@@ -1,3 +1,82 @@
 from django.contrib import admin
 
-# Register your models here.
+from .models import ProductionLine, QualityIncident, Shift
+
+
+@admin.register(ProductionLine)
+class ProductionLineAdmin(admin.ModelAdmin):
+    list_display = (
+        "code",
+        "name",
+        "location",
+        "status",
+        "target_units_per_hour",
+        "created_at",
+    )
+    list_filter = ("status",)
+    search_fields = ("code", "name", "location")
+    ordering = ("code",)
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(Shift)
+class ShiftAdmin(admin.ModelAdmin):
+    list_display = (
+        "production_line",
+        "date",
+        "shift_type",
+        "supervisor",
+        "planned_output",
+        "actual_output",
+        "performance",
+        "downtime_minutes",
+    )
+    list_filter = ("shift_type", "date", "production_line")
+    search_fields = (
+        "production_line__code",
+        "production_line__name",
+        "supervisor__username",
+        "supervisor__email",
+    )
+    autocomplete_fields = ("production_line", "supervisor")
+    date_hierarchy = "date"
+    readonly_fields = ("created_at", "updated_at")
+    list_select_related = ("production_line", "supervisor")
+
+    @admin.display(description="Performance")
+    def performance(self, obj):
+        percentage = obj.performance_percentage
+
+        if percentage is None:
+            return "N/A"
+
+        return f"{percentage}%"
+
+
+@admin.register(QualityIncident)
+class QualityIncidentAdmin(admin.ModelAdmin):
+    list_display = (
+        "title",
+        "shift",
+        "category",
+        "severity",
+        "status",
+        "occurred_at",
+        "reported_by",
+    )
+    list_filter = ("category", "severity", "status", "occurred_at")
+    search_fields = (
+        "title",
+        "description",
+        "root_cause",
+        "shift__production_line__code",
+        "reported_by__username",
+    )
+    autocomplete_fields = ("shift", "reported_by")
+    date_hierarchy = "occurred_at"
+    readonly_fields = ("created_at", "updated_at")
+    list_select_related = (
+        "shift",
+        "shift__production_line",
+        "reported_by",
+    )
