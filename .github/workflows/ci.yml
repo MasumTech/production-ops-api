@@ -47,3 +47,12 @@ jobs:
 
       - name: Run tests
         run: python -m pytest
+
+      - name: Prepare Docker environment
+        run: cp .env.docker.example .env.docker
+
+      - name: Validate Docker Compose configuration
+        run: docker compose config --quiet
+
+      - name: Build Docker image
+        run: docker compose build web
