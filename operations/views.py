@@ -1,15 +1,11 @@
+from django.db.models import Count, Q, Sum
+from django.db.models.functions import Coalesce
 from rest_framework import filters, viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.db.models import Count, Q, Sum
-from django.db.models.functions import Coalesce
+
 from .models import ProductionLine, QualityIncident, Shift
-from .serializers import (
-    ProductionLineSerializer,
-    QualityIncidentSerializer,
-    ShiftSerializer,
-)
 from .serializers import (
     OperationsDashboardSummarySerializer,
     ProductionLineSerializer,
