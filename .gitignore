@@ -25,3 +25,6 @@ media/
 .idea/
 .DS_Store
 Thumbs.db
+.env.docker
+!.env.example
+!.env.docker.example
