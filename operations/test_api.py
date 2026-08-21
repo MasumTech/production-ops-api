@@ -9,7 +9,6 @@ from rest_framework.test import APIClient
 
 from operations.models import ProductionLine, QualityIncident, Shift
 
-
 TEST_PASSWORD = "secure-test-password"
 
 

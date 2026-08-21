@@ -1,0 +1,8 @@
+target-version = "py312"
+
+extend-exclude = [
+    "**/migrations/*.py",
+]
+
+[lint.per-file-ignores]
+"operations/models.py" = ["RUF012"]
