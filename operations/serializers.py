@@ -153,3 +153,14 @@ class QualityIncidentSerializer(serializers.ModelSerializer):
             )
 
         return attrs
+
+class OperationsDashboardSummarySerializer(serializers.Serializer):
+    total_shifts = serializers.IntegerField()
+    total_planned_output = serializers.IntegerField()
+    total_actual_output = serializers.IntegerField()
+    overall_performance_percentage = serializers.FloatField(
+        allow_null=True,
+    )
+    total_downtime_minutes = serializers.IntegerField()
+    open_incidents = serializers.IntegerField()
+    critical_incidents = serializers.IntegerField()
