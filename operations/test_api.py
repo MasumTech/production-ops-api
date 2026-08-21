@@ -219,3 +219,61 @@ def test_resolved_incident_requires_resolution_time(
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "resolved_at" in response.data
+
+
+@pytest.mark.django_db
+def test_dashboard_requires_authentication(api_client):
+    response = api_client.get(reverse("operations-dashboard"))
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+def test_dashboard_returns_operations_summary(
+    authenticated_client,
+    shift,
+    api_user,
+):
+    QualityIncident.objects.create(
+        shift=shift,
+        title="Critical packaging failure",
+        category=QualityIncident.Category.PACKAGING,
+        severity=QualityIncident.Severity.CRITICAL,
+        status=QualityIncident.Status.OPEN,
+        description="Packaging seals failed during production.",
+        occurred_at=timezone.now(),
+        reported_by=api_user,
+    )
+
+    response = authenticated_client.get(
+        reverse("operations-dashboard"),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data == {
+        "total_shifts": 1,
+        "total_planned_output": 5000,
+        "total_actual_output": 4500,
+        "overall_performance_percentage": 90.0,
+        "total_downtime_minutes": 30,
+        "open_incidents": 1,
+        "critical_incidents": 1,
+    }
+
+
+@pytest.mark.django_db
+def test_dashboard_handles_empty_database(authenticated_client):
+    response = authenticated_client.get(
+        reverse("operations-dashboard"),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data == {
+        "total_shifts": 0,
+        "total_planned_output": 0,
+        "total_actual_output": 0,
+        "overall_performance_percentage": None,
+        "total_downtime_minutes": 0,
+        "open_incidents": 0,
+        "critical_incidents": 0,
+    }
