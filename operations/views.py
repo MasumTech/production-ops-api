@@ -1,12 +1,70 @@
+from django.db.models import Count, Q, Sum
+from django.db.models.functions import Coalesce
 from rest_framework import filters, viewsets
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .models import ProductionLine, QualityIncident, Shift
 from .serializers import (
+    OperationsDashboardSummarySerializer,
     ProductionLineSerializer,
     QualityIncidentSerializer,
     ShiftSerializer,
 )
+
+
+class OperationsDashboardView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        shift_summary = Shift.objects.aggregate(
+            total_shifts=Count("id"),
+            total_planned_output=Coalesce(
+                Sum("planned_output"),
+                0,
+            ),
+            total_actual_output=Coalesce(
+                Sum("actual_output"),
+                0,
+            ),
+            total_downtime_minutes=Coalesce(
+                Sum("downtime_minutes"),
+                0,
+            ),
+        )
+
+        planned_output = shift_summary["total_planned_output"]
+        actual_output = shift_summary["total_actual_output"]
+
+        performance_percentage = None
+        if planned_output:
+            performance_percentage = round(
+                (actual_output / planned_output) * 100,
+                2,
+            )
+
+        incident_summary = QualityIncident.objects.aggregate(
+            open_incidents=Count(
+                "id",
+                filter=Q(status=QualityIncident.Status.OPEN),
+            ),
+            critical_incidents=Count(
+                "id",
+                filter=Q(
+                    severity=QualityIncident.Severity.CRITICAL,
+                ),
+            ),
+        )
+
+        summary = {
+            **shift_summary,
+            "overall_performance_percentage": performance_percentage,
+            **incident_summary,
+        }
+
+        serializer = OperationsDashboardSummarySerializer(summary)
+        return Response(serializer.data)
 
 
 class ProductionLineViewSet(viewsets.ModelViewSet):
