@@ -122,8 +122,9 @@ def test_production_lines_can_be_filtered_by_status(
     )
 
     assert response.status_code == status.HTTP_200_OK
-    assert len(response.data) == 1
-    assert response.data[0]["code"] == "LINE-01"
+    assert response.data["count"] == 1
+    assert len(response.data["results"]) == 1
+    assert response.data["results"][0]["code"] == "LINE-01"
 
 
 @pytest.mark.django_db
