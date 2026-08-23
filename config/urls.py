@@ -9,6 +9,8 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
 )
 
+from .health import HealthCheckView
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path(
@@ -32,4 +34,9 @@ urlpatterns = [
         name="api-docs",
     ),
     path("api/", include("operations.urls")),
+    path(
+        "api/health/",
+        HealthCheckView.as_view(),
+        name="health-check",
+    ),
 ]

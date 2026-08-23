@@ -86,6 +86,7 @@ Tracks production quality issues, including:
 | `GET, PUT, PATCH, DELETE` | `/api/shifts/{id}/` | Manage one shift |
 | `GET, POST` | `/api/quality-incidents/` | List or create quality incidents |
 | `GET, PUT, PATCH, DELETE` | `/api/quality-incidents/{id}/` | Manage one quality incident |
+| `GET` | `/api/health/` | Check application and database health |
 
 All operations endpoints require a JWT access token:
 
