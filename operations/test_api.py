@@ -122,8 +122,9 @@ def test_production_lines_can_be_filtered_by_status(
     )
 
     assert response.status_code == status.HTTP_200_OK
-    assert len(response.data) == 1
-    assert response.data[0]["code"] == "LINE-01"
+    assert response.data["count"] == 1
+    assert len(response.data["results"]) == 1
+    assert response.data["results"][0]["code"] == "LINE-01"
 
 
 @pytest.mark.django_db
@@ -277,3 +278,36 @@ def test_dashboard_handles_empty_database(authenticated_client):
         "open_incidents": 0,
         "critical_incidents": 0,
     }
+
+
+@pytest.mark.django_db
+def test_production_lines_are_paginated(authenticated_client):
+    production_lines = [
+        ProductionLine(
+            code=f"LINE-{number:02d}",
+            name=f"Production Line {number}",
+        )
+        for number in range(1, 22)
+    ]
+    ProductionLine.objects.bulk_create(production_lines)
+
+    first_page = authenticated_client.get(
+        reverse("production-line-list"),
+    )
+
+    assert first_page.status_code == status.HTTP_200_OK
+    assert first_page.data["count"] == 21
+    assert len(first_page.data["results"]) == 20
+    assert first_page.data["next"] is not None
+    assert first_page.data["previous"] is None
+
+    second_page = authenticated_client.get(
+        reverse("production-line-list"),
+        {"page": 2},
+    )
+
+    assert second_page.status_code == status.HTTP_200_OK
+    assert second_page.data["count"] == 21
+    assert len(second_page.data["results"]) == 1
+    assert second_page.data["next"] is None
+    assert second_page.data["previous"] is not None
