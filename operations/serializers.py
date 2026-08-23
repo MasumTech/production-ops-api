@@ -165,3 +165,19 @@ class OperationsDashboardSummarySerializer(serializers.Serializer):
     total_downtime_minutes = serializers.IntegerField()
     open_incidents = serializers.IntegerField()
     critical_incidents = serializers.IntegerField()
+
+
+class OperationsDashboardFilterSerializer(serializers.Serializer):
+    date_from = serializers.DateField(required=False)
+    date_to = serializers.DateField(required=False)
+
+    def validate(self, attrs):
+        date_from = attrs.get("date_from")
+        date_to = attrs.get("date_to")
+
+        if date_from and date_to and date_from > date_to:
+            raise serializers.ValidationError(
+                {"date_to": ("Date to must be on or after date from.")}
+            )
+
+        return attrs
