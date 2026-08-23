@@ -93,6 +93,34 @@ All operations endpoints require a JWT access token:
 Authorization: Bearer <access-token>
 ```
 
+## Pagination
+
+List endpoints return a maximum of 20 records per page.
+
+```json
+{
+  "count": 21,
+  "next": "http://localhost:8000/api/production-lines/?page=2",
+  "previous": null,
+  "results": []
+}
+```
+
+Request another page using the `page` query parameter:
+
+```text
+/api/production-lines/?page=2
+/api/shifts/?page=2
+/api/quality-incidents/?page=2
+```
+
+Pagination can be combined with filtering, search, and ordering:
+
+```text
+/api/production-lines/?status=active&page=2
+/api/shifts/?ordering=-actual_output&page=2
+```
+
 ## Search, Filtering, and Ordering
 
 Examples:
