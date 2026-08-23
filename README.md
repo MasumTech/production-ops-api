@@ -137,6 +137,21 @@ Examples:
 /api/shifts/?ordering=-actual_output
 ```
 
+## Dashboard Date Filtering
+
+The operations dashboard can summarize all available records or filter the results by date.
+
+```text
+/api/dashboard/summary/
+/api/dashboard/summary/?date_from=2026-08-01
+/api/dashboard/summary/?date_to=2026-08-31
+/api/dashboard/summary/?date_from=2026-08-01&date_to=2026-08-31
+```
+
+`date_from` and `date_to` must use the `YYYY-MM-DD` format.
+
+The API returns `400 Bad Request` when `date_from` is later than `date_to`.
+
 ## Quick Start with Docker
 
 ### Prerequisites

@@ -1,4 +1,4 @@
-from datetime import time
+from datetime import time, timedelta
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -311,3 +311,80 @@ def test_production_lines_are_paginated(authenticated_client):
     assert len(second_page.data["results"]) == 1
     assert second_page.data["next"] is None
     assert second_page.data["previous"] is not None
+
+
+@pytest.mark.django_db
+def test_dashboard_filters_summary_by_date_range(
+    authenticated_client,
+    shift,
+    api_user,
+):
+    old_shift = Shift.objects.create(
+        production_line=shift.production_line,
+        supervisor=api_user,
+        date=shift.date - timedelta(days=30),
+        shift_type=Shift.ShiftType.DAY,
+        start_time=time(6, 0),
+        end_time=time(18, 0),
+        planned_output=1000,
+        actual_output=500,
+        downtime_minutes=60,
+    )
+
+    QualityIncident.objects.create(
+        shift=shift,
+        title="Current critical incident",
+        category=QualityIncident.Category.PRODUCT,
+        severity=QualityIncident.Severity.CRITICAL,
+        status=QualityIncident.Status.OPEN,
+        description="Current production incident.",
+        occurred_at=timezone.now(),
+        reported_by=api_user,
+    )
+    QualityIncident.objects.create(
+        shift=old_shift,
+        title="Old critical incident",
+        category=QualityIncident.Category.PRODUCT,
+        severity=QualityIncident.Severity.CRITICAL,
+        status=QualityIncident.Status.OPEN,
+        description="Old production incident.",
+        occurred_at=timezone.now() - timedelta(days=30),
+        reported_by=api_user,
+    )
+
+    response = authenticated_client.get(
+        reverse("operations-dashboard"),
+        {
+            "date_from": shift.date.isoformat(),
+            "date_to": shift.date.isoformat(),
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data == {
+        "total_shifts": 1,
+        "total_planned_output": 5000,
+        "total_actual_output": 4500,
+        "overall_performance_percentage": 90.0,
+        "total_downtime_minutes": 30,
+        "open_incidents": 1,
+        "critical_incidents": 1,
+    }
+
+
+@pytest.mark.django_db
+def test_dashboard_rejects_invalid_date_range(
+    authenticated_client,
+):
+    today = timezone.localdate()
+
+    response = authenticated_client.get(
+        reverse("operations-dashboard"),
+        {
+            "date_from": today.isoformat(),
+            "date_to": (today - timedelta(days=1)).isoformat(),
+        },
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "date_to" in response.data

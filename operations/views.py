@@ -1,5 +1,6 @@
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import Coalesce
+from drf_spectacular.utils import extend_schema
 from rest_framework import filters, viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -7,6 +8,7 @@ from rest_framework.views import APIView
 
 from .models import ProductionLine, QualityIncident, Shift
 from .serializers import (
+    OperationsDashboardFilterSerializer,
     OperationsDashboardSummarySerializer,
     ProductionLineSerializer,
     QualityIncidentSerializer,
@@ -17,8 +19,39 @@ from .serializers import (
 class OperationsDashboardView(APIView):
     permission_classes = (IsAuthenticated,)
 
+    @extend_schema(
+        parameters=[OperationsDashboardFilterSerializer],
+        responses=OperationsDashboardSummarySerializer,
+    )
     def get(self, request):
-        shift_summary = Shift.objects.aggregate(
+        filter_serializer = OperationsDashboardFilterSerializer(
+            data=request.query_params,
+        )
+        filter_serializer.is_valid(raise_exception=True)
+
+        date_from = filter_serializer.validated_data.get("date_from")
+        date_to = filter_serializer.validated_data.get("date_to")
+
+        shift_queryset = Shift.objects.all()
+        incident_queryset = QualityIncident.objects.all()
+
+        if date_from:
+            shift_queryset = shift_queryset.filter(
+                date__gte=date_from,
+            )
+            incident_queryset = incident_queryset.filter(
+                occurred_at__date__gte=date_from,
+            )
+
+        if date_to:
+            shift_queryset = shift_queryset.filter(
+                date__lte=date_to,
+            )
+            incident_queryset = incident_queryset.filter(
+                occurred_at__date__lte=date_to,
+            )
+
+        shift_summary = shift_queryset.aggregate(
             total_shifts=Count("id"),
             total_planned_output=Coalesce(
                 Sum("planned_output"),
@@ -44,7 +77,7 @@ class OperationsDashboardView(APIView):
                 2,
             )
 
-        incident_summary = QualityIncident.objects.aggregate(
+        incident_summary = incident_queryset.aggregate(
             open_incidents=Count(
                 "id",
                 filter=Q(status=QualityIncident.Status.OPEN),
