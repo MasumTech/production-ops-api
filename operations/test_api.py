@@ -8,6 +8,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from operations.models import (
+    HourlyLineUpdate,
     ProductionLine,
     QualityIncident,
     Shift,
@@ -59,6 +60,32 @@ def shift(production_line, api_user):
         planned_output=5000,
         actual_output=4500,
         downtime_minutes=30,
+    )
+
+
+@pytest.fixture
+def api_team_leader_assignment(
+    api_user,
+    production_line,
+):
+    return TeamLeaderAssignment.objects.create(
+        team_leader=api_user,
+        production_line=production_line,
+        date=timezone.localdate(),
+        shift_type=Shift.ShiftType.DAY,
+    )
+
+
+@pytest.fixture
+def other_team_leader_assignment(
+    other_user,
+    second_production_line,
+):
+    return TeamLeaderAssignment.objects.create(
+        team_leader=other_user,
+        production_line=second_production_line,
+        date=timezone.localdate(),
+        shift_type=Shift.ShiftType.DAY,
     )
 
 
@@ -664,3 +691,363 @@ def test_duplicate_line_assignment_is_rejected(
     )
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+def test_hourly_updates_require_authentication(api_client):
+    response = api_client.get(
+        reverse("hourly-line-update-list"),
+    )
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+def test_assigned_team_leader_can_create_hourly_update(
+    authenticated_client,
+    api_user,
+    api_team_leader_assignment,
+):
+    response = authenticated_client.post(
+        reverse("hourly-line-update-list"),
+        {
+            "assignment": api_team_leader_assignment.id,
+            "status": HourlyLineUpdate.Status.GREEN,
+            "current_product": "Demo Product A",
+            "next_update_due_at": (timezone.now() + timedelta(hours=1)).isoformat(),
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["recorded_by"] == api_user.id
+    assert response.data["production_line_code"] == "LINE-01"
+    assert response.data["status"] == HourlyLineUpdate.Status.GREEN
+
+
+@pytest.mark.django_db
+def test_team_leader_cannot_update_another_users_line(
+    authenticated_client,
+    other_team_leader_assignment,
+):
+    response = authenticated_client.post(
+        reverse("hourly-line-update-list"),
+        {
+            "assignment": other_team_leader_assignment.id,
+            "status": HourlyLineUpdate.Status.GREEN,
+            "next_update_due_at": (timezone.now() + timedelta(hours=1)).isoformat(),
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "assignment" in response.data
+
+
+@pytest.mark.django_db
+def test_staff_can_create_update_for_any_assignment(
+    staff_client,
+    staff_user,
+    other_team_leader_assignment,
+):
+    response = staff_client.post(
+        reverse("hourly-line-update-list"),
+        {
+            "assignment": other_team_leader_assignment.id,
+            "status": HourlyLineUpdate.Status.GREEN,
+            "next_update_due_at": (timezone.now() + timedelta(hours=1)).isoformat(),
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["recorded_by"] == staff_user.id
+    assert response.data["production_line_code"] == "LINE-02"
+
+
+@pytest.mark.django_db
+def test_team_leader_only_sees_updates_for_own_lines(
+    authenticated_client,
+    api_user,
+    other_user,
+    api_team_leader_assignment,
+    other_team_leader_assignment,
+):
+    recorded_at = timezone.now()
+
+    HourlyLineUpdate.objects.create(
+        assignment=api_team_leader_assignment,
+        status=HourlyLineUpdate.Status.GREEN,
+        recorded_at=recorded_at,
+        next_update_due_at=recorded_at + timedelta(hours=1),
+        recorded_by=api_user,
+    )
+    HourlyLineUpdate.objects.create(
+        assignment=other_team_leader_assignment,
+        status=HourlyLineUpdate.Status.GREEN,
+        recorded_at=recorded_at,
+        next_update_due_at=recorded_at + timedelta(hours=1),
+        recorded_by=other_user,
+    )
+
+    response = authenticated_client.get(
+        reverse("hourly-line-update-list"),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 1
+    assert response.data["results"][0]["production_line_code"] == "LINE-01"
+
+
+@pytest.mark.django_db
+def test_staff_can_see_all_hourly_updates(
+    staff_client,
+    api_user,
+    other_user,
+    api_team_leader_assignment,
+    other_team_leader_assignment,
+):
+    recorded_at = timezone.now()
+
+    HourlyLineUpdate.objects.create(
+        assignment=api_team_leader_assignment,
+        status=HourlyLineUpdate.Status.GREEN,
+        recorded_at=recorded_at,
+        next_update_due_at=recorded_at + timedelta(hours=1),
+        recorded_by=api_user,
+    )
+    HourlyLineUpdate.objects.create(
+        assignment=other_team_leader_assignment,
+        status=HourlyLineUpdate.Status.AMBER,
+        issue_summary="Materials running low.",
+        recorded_at=recorded_at,
+        next_update_due_at=recorded_at + timedelta(minutes=30),
+        recorded_by=other_user,
+    )
+
+    response = staff_client.get(
+        reverse("hourly-line-update-list"),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 2
+
+
+@pytest.mark.django_db
+def test_amber_update_requires_issue_summary(
+    authenticated_client,
+    api_team_leader_assignment,
+):
+    response = authenticated_client.post(
+        reverse("hourly-line-update-list"),
+        {
+            "assignment": api_team_leader_assignment.id,
+            "status": HourlyLineUpdate.Status.AMBER,
+            "issue_summary": "",
+            "next_update_due_at": (timezone.now() + timedelta(hours=1)).isoformat(),
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "issue_summary" in response.data
+
+
+@pytest.mark.django_db
+def test_red_update_requires_follow_up(
+    authenticated_client,
+    api_team_leader_assignment,
+):
+    response = authenticated_client.post(
+        reverse("hourly-line-update-list"),
+        {
+            "assignment": api_team_leader_assignment.id,
+            "status": HourlyLineUpdate.Status.RED,
+            "issue_summary": "Line stopped due to equipment fault.",
+            "requires_follow_up": False,
+            "next_update_due_at": (timezone.now() + timedelta(minutes=30)).isoformat(),
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "requires_follow_up" in response.data
+
+
+@pytest.mark.django_db
+def test_hourly_update_rejects_past_next_update_time(
+    authenticated_client,
+    api_team_leader_assignment,
+):
+    response = authenticated_client.post(
+        reverse("hourly-line-update-list"),
+        {
+            "assignment": api_team_leader_assignment.id,
+            "status": HourlyLineUpdate.Status.GREEN,
+            "next_update_due_at": (timezone.now() - timedelta(minutes=5)).isoformat(),
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "next_update_due_at" in response.data
+
+
+@pytest.mark.django_db
+def test_inactive_user_cannot_own_hourly_update_action(
+    authenticated_client,
+    api_team_leader_assignment,
+):
+    inactive_user = get_user_model().objects.create_user(
+        username="inactive.action.owner",
+        password=TEST_PASSWORD,
+        is_active=False,
+    )
+
+    response = authenticated_client.post(
+        reverse("hourly-line-update-list"),
+        {
+            "assignment": api_team_leader_assignment.id,
+            "status": HourlyLineUpdate.Status.GREEN,
+            "action_owner": inactive_user.id,
+            "next_update_due_at": (timezone.now() + timedelta(hours=1)).isoformat(),
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "action_owner" in response.data
+
+
+@pytest.mark.django_db
+def test_latest_status_returns_current_users_newest_update(
+    authenticated_client,
+    api_user,
+    other_user,
+    api_team_leader_assignment,
+    other_team_leader_assignment,
+):
+    recorded_at = timezone.now()
+
+    HourlyLineUpdate.objects.create(
+        assignment=api_team_leader_assignment,
+        status=HourlyLineUpdate.Status.GREEN,
+        recorded_at=recorded_at - timedelta(hours=1),
+        next_update_due_at=recorded_at,
+        recorded_by=api_user,
+    )
+    newest_update = HourlyLineUpdate.objects.create(
+        assignment=api_team_leader_assignment,
+        status=HourlyLineUpdate.Status.AMBER,
+        issue_summary="Output is below the hourly target.",
+        recorded_at=recorded_at,
+        next_update_due_at=recorded_at + timedelta(minutes=30),
+        recorded_by=api_user,
+    )
+    HourlyLineUpdate.objects.create(
+        assignment=other_team_leader_assignment,
+        status=HourlyLineUpdate.Status.RED,
+        issue_summary="Other line stopped.",
+        requires_follow_up=True,
+        recorded_at=recorded_at,
+        next_update_due_at=recorded_at + timedelta(minutes=30),
+        recorded_by=other_user,
+    )
+
+    response = authenticated_client.get(
+        reverse("hourly-line-update-latest-status"),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 1
+    assert response.data["results"][0]["id"] == newest_update.id
+    assert response.data["results"][0]["status"] == (HourlyLineUpdate.Status.AMBER)
+
+
+@pytest.mark.django_db
+def test_staff_latest_status_returns_one_update_per_assignment(
+    staff_client,
+    api_user,
+    other_user,
+    api_team_leader_assignment,
+    other_team_leader_assignment,
+):
+    recorded_at = timezone.now()
+
+    HourlyLineUpdate.objects.create(
+        assignment=api_team_leader_assignment,
+        status=HourlyLineUpdate.Status.GREEN,
+        recorded_at=recorded_at - timedelta(hours=1),
+        next_update_due_at=recorded_at,
+        recorded_by=api_user,
+    )
+    HourlyLineUpdate.objects.create(
+        assignment=api_team_leader_assignment,
+        status=HourlyLineUpdate.Status.AMBER,
+        issue_summary="Performance is below target.",
+        recorded_at=recorded_at,
+        next_update_due_at=recorded_at + timedelta(minutes=30),
+        recorded_by=api_user,
+    )
+    HourlyLineUpdate.objects.create(
+        assignment=other_team_leader_assignment,
+        status=HourlyLineUpdate.Status.GREEN,
+        recorded_at=recorded_at,
+        next_update_due_at=recorded_at + timedelta(hours=1),
+        recorded_by=other_user,
+    )
+
+    response = staff_client.get(
+        reverse("hourly-line-update-latest-status"),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 2
+
+
+@pytest.mark.django_db
+def test_hourly_update_filter_rejects_invalid_date(
+    authenticated_client,
+):
+    response = authenticated_client.get(
+        reverse("hourly-line-update-list"),
+        {"date": "invalid-date"},
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "date" in response.data
+
+
+@pytest.mark.django_db
+def test_hourly_updates_can_be_filtered_by_status(
+    authenticated_client,
+    api_user,
+    api_team_leader_assignment,
+):
+    recorded_at = timezone.now()
+
+    HourlyLineUpdate.objects.create(
+        assignment=api_team_leader_assignment,
+        status=HourlyLineUpdate.Status.GREEN,
+        recorded_at=recorded_at - timedelta(hours=1),
+        next_update_due_at=recorded_at,
+        recorded_by=api_user,
+    )
+    HourlyLineUpdate.objects.create(
+        assignment=api_team_leader_assignment,
+        status=HourlyLineUpdate.Status.RED,
+        issue_summary="Critical equipment failure.",
+        requires_follow_up=True,
+        recorded_at=recorded_at,
+        next_update_due_at=recorded_at + timedelta(minutes=30),
+        recorded_by=api_user,
+    )
+
+    response = authenticated_client.get(
+        reverse("hourly-line-update-list"),
+        {"status": HourlyLineUpdate.Status.RED},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 1
+    assert response.data["results"][0]["status"] == (HourlyLineUpdate.Status.RED)

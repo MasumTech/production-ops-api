@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    HourlyLineUpdateViewSet,
     OperationsDashboardView,
     ProductionLineViewSet,
     QualityIncidentViewSet,
@@ -29,6 +30,11 @@ router.register(
     "team-leader-assignments",
     TeamLeaderAssignmentViewSet,
     basename="team-leader-assignment",
+)
+router.register(
+    "hourly-line-updates",
+    HourlyLineUpdateViewSet,
+    basename="hourly-line-update",
 )
 
 urlpatterns = [

@@ -1,4 +1,4 @@
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import filters, viewsets
@@ -8,13 +8,19 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import (
+    HourlyLineUpdate,
     ProductionLine,
     QualityIncident,
     Shift,
     TeamLeaderAssignment,
 )
-from .permissions import IsStaffOrReadOnly
+from .permissions import (
+    IsAssignedTeamLeaderOrStaff,
+    IsStaffOrReadOnly,
+)
 from .serializers import (
+    HourlyLineUpdateFilterSerializer,
+    HourlyLineUpdateSerializer,
     OperationsDashboardFilterSerializer,
     OperationsDashboardSummarySerializer,
     ProductionLineSerializer,
@@ -319,6 +325,126 @@ class TeamLeaderAssignmentViewSet(viewsets.ModelViewSet):
     )
     def my_lines(self, request):
         queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        parameters=[HourlyLineUpdateFilterSerializer],
+    ),
+)
+class HourlyLineUpdateViewSet(viewsets.ModelViewSet):
+    queryset = HourlyLineUpdate.objects.all()
+    serializer_class = HourlyLineUpdateSerializer
+    permission_classes = (IsAssignedTeamLeaderOrStaff,)
+    filter_backends = (
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    )
+    search_fields = (
+        "assignment__production_line__code",
+        "assignment__production_line__name",
+        "assignment__team_leader__username",
+        "current_product",
+        "issue_summary",
+        "action_taken",
+        "support_required",
+    )
+    ordering_fields = (
+        "recorded_at",
+        "next_update_due_at",
+        "status",
+        "assignment__date",
+        "assignment__production_line__code",
+        "created_at",
+    )
+    ordering = ("-recorded_at", "-id")
+
+    def get_queryset(self):
+        queryset = self.queryset.select_related(
+            "assignment",
+            "assignment__production_line",
+            "assignment__team_leader",
+            "action_owner",
+            "recorded_by",
+        )
+
+        if not self.request.user.is_staff:
+            queryset = queryset.filter(
+                assignment__team_leader=self.request.user,
+            )
+
+        filter_serializer = HourlyLineUpdateFilterSerializer(
+            data=self.request.query_params,
+        )
+        filter_serializer.is_valid(raise_exception=True)
+
+        date = filter_serializer.validated_data.get("date")
+        shift_type = filter_serializer.validated_data.get("shift_type")
+        production_line = filter_serializer.validated_data.get("production_line")
+        status_value = filter_serializer.validated_data.get("status")
+        requires_follow_up = filter_serializer.validated_data.get("requires_follow_up")
+
+        if date is not None:
+            queryset = queryset.filter(
+                assignment__date=date,
+            )
+
+        if shift_type is not None:
+            queryset = queryset.filter(
+                assignment__shift_type=shift_type,
+            )
+
+        if production_line is not None:
+            queryset = queryset.filter(
+                assignment__production_line_id=production_line,
+            )
+
+        if status_value is not None:
+            queryset = queryset.filter(
+                status=status_value,
+            )
+
+        if requires_follow_up is not None:
+            queryset = queryset.filter(
+                requires_follow_up=requires_follow_up,
+            )
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(recorded_by=self.request.user)
+
+    @extend_schema(
+        parameters=[HourlyLineUpdateFilterSerializer],
+        responses=HourlyLineUpdateSerializer(many=True),
+    )
+    @action(
+        detail=False,
+        methods=("get",),
+        url_path="latest-status",
+    )
+    def latest_status(self, request):
+        latest_update_id = (
+            HourlyLineUpdate.objects.filter(
+                assignment_id=OuterRef("assignment_id"),
+            )
+            .order_by("-recorded_at", "-id")
+            .values("id")[:1]
+        )
+
+        queryset = self.filter_queryset(
+            self.get_queryset(),
+        ).filter(
+            id=Subquery(latest_update_id),
+        )
+
         page = self.paginate_queryset(queryset)
 
         if page is not None:
