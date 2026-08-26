@@ -1,10 +1,51 @@
 # Production Operations API
 
 [![CI](https://github.com/MasumTech/production-ops-api/actions/workflows/ci.yml/badge.svg)](https://github.com/MasumTech/production-ops-api/actions/workflows/ci.yml)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Django 5.2](https://img.shields.io/badge/Django-5.2-092E20?logo=django&logoColor=white)](https://www.djangoproject.com/)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A production-focused REST API for managing manufacturing lines, shifts, production performance, downtime, and quality incidents.
 
 The project demonstrates a structured Django backend using JWT authentication, PostgreSQL, Docker, automated testing, and continuous integration.
+
+**Portfolio scope:** Backend API engineering focused on production workflows, data integrity, access control, automated quality gates, and containerized delivery.
+
+## Business Problem
+
+Manufacturing teams often track line ownership, hourly status, production output, downtime, and quality incidents across disconnected spreadsheets and shift handovers. This API provides one auditable backend for assigning responsibility, recording operational performance, escalating line issues, and summarising production KPIs.
+
+It models a practical workflow: management assigns Team Leaders to lines, Team Leaders submit Green/Amber/Red hourly updates, and authenticated users review current status, shift performance, and quality incidents through documented endpoints.
+
+## Architecture
+
+```mermaid
+flowchart TB
+    Client["Swagger / API client"] --> API["Django REST API"]
+    API --> Auth["JWT authentication and permissions"]
+    Auth --> Domain["Production operations domain"]
+    Domain --> DB["PostgreSQL"]
+    CI["GitHub Actions"] -. "tests and builds" .-> API
+```
+
+## Engineering Highlights
+
+- Relational domain modelling with database constraints and targeted indexes
+- Assignment-scoped access control for Team Leaders and management staff
+- Business validation for incident resolution, line status, and follow-up deadlines
+- Efficient related-object loading and aggregate dashboard queries
+- Versioned migrations, interactive OpenAPI documentation, and JWT authentication
+- Automated formatting, linting, system checks, tests, Compose validation, and Docker builds
+- Non-root Gunicorn container with application and PostgreSQL health checks
+
+## Typical Operational Flow
+
+1. Management assigns a Team Leader to one or more production lines for a date and shift.
+2. The Team Leader retrieves their assigned lines through the `my-lines` endpoint.
+3. Hourly Green, Amber, or Red updates capture current issues, actions, owners, and deadlines.
+4. The `latest-status` endpoint returns the newest accessible update for each assignment.
+5. Dashboard and quality-incident endpoints provide operational oversight and follow-up.
 
 ## Features
 
@@ -126,6 +167,25 @@ All operations endpoints require a JWT access token:
 
 ```http
 Authorization: Bearer <access-token>
+```
+
+## Example Hourly Status Response
+
+```json
+{
+  "id": 42,
+  "assignment": 7,
+  "production_line_code": "LINE-01",
+  "production_line_name": "Primary Packing Line",
+  "team_leader_username": "team.leader",
+  "status": "amber",
+  "current_product": "Demo Product A",
+  "issue_summary": "Output is below the hourly target.",
+  "action_taken": "Engineering support requested.",
+  "requires_follow_up": true,
+  "recorded_by_username": "team.leader",
+  "next_update_due_at": "2026-08-26T15:30:00Z"
+}
 ```
 
 ## Pagination
@@ -383,6 +443,7 @@ production-ops-api/
 ├── config/              # Django settings and root URLs
 ├── operations/          # Models, serializers, views, URLs, and tests
 ├── Dockerfile           # Django application image
+├── LICENSE              # MIT open-source license
 ├── compose.yml          # Web and PostgreSQL services
 ├── manage.py            # Django management command
 ├── pytest.ini           # pytest configuration
