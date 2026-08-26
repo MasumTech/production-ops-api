@@ -10,6 +10,8 @@ A production-focused REST API for managing manufacturing lines, shifts, producti
 
 The project demonstrates a structured Django backend using JWT authentication, PostgreSQL, Docker, automated testing, and continuous integration.
 
+**Portfolio scope:** Backend API engineering focused on production workflows, data integrity, access control, automated quality gates, and containerized delivery.
+
 ## Business Problem
 
 Manufacturing teams often track line ownership, hourly status, production output, downtime, and quality incidents across disconnected spreadsheets and shift handovers. This API provides one auditable backend for assigning responsibility, recording operational performance, escalating line issues, and summarising production KPIs.
