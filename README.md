@@ -12,21 +12,73 @@ The project demonstrates a structured Django backend using JWT authentication, P
 
 **Portfolio scope:** Backend API engineering focused on production workflows, data integrity, access control, automated quality gates, and containerized delivery.
 
-## Business Problem
+[Business problem](#the-real-world-problem) · [Workflow](#operational-workflow) · [Architecture](#system-architecture) · [Data model](#core-data-model) · [API](#api-endpoints) · [Run locally](#quick-start-with-docker)
 
-Manufacturing teams often track line ownership, hourly status, production output, downtime, and quality incidents across disconnected spreadsheets and shift handovers. This API provides one auditable backend for assigning responsibility, recording operational performance, escalating line issues, and summarising production KPIs.
+## The Real-World Problem
 
-It models a practical workflow: management assigns Team Leaders to lines, Team Leaders submit Green/Amber/Red hourly updates, and authenticated users review current status, shift performance, and quality incidents through documented endpoints.
+On a busy manufacturing shift, one Team Leader may be responsible for up to three production lines at the same time. When one line slows down or stops because of a material blockage, equipment fault, quality concern, or staffing issue, verbal updates and paper notes quickly become incomplete or outdated.
 
-## Architecture
+The API addresses five operational control gaps:
+
+- unclear ownership when one Team Leader covers several lines
+- no consistent way to show the current Green, Amber, or Red condition
+- delayed escalation when an issue needs engineering or management support
+- missing action owners, next-update deadlines, and follow-up evidence
+- time lost asking several people for the latest position during the shift
+
+## Representative Shift Scenario
+
+| Moment | Operational risk | System response |
+|---|---|---|
+| Shift start | One Team Leader is covering Lines 01, 02, and 03 | Management creates dated, shift-specific line assignments |
+| Line 02 slows or blocks | The issue may be shared verbally but not recorded consistently | The Team Leader submits an Amber or Red update with the issue summary |
+| Support is requested | Nobody is clearly responsible for the action or deadline | The update records the action, owner, support required, and next-update time |
+| Management reviews the floor | Staff must call each line to discover the current position | `latest-status` returns one current update for every accessible assignment |
+| Shift follow-up | Previous decisions and escalation history may be lost | Timestamped records preserve who reported the issue and what happened next |
+
+## Operational Workflow
 
 ```mermaid
 flowchart TB
-    Client["Swagger / API client"] --> API["Django REST API"]
-    API --> Auth["JWT authentication and permissions"]
-    Auth --> Domain["Production operations domain"]
+    A["Manager assigns up to three lines"] --> B["Team Leader opens My Lines"]
+    B --> C["Record hourly RAG update"]
+    C --> D{"Current line status"}
+    D -->|Green| E["Continue and schedule next update"]
+    D -->|Amber or Red| F["Record issue, action owner and follow-up"]
+    E --> G["Latest status and dashboard"]
+    F --> G
+```
+
+## Business Outcomes
+
+- Clear responsibility across several production lines during the same shift
+- Faster visibility of stopped, at-risk, and stable lines
+- Consistent escalation with named owners and next-update deadlines
+- Less reliance on radio calls, paper notes, and fragmented spreadsheets
+- An auditable operational history for management and shift handovers
+- Scoped visibility: Team Leaders see their own lines while staff retain oversight
+
+## System Architecture
+
+```mermaid
+flowchart TB
+    Client["Swagger or API client"] --> API["Django REST Framework"]
+    API --> Access["JWT authentication and scoped permissions"]
+    Access --> Domain["Operations domain and business validation"]
     Domain --> DB["PostgreSQL"]
-    CI["GitHub Actions"] -. "tests and builds" .-> API
+    CI["GitHub Actions"] -->|quality checks and Docker build| API
+```
+
+## Core Data Model
+
+```mermaid
+erDiagram
+    USER ||--o{ TEAM_LEADER_ASSIGNMENT : leads
+    USER ||--o{ HOURLY_LINE_UPDATE : records
+    PRODUCTION_LINE ||--o{ TEAM_LEADER_ASSIGNMENT : receives
+    TEAM_LEADER_ASSIGNMENT ||--o{ HOURLY_LINE_UPDATE : contains
+    PRODUCTION_LINE ||--o{ SHIFT : runs
+    SHIFT ||--o{ QUALITY_INCIDENT : reports
 ```
 
 ## Engineering Highlights
@@ -39,36 +91,16 @@ flowchart TB
 - Automated formatting, linting, system checks, tests, Compose validation, and Docker builds
 - Non-root Gunicorn container with application and PostgreSQL health checks
 
-## Typical Operational Flow
+## Key Capabilities
 
-1. Management assigns a Team Leader to one or more production lines for a date and shift.
-2. The Team Leader retrieves their assigned lines through the `my-lines` endpoint.
-3. Hourly Green, Amber, or Red updates capture current issues, actions, owners, and deadlines.
-4. The `latest-status` endpoint returns the newest accessible update for each assignment.
-5. Dashboard and quality-incident endpoints provide operational oversight and follow-up.
-
-## Features
-
-- Record hourly Green, Amber, and Red production-line status updates
-- Capture current issues, actions, owners, support requirements, and follow-up
-- Retrieve the latest recorded status for every accessible line assignment
-- Restrict Team Leaders to updates belonging to their assigned lines
-- Assign Team Leaders to multiple production lines by date and shift
-- Restrict assignment changes to management staff
-- Let Team Leaders retrieve only their own assigned lines
-- Manage production lines and their operational status
-- Record day and night shifts
-- Track planned and actual production output
-- Calculate shift performance percentage automatically
-- Record downtime for each shift
-- Report and manage quality incidents
-- Track root causes and corrective actions
-- Filter, search, and order API results
-- JWT-based authentication and token refresh
-- Interactive Swagger API documentation
-- PostgreSQL database with Docker Compose
-- Non-root Gunicorn application container
-- Automated linting, tests, system checks, and Docker builds in CI
+| Area | Capability | Operational value |
+|---|---|---|
+| Line ownership | Date- and shift-specific Team Leader assignments | Makes multi-line responsibility explicit |
+| Hourly control | Green, Amber, and Red updates with issues and deadlines | Shows the current condition and required response |
+| Production performance | Planned output, actual output, downtime, and performance percentage | Turns shift activity into measurable KPIs |
+| Quality management | Incident severity, status, root cause, and corrective action | Supports structured investigation and closure |
+| Management visibility | Dashboard summary, latest status, search, filtering, and ordering | Reduces manual status chasing |
+| Platform controls | JWT, scoped permissions, validation, pagination, health checks, and OpenAPI | Provides a secure and maintainable API foundation |
 
 ## Technology Stack
 
