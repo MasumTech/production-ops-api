@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 
 class TimeStampedModel(models.Model):
@@ -228,4 +229,94 @@ class TeamLeaderAssignment(TimeStampedModel):
             f"{self.get_shift_type_display()} - "
             f"{self.production_line.code} - "
             f"{self.team_leader.username}"
+        )
+
+
+class HourlyLineUpdate(TimeStampedModel):
+    class Status(models.TextChoices):
+        GREEN = "green", "Green"
+        AMBER = "amber", "Amber"
+        RED = "red", "Red"
+
+    assignment = models.ForeignKey(
+        TeamLeaderAssignment,
+        on_delete=models.PROTECT,
+        related_name="hourly_updates",
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=Status.choices,
+    )
+    current_product = models.CharField(
+        max_length=150,
+        blank=True,
+    )
+    issue_summary = models.CharField(
+        max_length=255,
+        blank=True,
+    )
+    action_taken = models.TextField(blank=True)
+    action_owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="owned_line_update_actions",
+        null=True,
+        blank=True,
+    )
+    support_required = models.TextField(blank=True)
+    requires_follow_up = models.BooleanField(default=False)
+    recorded_at = models.DateTimeField(default=timezone.now)
+    next_update_due_at = models.DateTimeField()
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="recorded_line_updates",
+    )
+
+    class Meta:
+        ordering = ["-recorded_at"]
+        indexes = [
+            models.Index(
+                fields=["assignment", "recorded_at"],
+            ),
+            models.Index(
+                fields=["status", "recorded_at"],
+            ),
+        ]
+
+    def clean(self):
+        errors = {}
+
+        if (
+            self.next_update_due_at
+            and self.recorded_at
+            and self.next_update_due_at <= self.recorded_at
+        ):
+            errors["next_update_due_at"] = (
+                "Next update time must be later than the recorded time."
+            )
+
+        if (
+            self.status
+            in {
+                self.Status.AMBER,
+                self.Status.RED,
+            }
+            and not self.issue_summary.strip()
+        ):
+            errors["issue_summary"] = (
+                "Issue summary is required for Amber or Red status."
+            )
+
+        if self.status == self.Status.RED and not self.requires_follow_up:
+            errors["requires_follow_up"] = "Red status must require follow-up."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self):
+        return (
+            f"{self.assignment.production_line.code} - "
+            f"{self.get_status_display()} - "
+            f"{self.recorded_at:%Y-%m-%d %H:%M}"
         )

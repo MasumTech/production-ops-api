@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from .models import (
+    HourlyLineUpdate,
     ProductionLine,
     QualityIncident,
     Shift,
@@ -128,3 +129,54 @@ class TeamLeaderAssignmentAdmin(admin.ModelAdmin):
         "team_leader",
         "assigned_by",
     )
+
+
+@admin.register(HourlyLineUpdate)
+class HourlyLineUpdateAdmin(admin.ModelAdmin):
+    list_display = (
+        "recorded_at",
+        "production_line",
+        "status",
+        "current_product",
+        "recorded_by",
+        "action_owner",
+        "next_update_due_at",
+        "requires_follow_up",
+    )
+    list_filter = (
+        "status",
+        "requires_follow_up",
+        "recorded_at",
+    )
+    search_fields = (
+        "assignment__production_line__code",
+        "assignment__production_line__name",
+        "current_product",
+        "issue_summary",
+        "recorded_by__username",
+        "action_owner__username",
+    )
+    autocomplete_fields = (
+        "assignment",
+        "recorded_by",
+        "action_owner",
+    )
+    date_hierarchy = "recorded_at"
+    ordering = ("-recorded_at",)
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+    )
+    list_select_related = (
+        "assignment",
+        "assignment__production_line",
+        "recorded_by",
+        "action_owner",
+    )
+
+    @admin.display(
+        ordering="assignment__production_line__code",
+        description="Production line",
+    )
+    def production_line(self, obj):
+        return obj.assignment.production_line.code

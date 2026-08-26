@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from operations.models import (
+    HourlyLineUpdate,
     ProductionLine,
     QualityIncident,
     Shift,
@@ -203,3 +204,86 @@ def test_team_leader_can_be_assigned_to_multiple_lines(
         ).count()
         == 2
     )
+
+
+@pytest.fixture
+def hourly_line_update(team_leader_assignment, supervisor):
+    recorded_at = timezone.now()
+
+    return HourlyLineUpdate.objects.create(
+        assignment=team_leader_assignment,
+        status=HourlyLineUpdate.Status.GREEN,
+        current_product="Demo Product A",
+        recorded_at=recorded_at,
+        next_update_due_at=recorded_at + timedelta(hours=1),
+        recorded_by=supervisor,
+    )
+
+
+@pytest.mark.django_db
+def test_hourly_line_update_string_representation(
+    hourly_line_update,
+):
+    assert str(hourly_line_update) == (
+        f"LINE-01 - Green - {hourly_line_update.recorded_at:%Y-%m-%d %H:%M}"
+    )
+
+
+@pytest.mark.django_db
+def test_hourly_update_rejects_invalid_next_update_time(
+    team_leader_assignment,
+    supervisor,
+):
+    recorded_at = timezone.now()
+
+    update = HourlyLineUpdate(
+        assignment=team_leader_assignment,
+        status=HourlyLineUpdate.Status.GREEN,
+        recorded_at=recorded_at,
+        next_update_due_at=recorded_at,
+        recorded_by=supervisor,
+    )
+
+    with pytest.raises(ValidationError):
+        update.full_clean()
+
+
+@pytest.mark.django_db
+def test_amber_update_requires_issue_summary(
+    team_leader_assignment,
+    supervisor,
+):
+    recorded_at = timezone.now()
+
+    update = HourlyLineUpdate(
+        assignment=team_leader_assignment,
+        status=HourlyLineUpdate.Status.AMBER,
+        issue_summary="",
+        recorded_at=recorded_at,
+        next_update_due_at=recorded_at + timedelta(hours=1),
+        recorded_by=supervisor,
+    )
+
+    with pytest.raises(ValidationError):
+        update.full_clean()
+
+
+@pytest.mark.django_db
+def test_red_update_requires_follow_up(
+    team_leader_assignment,
+    supervisor,
+):
+    recorded_at = timezone.now()
+
+    update = HourlyLineUpdate(
+        assignment=team_leader_assignment,
+        status=HourlyLineUpdate.Status.RED,
+        issue_summary="Printer fault stopped production.",
+        requires_follow_up=False,
+        recorded_at=recorded_at,
+        next_update_due_at=recorded_at + timedelta(minutes=30),
+        recorded_by=supervisor,
+    )
+
+    with pytest.raises(ValidationError):
+        update.full_clean()
