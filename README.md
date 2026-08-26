@@ -8,6 +8,10 @@ The project demonstrates a structured Django backend using JWT authentication, P
 
 ## Features
 
+- Record hourly Green, Amber, and Red production-line status updates
+- Capture current issues, actions, owners, support requirements, and follow-up
+- Retrieve the latest recorded status for every accessible line assignment
+- Restrict Team Leaders to updates belonging to their assigned lines
 - Assign Team Leaders to multiple production lines by date and shift
 - Restrict assignment changes to management staff
 - Let Team Leaders retrieve only their own assigned lines
@@ -42,6 +46,17 @@ The project demonstrates a structured Django backend using JWT authentication, P
 | Continuous integration | GitHub Actions |
 
 ## Core Models
+
+### HourlyLineUpdate
+
+Records an operational status update for an assigned production line:
+
+- Green, Amber, or Red line status
+- Current product and issue summary
+- Action taken and responsible action owner
+- Support requirements and follow-up indicator
+- Recorded time and next update deadline
+- User who recorded the update
 
 ### TeamLeaderAssignment
 
@@ -103,6 +118,9 @@ Tracks production quality issues, including:
 | `GET, POST` | `/api/team-leader-assignments/` | List or create line assignments |
 | `GET, PUT, PATCH, DELETE` | `/api/team-leader-assignments/{id}/` | Manage one line assignment |
 | `GET` | `/api/team-leader-assignments/my-lines/` | List the current user’s assigned lines |
+| `GET, POST` | `/api/hourly-line-updates/` | List or create hourly line updates |
+| `GET, PUT, PATCH, DELETE` | `/api/hourly-line-updates/{id}/` | Manage one accessible hourly update |
+| `GET` | `/api/hourly-line-updates/latest-status/` | Return the latest update for every accessible assignment |
 
 All operations endpoints require a JWT access token:
 
@@ -152,6 +170,12 @@ Examples:
 /api/quality-incidents/?status=open
 /api/quality-incidents/?category=packaging
 /api/shifts/?ordering=-actual_output
+/api/hourly-line-updates/?date=2026-08-26
+/api/hourly-line-updates/?shift_type=day
+/api/hourly-line-updates/?production_line=1
+/api/hourly-line-updates/?status=red
+/api/hourly-line-updates/?requires_follow_up=true
+/api/hourly-line-updates/latest-status/?status=amber
 /api/team-leader-assignments/?date=2026-08-26
 /api/team-leader-assignments/?shift_type=day
 /api/team-leader-assignments/?production_line=1
@@ -179,6 +203,15 @@ The API returns `400 Bad Request` when `date_from` is later than `date_to`.
 - Regular authenticated users can only view their own assignments.
 - The `my-lines` endpoint always returns assignments belonging to the current user.
 - Inactive users and inactive production lines cannot receive new assignments.
+
+## Hourly Line Update Permissions
+
+- Management staff can access updates for all line assignments.
+- Team Leaders can only access and record updates for their assigned lines.
+- The authenticated user is automatically recorded as the update author.
+- Amber and Red updates require an issue summary.
+- Red updates must be marked for follow-up.
+- Inactive users cannot be selected as action owners.
 
 ## Quick Start with Docker
 

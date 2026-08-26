@@ -1,6 +1,8 @@
+from django.utils import timezone
 from rest_framework import serializers
 
 from .models import (
+    HourlyLineUpdate,
     ProductionLine,
     QualityIncident,
     Shift,
@@ -258,3 +260,167 @@ class OperationsDashboardFilterSerializer(serializers.Serializer):
             )
 
         return attrs
+
+
+class HourlyLineUpdateSerializer(serializers.ModelSerializer):
+    production_line = serializers.IntegerField(
+        source="assignment.production_line_id",
+        read_only=True,
+    )
+    production_line_code = serializers.CharField(
+        source="assignment.production_line.code",
+        read_only=True,
+    )
+    production_line_name = serializers.CharField(
+        source="assignment.production_line.name",
+        read_only=True,
+    )
+    assignment_date = serializers.DateField(
+        source="assignment.date",
+        read_only=True,
+    )
+    shift_type = serializers.CharField(
+        source="assignment.shift_type",
+        read_only=True,
+    )
+    team_leader_username = serializers.CharField(
+        source="assignment.team_leader.username",
+        read_only=True,
+    )
+    action_owner_username = serializers.CharField(
+        source="action_owner.username",
+        read_only=True,
+    )
+    recorded_by_username = serializers.CharField(
+        source="recorded_by.username",
+        read_only=True,
+    )
+
+    class Meta:
+        model = HourlyLineUpdate
+        fields = (
+            "id",
+            "assignment",
+            "assignment_date",
+            "shift_type",
+            "production_line",
+            "production_line_code",
+            "production_line_name",
+            "team_leader_username",
+            "status",
+            "current_product",
+            "issue_summary",
+            "action_taken",
+            "action_owner",
+            "action_owner_username",
+            "support_required",
+            "requires_follow_up",
+            "recorded_at",
+            "next_update_due_at",
+            "recorded_by",
+            "recorded_by_username",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "recorded_at",
+            "recorded_by",
+            "recorded_by_username",
+            "created_at",
+            "updated_at",
+        )
+
+    def validate_assignment(self, value):
+        request = self.context.get("request")
+
+        if (
+            request
+            and request.user.is_authenticated
+            and not request.user.is_staff
+            and value.team_leader_id != request.user.id
+        ):
+            raise serializers.ValidationError(
+                "You can only update a line assigned to you."
+            )
+
+        return value
+
+    def validate_action_owner(self, value):
+        if value is not None and not value.is_active:
+            raise serializers.ValidationError("An inactive user cannot own an action.")
+
+        return value
+
+    def validate(self, attrs):
+        instance = self.instance
+
+        status_value = attrs.get(
+            "status",
+            getattr(instance, "status", None),
+        )
+        issue_summary = attrs.get(
+            "issue_summary",
+            getattr(instance, "issue_summary", ""),
+        )
+        requires_follow_up = attrs.get(
+            "requires_follow_up",
+            getattr(instance, "requires_follow_up", False),
+        )
+        recorded_at = getattr(
+            instance,
+            "recorded_at",
+            timezone.now(),
+        )
+        next_update_due_at = attrs.get(
+            "next_update_due_at",
+            getattr(instance, "next_update_due_at", None),
+        )
+
+        errors = {}
+
+        if next_update_due_at and next_update_due_at <= recorded_at:
+            errors["next_update_due_at"] = (
+                "Next update time must be later than the recorded time."
+            )
+
+        if (
+            status_value
+            in {
+                HourlyLineUpdate.Status.AMBER,
+                HourlyLineUpdate.Status.RED,
+            }
+            and not (issue_summary or "").strip()
+        ):
+            errors["issue_summary"] = (
+                "Issue summary is required for Amber or Red status."
+            )
+
+        if status_value == HourlyLineUpdate.Status.RED and not requires_follow_up:
+            errors["requires_follow_up"] = "Red status must require follow-up."
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        return attrs
+
+
+class HourlyLineUpdateFilterSerializer(serializers.Serializer):
+    date = serializers.DateField(required=False)
+    shift_type = serializers.ChoiceField(
+        choices=Shift.ShiftType.choices,
+        required=False,
+    )
+    production_line = serializers.IntegerField(
+        required=False,
+        min_value=1,
+    )
+    status = serializers.ChoiceField(
+        choices=HourlyLineUpdate.Status.choices,
+        required=False,
+    )
+    requires_follow_up = serializers.BooleanField(
+        required=False,
+        allow_null=True,
+        default=None,
+    )
