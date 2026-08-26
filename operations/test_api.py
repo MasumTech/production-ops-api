@@ -7,7 +7,12 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from operations.models import ProductionLine, QualityIncident, Shift
+from operations.models import (
+    ProductionLine,
+    QualityIncident,
+    Shift,
+    TeamLeaderAssignment,
+)
 
 TEST_PASSWORD = "secure-test-password"
 
@@ -388,3 +393,274 @@ def test_dashboard_rejects_invalid_date_range(
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "date_to" in response.data
+
+
+@pytest.fixture
+def staff_user(db):
+    return get_user_model().objects.create_user(
+        username="operations.manager",
+        email="manager@example.com",
+        password=TEST_PASSWORD,
+        is_staff=True,
+    )
+
+
+@pytest.fixture
+def staff_client(api_client, staff_user):
+    api_client.force_authenticate(user=staff_user)
+    return api_client
+
+
+@pytest.fixture
+def other_user(db):
+    return get_user_model().objects.create_user(
+        username="other.team.leader",
+        email="other@example.com",
+        password=TEST_PASSWORD,
+    )
+
+
+@pytest.fixture
+def second_production_line(db):
+    return ProductionLine.objects.create(
+        code="LINE-02",
+        name="Secondary Packing Line",
+        location="Factory Floor B",
+        target_units_per_hour=400,
+    )
+
+
+@pytest.mark.django_db
+def test_team_leader_assignments_require_authentication(api_client):
+    response = api_client.get(
+        reverse("team-leader-assignment-list"),
+    )
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+def test_staff_can_create_team_leader_assignment(
+    staff_client,
+    staff_user,
+    api_user,
+    production_line,
+):
+    response = staff_client.post(
+        reverse("team-leader-assignment-list"),
+        {
+            "team_leader": api_user.id,
+            "production_line": production_line.id,
+            "date": timezone.localdate().isoformat(),
+            "shift_type": Shift.ShiftType.DAY,
+            "notes": "Responsible for the line during this shift.",
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["team_leader"] == api_user.id
+    assert response.data["assigned_by"] == staff_user.id
+    assert response.data["production_line_code"] == "LINE-01"
+
+
+@pytest.mark.django_db
+def test_regular_user_cannot_create_team_leader_assignment(
+    authenticated_client,
+    api_user,
+    production_line,
+):
+    response = authenticated_client.post(
+        reverse("team-leader-assignment-list"),
+        {
+            "team_leader": api_user.id,
+            "production_line": production_line.id,
+            "date": timezone.localdate().isoformat(),
+            "shift_type": Shift.ShiftType.DAY,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_team_leader_only_sees_own_assignments(
+    authenticated_client,
+    api_user,
+    other_user,
+    production_line,
+    second_production_line,
+):
+    TeamLeaderAssignment.objects.create(
+        team_leader=api_user,
+        production_line=production_line,
+        date=timezone.localdate(),
+        shift_type=Shift.ShiftType.DAY,
+    )
+    TeamLeaderAssignment.objects.create(
+        team_leader=other_user,
+        production_line=second_production_line,
+        date=timezone.localdate(),
+        shift_type=Shift.ShiftType.DAY,
+    )
+
+    response = authenticated_client.get(
+        reverse("team-leader-assignment-list"),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 1
+    assert response.data["results"][0]["team_leader"] == api_user.id
+    assert response.data["results"][0]["production_line_code"] == "LINE-01"
+
+
+@pytest.mark.django_db
+def test_staff_user_can_see_all_assignments(
+    staff_client,
+    api_user,
+    other_user,
+    production_line,
+    second_production_line,
+):
+    TeamLeaderAssignment.objects.create(
+        team_leader=api_user,
+        production_line=production_line,
+        date=timezone.localdate(),
+        shift_type=Shift.ShiftType.DAY,
+    )
+    TeamLeaderAssignment.objects.create(
+        team_leader=other_user,
+        production_line=second_production_line,
+        date=timezone.localdate(),
+        shift_type=Shift.ShiftType.DAY,
+    )
+
+    response = staff_client.get(
+        reverse("team-leader-assignment-list"),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 2
+
+
+@pytest.mark.django_db
+def test_my_lines_returns_only_current_users_assignments(
+    staff_client,
+    staff_user,
+    api_user,
+    production_line,
+    second_production_line,
+):
+    TeamLeaderAssignment.objects.create(
+        team_leader=staff_user,
+        production_line=production_line,
+        date=timezone.localdate(),
+        shift_type=Shift.ShiftType.DAY,
+    )
+    TeamLeaderAssignment.objects.create(
+        team_leader=api_user,
+        production_line=second_production_line,
+        date=timezone.localdate(),
+        shift_type=Shift.ShiftType.DAY,
+    )
+
+    response = staff_client.get(
+        reverse("team-leader-assignment-my-lines"),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 1
+    assert response.data["results"][0]["team_leader"] == staff_user.id
+    assert response.data["results"][0]["production_line_code"] == "LINE-01"
+
+
+@pytest.mark.django_db
+def test_assignment_filter_rejects_invalid_date(authenticated_client):
+    response = authenticated_client.get(
+        reverse("team-leader-assignment-list"),
+        {"date": "invalid-date"},
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "date" in response.data
+
+
+@pytest.mark.django_db
+def test_inactive_user_cannot_be_assigned(
+    staff_client,
+    production_line,
+):
+    inactive_user = get_user_model().objects.create_user(
+        username="inactive.team.leader",
+        password=TEST_PASSWORD,
+        is_active=False,
+    )
+
+    response = staff_client.post(
+        reverse("team-leader-assignment-list"),
+        {
+            "team_leader": inactive_user.id,
+            "production_line": production_line.id,
+            "date": timezone.localdate().isoformat(),
+            "shift_type": Shift.ShiftType.DAY,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "team_leader" in response.data
+
+
+@pytest.mark.django_db
+def test_inactive_line_cannot_be_assigned(
+    staff_client,
+    api_user,
+):
+    inactive_line = ProductionLine.objects.create(
+        code="LINE-INACTIVE",
+        name="Inactive Line",
+        status=ProductionLine.Status.INACTIVE,
+    )
+
+    response = staff_client.post(
+        reverse("team-leader-assignment-list"),
+        {
+            "team_leader": api_user.id,
+            "production_line": inactive_line.id,
+            "date": timezone.localdate().isoformat(),
+            "shift_type": Shift.ShiftType.DAY,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "production_line" in response.data
+
+
+@pytest.mark.django_db
+def test_duplicate_line_assignment_is_rejected(
+    staff_client,
+    api_user,
+    other_user,
+    production_line,
+):
+    TeamLeaderAssignment.objects.create(
+        team_leader=api_user,
+        production_line=production_line,
+        date=timezone.localdate(),
+        shift_type=Shift.ShiftType.DAY,
+    )
+
+    response = staff_client.post(
+        reverse("team-leader-assignment-list"),
+        {
+            "team_leader": other_user.id,
+            "production_line": production_line.id,
+            "date": timezone.localdate().isoformat(),
+            "shift_type": Shift.ShiftType.DAY,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST

@@ -169,3 +169,63 @@ class QualityIncident(TimeStampedModel):
 
     def __str__(self):
         return f"{self.title} ({self.get_severity_display()})"
+
+
+class TeamLeaderAssignment(TimeStampedModel):
+    team_leader = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="team_leader_assignments",
+    )
+    production_line = models.ForeignKey(
+        ProductionLine,
+        on_delete=models.PROTECT,
+        related_name="team_leader_assignments",
+    )
+    date = models.DateField()
+    shift_type = models.CharField(
+        max_length=10,
+        choices=Shift.ShiftType.choices,
+    )
+    assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="created_team_leader_assignments",
+        null=True,
+        blank=True,
+    )
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = [
+            "-date",
+            "shift_type",
+            "production_line__code",
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "production_line",
+                    "date",
+                    "shift_type",
+                ],
+                name="unique_line_date_shift_assignment",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=[
+                    "team_leader",
+                    "date",
+                    "shift_type",
+                ],
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.date} - "
+            f"{self.get_shift_type_display()} - "
+            f"{self.production_line.code} - "
+            f"{self.team_leader.username}"
+        )

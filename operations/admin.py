@@ -1,6 +1,11 @@
 from django.contrib import admin
 
-from .models import ProductionLine, QualityIncident, Shift
+from .models import (
+    ProductionLine,
+    QualityIncident,
+    Shift,
+    TeamLeaderAssignment,
+)
 
 
 @admin.register(ProductionLine)
@@ -79,4 +84,47 @@ class QualityIncidentAdmin(admin.ModelAdmin):
         "shift",
         "shift__production_line",
         "reported_by",
+    )
+
+
+@admin.register(TeamLeaderAssignment)
+class TeamLeaderAssignmentAdmin(admin.ModelAdmin):
+    list_display = (
+        "date",
+        "shift_type",
+        "production_line",
+        "team_leader",
+        "assigned_by",
+        "created_at",
+    )
+    list_filter = (
+        "date",
+        "shift_type",
+        "production_line",
+    )
+    search_fields = (
+        "production_line__code",
+        "production_line__name",
+        "team_leader__username",
+        "team_leader__email",
+    )
+    autocomplete_fields = (
+        "production_line",
+        "team_leader",
+        "assigned_by",
+    )
+    date_hierarchy = "date"
+    ordering = (
+        "-date",
+        "shift_type",
+        "production_line__code",
+    )
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+    )
+    list_select_related = (
+        "production_line",
+        "team_leader",
+        "assigned_by",
     )

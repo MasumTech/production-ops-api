@@ -5,7 +5,12 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from operations.models import ProductionLine, QualityIncident, Shift
+from operations.models import (
+    ProductionLine,
+    QualityIncident,
+    Shift,
+    TeamLeaderAssignment,
+)
 
 
 @pytest.fixture
@@ -134,3 +139,67 @@ def test_quality_incident_string_representation(shift):
     )
 
     assert str(incident) == "Packaging seal failure (High)"
+
+
+@pytest.fixture
+def team_leader_assignment(production_line, supervisor):
+    return TeamLeaderAssignment.objects.create(
+        team_leader=supervisor,
+        production_line=production_line,
+        date=timezone.localdate(),
+        shift_type=Shift.ShiftType.DAY,
+    )
+
+
+@pytest.mark.django_db
+def test_team_leader_assignment_string_representation(
+    team_leader_assignment,
+):
+    assert str(team_leader_assignment) == (
+        f"{team_leader_assignment.date} - Day - LINE-01 - shift.supervisor"
+    )
+
+
+@pytest.mark.django_db
+def test_line_cannot_have_duplicate_assignment_for_same_shift(
+    team_leader_assignment,
+    supervisor,
+):
+    duplicate_assignment = TeamLeaderAssignment(
+        team_leader=supervisor,
+        production_line=team_leader_assignment.production_line,
+        date=team_leader_assignment.date,
+        shift_type=team_leader_assignment.shift_type,
+    )
+
+    with pytest.raises(ValidationError):
+        duplicate_assignment.full_clean()
+
+
+@pytest.mark.django_db
+def test_team_leader_can_be_assigned_to_multiple_lines(
+    team_leader_assignment,
+    supervisor,
+):
+    second_line = ProductionLine.objects.create(
+        code="LINE-02",
+        name="Secondary Packing Line",
+        location="Factory Floor B",
+        target_units_per_hour=400,
+    )
+
+    TeamLeaderAssignment.objects.create(
+        team_leader=supervisor,
+        production_line=second_line,
+        date=team_leader_assignment.date,
+        shift_type=team_leader_assignment.shift_type,
+    )
+
+    assert (
+        TeamLeaderAssignment.objects.filter(
+            team_leader=supervisor,
+            date=team_leader_assignment.date,
+            shift_type=team_leader_assignment.shift_type,
+        ).count()
+        == 2
+    )

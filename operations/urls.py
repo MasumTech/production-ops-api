@@ -6,6 +6,7 @@ from .views import (
     ProductionLineViewSet,
     QualityIncidentViewSet,
     ShiftViewSet,
+    TeamLeaderAssignmentViewSet,
 )
 
 router = DefaultRouter()
@@ -23,6 +24,11 @@ router.register(
     "quality-incidents",
     QualityIncidentViewSet,
     basename="quality-incident",
+)
+router.register(
+    "team-leader-assignments",
+    TeamLeaderAssignmentViewSet,
+    basename="team-leader-assignment",
 )
 
 urlpatterns = [
