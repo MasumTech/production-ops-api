@@ -1,6 +1,11 @@
 from rest_framework import serializers
 
-from .models import ProductionLine, QualityIncident, Shift
+from .models import (
+    ProductionLine,
+    QualityIncident,
+    Shift,
+    TeamLeaderAssignment,
+)
 
 
 class ProductionLineSerializer(serializers.ModelSerializer):
@@ -73,6 +78,78 @@ class ShiftSerializer(serializers.ModelSerializer):
             )
 
         return attrs
+
+
+class TeamLeaderAssignmentSerializer(serializers.ModelSerializer):
+    production_line_code = serializers.CharField(
+        source="production_line.code",
+        read_only=True,
+    )
+    production_line_name = serializers.CharField(
+        source="production_line.name",
+        read_only=True,
+    )
+    team_leader_username = serializers.CharField(
+        source="team_leader.username",
+        read_only=True,
+    )
+    assigned_by_username = serializers.CharField(
+        source="assigned_by.username",
+        read_only=True,
+    )
+
+    class Meta:
+        model = TeamLeaderAssignment
+        fields = (
+            "id",
+            "team_leader",
+            "team_leader_username",
+            "production_line",
+            "production_line_code",
+            "production_line_name",
+            "date",
+            "shift_type",
+            "assigned_by",
+            "assigned_by_username",
+            "notes",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "assigned_by",
+            "assigned_by_username",
+            "created_at",
+            "updated_at",
+        )
+
+    def validate_team_leader(self, value):
+        if not value.is_active:
+            raise serializers.ValidationError(
+                "An inactive user cannot be assigned as Team Leader."
+            )
+
+        return value
+
+    def validate_production_line(self, value):
+        if value.status == ProductionLine.Status.INACTIVE:
+            raise serializers.ValidationError(
+                "An inactive production line cannot be assigned."
+            )
+
+        return value
+
+
+class TeamLeaderAssignmentFilterSerializer(serializers.Serializer):
+    date = serializers.DateField(required=False)
+    shift_type = serializers.ChoiceField(
+        choices=Shift.ShiftType.choices,
+        required=False,
+    )
+    production_line = serializers.IntegerField(
+        required=False,
+        min_value=1,
+    )
 
 
 class QualityIncidentSerializer(serializers.ModelSerializer):

@@ -1,18 +1,27 @@
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import Coalesce
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import filters, viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import ProductionLine, QualityIncident, Shift
+from .models import (
+    ProductionLine,
+    QualityIncident,
+    Shift,
+    TeamLeaderAssignment,
+)
+from .permissions import IsStaffOrReadOnly
 from .serializers import (
     OperationsDashboardFilterSerializer,
     OperationsDashboardSummarySerializer,
     ProductionLineSerializer,
     QualityIncidentSerializer,
     ShiftSerializer,
+    TeamLeaderAssignmentFilterSerializer,
+    TeamLeaderAssignmentSerializer,
 )
 
 
@@ -226,3 +235,95 @@ class QualityIncidentViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(reported_by=self.request.user)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        parameters=[TeamLeaderAssignmentFilterSerializer],
+    ),
+)
+class TeamLeaderAssignmentViewSet(viewsets.ModelViewSet):
+    queryset = TeamLeaderAssignment.objects.all()
+    serializer_class = TeamLeaderAssignmentSerializer
+    permission_classes = (IsStaffOrReadOnly,)
+    filter_backends = (
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    )
+    search_fields = (
+        "production_line__code",
+        "production_line__name",
+        "team_leader__username",
+        "team_leader__email",
+    )
+    ordering_fields = (
+        "date",
+        "shift_type",
+        "production_line__code",
+        "team_leader__username",
+        "created_at",
+    )
+    ordering = (
+        "-date",
+        "shift_type",
+        "production_line__code",
+    )
+
+    def get_queryset(self):
+        queryset = self.queryset.select_related(
+            "production_line",
+            "team_leader",
+            "assigned_by",
+        )
+
+        action_name = getattr(self, "action", None)
+
+        if not self.request.user.is_staff or action_name == "my_lines":
+            queryset = queryset.filter(
+                team_leader=self.request.user,
+            )
+
+        filter_serializer = TeamLeaderAssignmentFilterSerializer(
+            data=self.request.query_params,
+        )
+        filter_serializer.is_valid(raise_exception=True)
+
+        date = filter_serializer.validated_data.get("date")
+        shift_type = filter_serializer.validated_data.get("shift_type")
+        production_line = filter_serializer.validated_data.get("production_line")
+
+        if date:
+            queryset = queryset.filter(date=date)
+
+        if shift_type:
+            queryset = queryset.filter(shift_type=shift_type)
+
+        if production_line:
+            queryset = queryset.filter(
+                production_line_id=production_line,
+            )
+
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(assigned_by=self.request.user)
+
+    @extend_schema(
+        parameters=[TeamLeaderAssignmentFilterSerializer],
+        responses=TeamLeaderAssignmentSerializer(many=True),
+    )
+    @action(
+        detail=False,
+        methods=("get",),
+        url_path="my-lines",
+    )
+    def my_lines(self, request):
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)

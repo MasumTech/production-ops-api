@@ -8,6 +8,9 @@ The project demonstrates a structured Django backend using JWT authentication, P
 
 ## Features
 
+- Assign Team Leaders to multiple production lines by date and shift
+- Restrict assignment changes to management staff
+- Let Team Leaders retrieve only their own assigned lines
 - Manage production lines and their operational status
 - Record day and night shifts
 - Track planned and actual production output
@@ -39,6 +42,16 @@ The project demonstrates a structured Django backend using JWT authentication, P
 | Continuous integration | GitHub Actions |
 
 ## Core Models
+
+### TeamLeaderAssignment
+
+Records Team Leader responsibility for a production line, date, and shift:
+
+- Team Leader and production line
+- Assignment date and shift type
+- Management user who created the assignment
+- Optional assignment notes
+- Prevention of duplicate line assignments for the same shift
 
 ### ProductionLine
 
@@ -87,6 +100,9 @@ Tracks production quality issues, including:
 | `GET, POST` | `/api/quality-incidents/` | List or create quality incidents |
 | `GET, PUT, PATCH, DELETE` | `/api/quality-incidents/{id}/` | Manage one quality incident |
 | `GET` | `/api/health/` | Check application and database health |
+| `GET, POST` | `/api/team-leader-assignments/` | List or create line assignments |
+| `GET, PUT, PATCH, DELETE` | `/api/team-leader-assignments/{id}/` | Manage one line assignment |
+| `GET` | `/api/team-leader-assignments/my-lines/` | List the current user’s assigned lines |
 
 All operations endpoints require a JWT access token:
 
@@ -136,6 +152,10 @@ Examples:
 /api/quality-incidents/?status=open
 /api/quality-incidents/?category=packaging
 /api/shifts/?ordering=-actual_output
+/api/team-leader-assignments/?date=2026-08-26
+/api/team-leader-assignments/?shift_type=day
+/api/team-leader-assignments/?production_line=1
+/api/team-leader-assignments/my-lines/?date=2026-08-26&shift_type=day
 ```
 
 ## Dashboard Date Filtering
@@ -152,6 +172,13 @@ The operations dashboard can summarize all available records or filter the resul
 `date_from` and `date_to` must use the `YYYY-MM-DD` format.
 
 The API returns `400 Bad Request` when `date_from` is later than `date_to`.
+
+## Team Leader Assignment Permissions
+
+- Management staff can list, create, update, and delete assignments.
+- Regular authenticated users can only view their own assignments.
+- The `my-lines` endpoint always returns assignments belonging to the current user.
+- Inactive users and inactive production lines cannot receive new assignments.
 
 ## Quick Start with Docker
 
