@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 650" role="img" aria-labelledby="title desc">
+  <title id="title">Production Operations API architecture</title>
+  <desc id="desc">API clients and GitHub Actions connect to a Django REST Framework application secured by JWT, backed by domain validation and PostgreSQL.</desc>
+  <defs>
+    <linearGradient id="primary" x1="0" x2="1"><stop offset="0" stop-color="#eff6ff"/><stop offset="1" stop-color="#eef2ff"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#0f172a" flood-opacity=".12"/></filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#64748b"/></marker>
+  </defs>
+  <style>
+    .node{fill:url(#primary);stroke:#6366f1;stroke-width:2;filter:url(#shadow)}
+    .core{fill:#f5f3ff;stroke:#8b5cf6;stroke-width:2;filter:url(#shadow)}
+    .db{fill:#ecfeff;stroke:#0891b2;stroke-width:2;filter:url(#shadow)}
+    .line{fill:none;stroke:#64748b;stroke-width:3;marker-end:url(#arrow)}
+    .label{font:600 21px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;text-anchor:middle}
+    .small{font:500 16px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;text-anchor:middle}
+  </style>
+  <rect class="node" x="90" y="35" width="360" height="86" rx="18"/>
+  <text class="label" x="270" y="75">Swagger or API client</text><text class="small" x="270" y="101">HTTP and JSON</text>
+  <rect class="node" x="650" y="35" width="360" height="86" rx="18"/>
+  <text class="label" x="830" y="75">GitHub Actions</text><text class="small" x="830" y="101">Quality checks and Docker build</text>
+  <path class="line" d="M270 121 V165 H485"/><path class="line" d="M830 121 V165 H615"/>
+  <rect class="core" x="330" y="160" width="440" height="86" rx="18"/>
+  <text class="label" x="550" y="200">Django REST Framework</text><text class="small" x="550" y="226">ViewSets, serializers and OpenAPI</text>
+  <path class="line" d="M550 246 V285"/>
+  <rect class="node" x="330" y="285" width="440" height="86" rx="18"/>
+  <text class="label" x="550" y="325">JWT authentication</text><text class="small" x="550" y="351">Role and assignment-scoped permissions</text>
+  <path class="line" d="M550 371 V410"/>
+  <rect class="node" x="330" y="410" width="440" height="86" rx="18"/>
+  <text class="label" x="550" y="450">Operations domain</text><text class="small" x="550" y="476">Business validation, constraints and indexes</text>
+  <path class="line" d="M550 496 V535"/>
+  <rect class="db" x="330" y="535" width="440" height="86" rx="18"/>
+  <text class="label" x="550" y="575">PostgreSQL 16</text><text class="small" x="550" y="601">Persistent operational data</text>
+</svg>
