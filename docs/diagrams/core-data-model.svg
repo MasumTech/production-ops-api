@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 680" role="img" aria-labelledby="title desc">
-  <title id="title">Production Operations API core data model</title>
+  <title id="title">Multi-Line Production Operations API core data model</title>
   <desc id="desc">Users lead line assignments and record hourly updates. Production lines receive assignments and run shifts. Shifts report quality incidents.</desc>
   <defs>
     <linearGradient id="primary" x1="0" x2="1"><stop offset="0" stop-color="#eff6ff"/><stop offset="1" stop-color="#eef2ff"/></linearGradient>
@@ -9,10 +9,11 @@
   <style>
     .node{fill:url(#primary);stroke:#6366f1;stroke-width:2;filter:url(#shadow)}
     .line{fill:none;stroke:#64748b;stroke-width:3;marker-end:url(#arrow)}
-    .label{font:650 19px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;text-anchor:middle}
+    .label{font:600 19px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;text-anchor:middle}
     .small{font:500 15px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;text-anchor:middle}
     .rel{font:600 15px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#4338ca;text-anchor:middle}
   </style>
+  <rect width="1100" height="680" fill="#ffffff"/>
   <rect class="node" x="90" y="35" width="330" height="92" rx="18"/>
   <text class="label" x="255" y="76">USER</text><text class="small" x="255" y="103">Team Leader, manager or recorder</text>
   <rect class="node" x="680" y="35" width="330" height="92" rx="18"/>
