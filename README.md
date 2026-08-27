@@ -6,17 +6,19 @@
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A production-focused REST API for managing manufacturing lines, shifts, production performance, downtime, and quality incidents.
+A production-focused REST API for manufacturing line ownership, hourly RAG status, shift KPIs, downtime, and quality incidents.
 
-The project demonstrates a structured Django backend using JWT authentication, PostgreSQL, Docker, automated testing, and continuous integration.
+Built with Django REST Framework, JWT authentication, PostgreSQL, Docker, automated testing, and continuous integration.
 
 **Portfolio scope:** Backend API engineering focused on production workflows, data integrity, access control, automated quality gates, and containerized delivery.
 
-[Business problem](#the-real-world-problem) · [Workflow](#operational-workflow) · [Architecture](#system-architecture) · [Data model](#core-data-model) · [API](#api-endpoints) · [Run locally](#quick-start-with-docker)
+[Problem](#the-real-world-problem) · [Scenario](#representative-shift-scenario) · [Workflow](#operational-workflow) · [Capabilities](#key-capabilities) · [Architecture](#system-architecture) · [API](#api-endpoints) · [Run locally](#quick-start-with-docker)
 
 ## The Real-World Problem
 
-On a busy manufacturing shift, one Team Leader may be responsible for up to three production lines at the same time. When one line slows down or stops because of a material blockage, equipment fault, quality concern, or staffing issue, verbal updates and paper notes quickly become incomplete or outdated.
+On a normal manufacturing shift, a Team Leader may run one production line. During busy periods, absence cover, or changing production demand, the same person may temporarily coordinate two or three lines. If one line slows or stops because of a material blockage, equipment fault, quality concern, or staffing issue, verbal updates and paper notes quickly become incomplete or outdated.
+
+Each line remains a separate date- and shift-specific assignment. The API therefore makes multi-line responsibility visible without treating “three lines” as a hard-coded limit.
 
 The API addresses five operational control gaps:
 
@@ -40,7 +42,7 @@ The API addresses five operational control gaps:
 
 ```mermaid
 flowchart TB
-    A["Manager assigns up to three lines"] --> B["Team Leader opens My Lines"]
+    A["Manager assigns one or several lines"] --> B["Team Leader opens My Lines"]
     B --> C["Record hourly RAG update"]
     C --> D{"Current line status"}
     D -->|Green| E["Continue and schedule next update"]
@@ -49,7 +51,27 @@ flowchart TB
     F --> G
 ```
 
-## Business Outcomes
+## RAG Status and Escalation Rules
+
+| Status | Typical condition | Operational response | API-enforced rule |
+|---|---|---|---|
+| `Green` | Stable and operating as expected | Continue production and schedule the next check | Next-update time must be later than the recorded time |
+| `Amber` | At risk but still running or recoverable | Record the issue, action, owner/support, and monitor closely | Issue summary and a future next-update time are required |
+| `Red` | Stopped or critically constrained | Escalate immediately and maintain a follow-up trail | Issue summary, follow-up flag, and a future next-update time are required |
+
+## Key Capabilities
+
+| Area | Capability | Operational value |
+|---|---|---|
+| Workforce coordination | Date- and shift-specific Team Leader assignments across one or several lines | Makes line ownership explicit |
+| Live line control | Green, Amber, and Red updates with issues, actions, owners, support needs, and deadlines | Shows the current condition and required response |
+| Production performance | Planned output, actual output, downtime, and calculated performance percentage | Turns shift activity into measurable KPIs |
+| Quality incident management | Category, severity, lifecycle status, root cause, and corrective action | Supports structured investigation and closure |
+| Management oversight | Dashboard aggregates, latest status, search, filtering, and ordering | Reduces manual status chasing |
+| API usability | JWT authentication, pagination, validation, health checks, OpenAPI schema, and Swagger UI | Provides a predictable integration surface |
+| Delivery and reliability | Automated tests, Ruff, GitHub Actions, Docker Compose, Gunicorn, and health checks | Demonstrates a repeatable production-style delivery process |
+
+## Expected Operational Value
 
 - Clear responsibility across several production lines during the same shift
 - Faster visibility of stopped, at-risk, and stable lines
@@ -81,6 +103,26 @@ erDiagram
     SHIFT ||--o{ QUALITY_INCIDENT : reports
 ```
 
+## Access Control Matrix
+
+| Role | Read access | Write access |
+|---|---|---|
+| Public visitor | Health check, JWT token routes, OpenAPI schema, and Swagger UI | None |
+| Authenticated operations user | Production lines, shifts, incidents, and dashboard | Production lines, shifts, and quality incidents |
+| Assigned Team Leader | Own line assignments and own hourly updates | Hourly updates for assigned lines only |
+| Management staff | All assignments and hourly updates | Create, update, and delete assignments; manage all hourly updates |
+
+## Data Integrity and Business Rules
+
+| Domain | Enforced rule |
+|---|---|
+| Production line | Line code is unique; status is Active, Inactive, or Maintenance |
+| Shift | One shift per line/date/type; start and end times must differ; performance is calculated from actual versus planned output |
+| Quality incident | Resolution cannot precede occurrence; Resolved or Closed incidents require a resolution time |
+| Line assignment | One assignee per line/date/shift; inactive users and inactive lines cannot receive new assignments |
+| Hourly update | Team Leaders can use only their own assignments; Amber/Red need an issue summary; Red requires follow-up |
+| Audit trail | Reporter/recorder is captured from the authenticated user; update deadlines must be in the future |
+
 ## Engineering Highlights
 
 - Relational domain modelling with database constraints and targeted indexes
@@ -91,16 +133,6 @@ erDiagram
 - Automated formatting, linting, system checks, tests, Compose validation, and Docker builds
 - Non-root Gunicorn container with application and PostgreSQL health checks
 
-## Key Capabilities
-
-| Area | Capability | Operational value |
-|---|---|---|
-| Line ownership | Date- and shift-specific Team Leader assignments | Makes multi-line responsibility explicit |
-| Hourly control | Green, Amber, and Red updates with issues and deadlines | Shows the current condition and required response |
-| Production performance | Planned output, actual output, downtime, and performance percentage | Turns shift activity into measurable KPIs |
-| Quality management | Incident severity, status, root cause, and corrective action | Supports structured investigation and closure |
-| Management visibility | Dashboard summary, latest status, search, filtering, and ordering | Reduces manual status chasing |
-| Platform controls | JWT, scoped permissions, validation, pagination, health checks, and OpenAPI | Provides a secure and maintainable API foundation |
 
 ## Technology Stack
 
@@ -118,61 +150,16 @@ erDiagram
 | Code quality | Ruff |
 | Continuous integration | GitHub Actions |
 
-## Core Models
+## Domain Model Responsibilities
 
-### HourlyLineUpdate
-
-Records an operational status update for an assigned production line:
-
-- Green, Amber, or Red line status
-- Current product and issue summary
-- Action taken and responsible action owner
-- Support requirements and follow-up indicator
-- Recorded time and next update deadline
-- User who recorded the update
-
-### TeamLeaderAssignment
-
-Records Team Leader responsibility for a production line, date, and shift:
-
-- Team Leader and production line
-- Assignment date and shift type
-- Management user who created the assignment
-- Optional assignment notes
-- Prevention of duplicate line assignments for the same shift
-
-### ProductionLine
-
-Stores production line details, including:
-
-- Unique line code
-- Name and location
-- Target units per hour
-- Operational status
-
-### Shift
-
-Records production activity for a particular line and date, including:
-
-- Day or night shift
-- Supervisor
-- Planned and actual output
-- Downtime
-- Automatically calculated performance percentage
-
-A production line cannot have duplicate shifts with the same date and shift type.
-
-### QualityIncident
-
-Tracks production quality issues, including:
-
-- Category and severity
-- Incident status
-- Description and immediate action
-- Root cause and corrective action
-- Occurrence and resolution time
-- User who reported the incident
-
+| Model | Responsibility | Key data and behaviour |
+|---|---|---|
+| `TimeStampedModel` | Shared audit base | Adds `created_at` and `updated_at` to domain records |
+| `ProductionLine` | Manufacturing line master data | Unique code, name, location, hourly target, and operational status |
+| `Shift` | Production result for a line and shift | Supervisor, times, planned/actual output, downtime, notes, and calculated performance |
+| `QualityIncident` | Quality and operational issue lifecycle | Category, severity, status, actions, root cause, corrective action, occurrence, resolution, and reporter |
+| `TeamLeaderAssignment` | Line ownership for a date and shift | Team Leader, line, assignment creator, and notes; supports multi-line responsibility |
+| `HourlyLineUpdate` | Timestamped RAG condition for an assigned line | Product, issue, action, owner, support required, follow-up, recorder, and next-update deadline |
 ## API Endpoints
 
 | Method | Endpoint | Description |
@@ -188,6 +175,7 @@ Tracks production quality issues, including:
 | `GET, POST` | `/api/quality-incidents/` | List or create quality incidents |
 | `GET, PUT, PATCH, DELETE` | `/api/quality-incidents/{id}/` | Manage one quality incident |
 | `GET` | `/api/health/` | Check application and database health |
+| `GET` | `/api/dashboard/summary/` | Return aggregated production and incident KPIs |
 | `GET, POST` | `/api/team-leader-assignments/` | List or create line assignments |
 | `GET, PUT, PATCH, DELETE` | `/api/team-leader-assignments/{id}/` | Manage one line assignment |
 | `GET` | `/api/team-leader-assignments/my-lines/` | List the current user’s assigned lines |
@@ -195,7 +183,7 @@ Tracks production quality issues, including:
 | `GET, PUT, PATCH, DELETE` | `/api/hourly-line-updates/{id}/` | Manage one accessible hourly update |
 | `GET` | `/api/hourly-line-updates/latest-status/` | Return the latest update for every accessible assignment |
 
-All operations endpoints require a JWT access token:
+Business operations endpoints, including the dashboard and resource routes, require a JWT access token:
 
 ```http
 Authorization: Bearer <access-token>
@@ -250,61 +238,28 @@ Pagination can be combined with filtering, search, and ordering:
 
 ## Search, Filtering, and Ordering
 
-Examples:
+| Resource | Filters | Search and ordering |
+|---|---|---|
+| Production lines | `status` | Search code/name/location; order by code/name/status/created time |
+| Shifts | `production_line`, `shift_type`, `date` | Search line/supervisor/notes; order by date/output/downtime/created time |
+| Quality incidents | `status`, `severity`, `category`, `shift` | Search title/description/root cause/line; order by occurrence/resolution/severity/status |
+| Team Leader assignments | `date`, `shift_type`, `production_line` | Search line/leader; order by date/shift/line/leader |
+| Hourly line updates | `date`, `shift_type`, `production_line`, `status`, `requires_follow_up` | Search line/leader/product/issue/action/support; order by recorded time/deadline/status/line |
+| Dashboard summary | `date_from`, `date_to` | Aggregates only the selected date range |
+
+Representative queries:
 
 ```text
-/api/production-lines/?status=active
-/api/production-lines/?search=packing
-/api/shifts/?production_line=1
-/api/shifts/?shift_type=day
-/api/shifts/?date=2026-08-21
-/api/quality-incidents/?severity=high
-/api/quality-incidents/?status=open
-/api/quality-incidents/?category=packaging
-/api/shifts/?ordering=-actual_output
-/api/hourly-line-updates/?date=2026-08-26
-/api/hourly-line-updates/?shift_type=day
-/api/hourly-line-updates/?production_line=1
-/api/hourly-line-updates/?status=red
-/api/hourly-line-updates/?requires_follow_up=true
-/api/hourly-line-updates/latest-status/?status=amber
-/api/team-leader-assignments/?date=2026-08-26
-/api/team-leader-assignments/?shift_type=day
-/api/team-leader-assignments/?production_line=1
+/api/production-lines/?status=active&search=packing
+/api/shifts/?production_line=1&shift_type=day&ordering=-actual_output
+/api/quality-incidents/?severity=critical&status=open
 /api/team-leader-assignments/my-lines/?date=2026-08-26&shift_type=day
-```
-
-## Dashboard Date Filtering
-
-The operations dashboard can summarize all available records or filter the results by date.
-
-```text
-/api/dashboard/summary/
-/api/dashboard/summary/?date_from=2026-08-01
-/api/dashboard/summary/?date_to=2026-08-31
+/api/hourly-line-updates/?status=red&requires_follow_up=true
+/api/hourly-line-updates/latest-status/?status=amber
 /api/dashboard/summary/?date_from=2026-08-01&date_to=2026-08-31
 ```
 
-`date_from` and `date_to` must use the `YYYY-MM-DD` format.
-
-The API returns `400 Bad Request` when `date_from` is later than `date_to`.
-
-## Team Leader Assignment Permissions
-
-- Management staff can list, create, update, and delete assignments.
-- Regular authenticated users can only view their own assignments.
-- The `my-lines` endpoint always returns assignments belonging to the current user.
-- Inactive users and inactive production lines cannot receive new assignments.
-
-## Hourly Line Update Permissions
-
-- Management staff can access updates for all line assignments.
-- Team Leaders can only access and record updates for their assigned lines.
-- The authenticated user is automatically recorded as the update author.
-- Amber and Red updates require an issue summary.
-- Red updates must be marked for follow-up.
-- Inactive users cannot be selected as action owners.
-
+`date_from` and `date_to` use `YYYY-MM-DD`. The API returns `400 Bad Request` when `date_from` is later than `date_to`. Invalid typed filters, such as an invalid date or status, are also rejected.
 ## Quick Start with Docker
 
 ### Prerequisites
@@ -425,6 +380,8 @@ curl http://localhost:8000/api/production-lines/ \
 
 ## Testing and Code Quality
 
+The current suite contains **54 automated tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, and validation.
+
 Run the complete test suite:
 
 ```bash
@@ -471,16 +428,26 @@ GitHub Actions automatically runs the following checks for changes targeting `ma
 
 ```text
 production-ops-api/
-├── .github/workflows/   # GitHub Actions configuration
-├── config/              # Django settings and root URLs
-├── operations/          # Models, serializers, views, URLs, and tests
-├── Dockerfile           # Django application image
-├── LICENSE              # MIT open-source license
-├── compose.yml          # Web and PostgreSQL services
-├── manage.py            # Django management command
-├── pytest.ini           # pytest configuration
-├── requirements.txt     # Python dependencies
-└── ruff.toml            # Ruff configuration
+├── .github/workflows/ci.yml    # Automated quality and Docker checks
+├── config/
+│   ├── settings.py             # Environment-driven Django/DRF settings
+│   ├── urls.py                 # Auth, schema, docs, health, and app routes
+│   └── health.py               # Application and database readiness check
+├── operations/
+│   ├── models.py               # Production domain and integrity rules
+│   ├── serializers.py          # API representation and validation
+│   ├── permissions.py          # Staff and assignment-scoped access
+│   ├── views.py                # CRUD, filters, dashboard, and custom actions
+│   ├── urls.py                 # DRF router registrations
+│   ├── admin.py                # Django admin configuration
+│   ├── migrations/             # Versioned database schema
+│   ├── tests.py                # Model tests
+│   └── test_api.py             # API, permission, and workflow tests
+├── Dockerfile                  # Non-root Gunicorn image
+├── compose.yml                 # Django and PostgreSQL services
+├── requirements.txt            # Pinned Python dependencies
+├── ruff.toml                   # Formatting and lint rules
+└── README.md                   # Case study and operating guide
 ```
 
 ## Author
