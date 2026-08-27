@@ -1,4 +1,6 @@
-# Production Operations API
+# Multi-Line Production Operations Platform
+
+**Backend API for the Multi-Line Team Leader Digital Solution**
 
 [![CI](https://github.com/MasumTech/production-ops-api/actions/workflows/ci.yml/badge.svg)](https://github.com/MasumTech/production-ops-api/actions/workflows/ci.yml)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
@@ -6,15 +8,25 @@
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A production-focused REST API for manufacturing line ownership, hourly RAG status, shift KPIs, downtime, and quality incidents.
+A production-focused platform for coordinating two or three manufacturing lines through clear ownership, hourly RAG status, issue escalation, shift KPIs, downtime, and quality records.
 
-Built with Django REST Framework, JWT authentication, PostgreSQL, Docker, automated testing, and continuous integration.
+This repository implements the backend API foundation using Django REST Framework, JWT authentication, PostgreSQL, Docker, automated testing, and continuous integration.
 
-**Current repository scope:** Backend API engineering focused on production workflows, data integrity, access control, automated quality gates, and containerized delivery.
+**Current repository scope:** The Multi-Line Production Operations API, focused on production workflows, data integrity, access control, automated quality gates, and containerized delivery.
 
-**Product direction:** A tablet-first Line Control Assistant for Team Leaders, a web control board for Operations, and optional mobile access after the core workflow is validated.
+**Product direction:** The wider platform will add a tablet-first Team Leader experience, an Operations Manager web console, live events, operational analytics, and optional mobile access after the core workflow is validated.
 
-[Problem](#the-real-world-problem) · [Scenario](#representative-shift-scenario) · [Workflow](#operational-workflow) · [Capabilities](#key-capabilities) · [Roadmap](#product-roadmap) · [Architecture](#system-architecture) · [API](#api-endpoints) · [Run locally](#quick-start-with-docker)
+[Scope](#product-scope-and-naming) · [Problem](#the-real-world-problem) · [Scenario](#representative-shift-scenario) · [Workflow](#operational-workflow) · [Capabilities](#key-capabilities) · [Roadmap](#product-roadmap) · [Architecture](#system-architecture) · [API](#api-endpoints) · [Run locally](#quick-start-with-docker)
+
+## Product Scope and Naming
+
+| Layer | Name | Purpose |
+|---|---|---|
+| Complete product | **Multi-Line Production Operations Platform** | The full tablet, web, backend, live-event, analytics, and future mobile direction |
+| Operational proposal | **Multi-Line Team Leader Digital Solution** | The management-facing workflow for one Team Leader coordinating two or three production lines |
+| Current repository | **Multi-Line Production Operations API** | The implemented Django backend, business rules, access control, operational data, and integration endpoints |
+
+The repository slug remains `production-ops-api` so existing GitHub, clone, CV, and portfolio links stay stable while the wider product develops in phases.
 
 ## The Real-World Problem
 
@@ -75,7 +87,7 @@ The API addresses five operational control gaps:
 
 ## Product Roadmap
 
-This repository is the backend foundation for a wider **Line Control Assistant**. The sequence below keeps the solution useful and safe: prove the workflow first, build reliable operational data next, then add interfaces, live events, analytics, and only later consider AI.
+This repository is the backend foundation for the wider **Multi-Line Production Operations Platform** and its **Multi-Line Team Leader Digital Solution** workflow. The sequence below keeps the solution useful and safe: prove the workflow first, build reliable operational data next, then add interfaces, live events, analytics, and only later consider AI.
 
 | Phase | Scope | Main users/interface | Status |
 |---|---|---|---|

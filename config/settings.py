@@ -1,4 +1,4 @@
-"""Django settings for the Production Operations API."""
+"""Django settings for the Multi-Line Production Operations API."""
 
 from pathlib import Path
 
@@ -133,9 +133,10 @@ REST_FRAMEWORK = {
 
 # drf-spectacular settings
 SPECTACULAR_SETTINGS = {
-    "TITLE": "Production Operations API",
+    "TITLE": "Multi-Line Production Operations API",
     "DESCRIPTION": (
-        "REST API for managing production lines, shifts, KPIs, and quality incidents."
+        "Backend API for the Multi-Line Team Leader Digital Solution, including "
+        "line assignments, hourly RAG updates, shifts, KPIs, and quality incidents."
     ),
     "VERSION": "1.0.0",
 }

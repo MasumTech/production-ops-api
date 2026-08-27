@@ -21,6 +21,7 @@
     .small{font:600 16px system-ui,-apple-system,"Segoe UI",sans-serif;text-anchor:middle}
     .green{fill:#166534}.amber{fill:#9a3412}
   </style>
+  <rect width="1100" height="760" fill="#ffffff"/>
   <rect class="node" x="350" y="24" width="400" height="84" rx="16"/>
   <text class="label" x="550" y="60">Manager assigns one or</text>
   <text class="label" x="550" y="88">several lines</text>
