@@ -10,9 +10,11 @@ A production-focused REST API for manufacturing line ownership, hourly RAG statu
 
 Built with Django REST Framework, JWT authentication, PostgreSQL, Docker, automated testing, and continuous integration.
 
-**Portfolio scope:** Backend API engineering focused on production workflows, data integrity, access control, automated quality gates, and containerized delivery.
+**Current repository scope:** Backend API engineering focused on production workflows, data integrity, access control, automated quality gates, and containerized delivery.
 
-[Problem](#the-real-world-problem) · [Scenario](#representative-shift-scenario) · [Workflow](#operational-workflow) · [Capabilities](#key-capabilities) · [Architecture](#system-architecture) · [API](#api-endpoints) · [Run locally](#quick-start-with-docker)
+**Product direction:** A tablet-first Line Control Assistant for Team Leaders, a web control board for Operations, and optional mobile access after the core workflow is validated.
+
+[Problem](#the-real-world-problem) · [Scenario](#representative-shift-scenario) · [Workflow](#operational-workflow) · [Capabilities](#key-capabilities) · [Roadmap](#product-roadmap) · [Architecture](#system-architecture) · [API](#api-endpoints) · [Run locally](#quick-start-with-docker)
 
 ## The Real-World Problem
 
@@ -40,16 +42,7 @@ The API addresses five operational control gaps:
 
 ## Operational Workflow
 
-```mermaid
-flowchart TB
-    A["Manager assigns one or several lines"] --> B["Team Leader opens My Lines"]
-    B --> C["Record hourly RAG update"]
-    C --> D{"Current line status"}
-    D -->|Green| E["Continue and schedule next update"]
-    D -->|Amber or Red| F["Record issue, action owner and follow-up"]
-    E --> G["Latest status and dashboard"]
-    F --> G
-```
+![Operational workflow from line assignment to status and escalation](docs/diagrams/operational-workflow.svg)
 
 ## RAG Status and Escalation Rules
 
@@ -80,28 +73,50 @@ flowchart TB
 - An auditable operational history for management and shift handovers
 - Scoped visibility: Team Leaders see their own lines while staff retain oversight
 
+## Product Roadmap
+
+This repository is the backend foundation for a wider **Line Control Assistant**. The sequence below keeps the solution useful and safe: prove the workflow first, build reliable operational data next, then add interfaces, live events, analytics, and only later consider AI.
+
+| Phase | Scope | Main users/interface | Status |
+|---|---|---|---|
+| 1. Operations foundation | Production lines, shifts, output, downtime, quality incidents, dashboard, JWT, PostgreSQL, Docker, CI, health checks | API, Swagger, Django Admin | **Built** |
+| 2. Multi-line control | Date/shift assignments, `my-lines`, hourly RAG updates, owners, deadlines, follow-up, `latest-status` | Team Leader and management API | **Built** |
+| 3. Product and material readiness | Product sequence, READY/IN PROCESS/SHORT/HELD state, shortage quantity, owner, expected availability, authorised release visibility | Batcher, Team Leader, Operations | **Next backend phase** |
+| 4. Handover and recovery workflows | Structured issue categories, acknowledgements, unresolved-item handover, break/recovery controls, overdue/no-owner rules | Team Leader, incoming lead, Operations | **Planned backend phase** |
+| 5. Tablet-first frontend | My Lines, Raise Issue, Materials, Break & Recovery, and Handover in a fast responsive PWA | Team Leader tablet | **Planned frontend phase** |
+| 6. Manager web console | Live Floor priority board, all-line status, output position, open actions, late updates, and current material risk | Operations desktop/laptop | **Planned frontend phase** |
+| 7. Real-time event layer | Live status delivery, support notifications, overdue reminders, offline queue, and safe re-sync | Tablet and web interfaces | **Future phase** |
+| 8. Loss and asset analytics | Repeated fault history, downtime impact, material delays, recurring line combinations, repair-versus-replace evidence | Operations and Engineering | **Future phase** |
+| 9. AI daily risk briefing | Explainable plan-completion, downtime, and material-delay risk with confidence and missing-data warnings | Authorised managers/support roles | **Data-dependent future phase** |
+| 10. Optional mobile companion | Focused alerts, acknowledgements, and quick status access using the same API | Approved support users | **Optional after tablet validation** |
+
+### Proposed Product Architecture
+
+| Layer | Proposed direction | Why |
+|---|---|---|
+| Backend and API | Continue with Django, DRF, PostgreSQL, and versioned REST endpoints | Reuses the tested foundation and keeps business rules central |
+| Tablet and manager frontend | React + TypeScript responsive Progressive Web App | One tablet-first codebase can also serve desktop and provide limited offline support |
+| Live updates | Django Channels/WebSockets with Redis after the pilot proves the need | Pushes important status changes without constant manual refresh |
+| Background work | Celery with Redis for approved reminders, overdue checks, and scheduled reports | Keeps asynchronous work outside API requests |
+| Optional mobile | PWA first; consider React Native/Expo only if native notifications, scanning, or stronger offline use is justified | Avoids maintaining a second client too early |
+| Delivery | Containerised services, managed PostgreSQL, monitoring, backups, and staged environments | Provides a controlled route from prototype to pilot and production |
+
+## Safety and Product Boundaries
+
+- Make the line safe and follow approved safety, food-safety, quality, product-hold, engineering, and escalation procedures **before** entering a software update.
+- The product supports visibility and coordination; it does not replace authorised checks, release records, traceability, HR decisions, or official production systems.
+- Tablet or Wi-Fi failure must not stop the process. Approved verbal communication and paper/whiteboard fallback remain available.
+- Start with generic dummy data, then a controlled process pilot, then a limited software pilot only after Operations, QA, Health and Safety, Engineering, HR, and IT approval.
+- Deterministic rules come before prediction. AI remains advisory and cannot start/stop a line, release product, set staffing, move breaks, raise line speed, or order repair/replacement.
+- Tablet is the primary shopfloor interface. Mobile remains optional until the tablet workflow proves fast, safe, and useful.
+
 ## System Architecture
 
-```mermaid
-flowchart TB
-    Client["Swagger or API client"] --> API["Django REST Framework"]
-    API --> Access["JWT authentication and scoped permissions"]
-    Access --> Domain["Operations domain and business validation"]
-    Domain --> DB["PostgreSQL"]
-    CI["GitHub Actions"] -->|quality checks and Docker build| API
-```
+![System architecture from API clients and CI through Django REST Framework to PostgreSQL](docs/diagrams/system-architecture.svg)
 
 ## Core Data Model
 
-```mermaid
-erDiagram
-    USER ||--o{ TEAM_LEADER_ASSIGNMENT : leads
-    USER ||--o{ HOURLY_LINE_UPDATE : records
-    PRODUCTION_LINE ||--o{ TEAM_LEADER_ASSIGNMENT : receives
-    TEAM_LEADER_ASSIGNMENT ||--o{ HOURLY_LINE_UPDATE : contains
-    PRODUCTION_LINE ||--o{ SHIFT : runs
-    SHIFT ||--o{ QUALITY_INCIDENT : reports
-```
+![Core data model relationships for users, lines, assignments, updates, shifts, and incidents](docs/diagrams/core-data-model.svg)
 
 ## Access Control Matrix
 
@@ -429,6 +444,7 @@ GitHub Actions automatically runs the following checks for changes targeting `ma
 ```text
 production-ops-api/
 ├── .github/workflows/ci.yml    # Automated quality and Docker checks
+├── docs/diagrams/              # Stable SVG workflow and architecture visuals
 ├── config/
 │   ├── settings.py             # Environment-driven Django/DRF settings
 │   ├── urls.py                 # Auth, schema, docs, health, and app routes

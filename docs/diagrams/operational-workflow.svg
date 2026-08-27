@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 760" role="img" aria-labelledby="title desc">
+  <title id="title">Production operations workflow</title>
+  <desc id="desc">Management assigns lines, a Team Leader records hourly RAG status, and stable or escalated paths feed the latest-status dashboard.</desc>
+  <defs>
+    <linearGradient id="primary" x1="0" x2="1">
+      <stop offset="0" stop-color="#eff6ff"/>
+      <stop offset="1" stop-color="#eef2ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#0f172a" flood-opacity=".12"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+  </defs>
+  <style>
+    .node{fill:url(#primary);stroke:#6366f1;stroke-width:2;filter:url(#shadow)}
+    .decision{fill:#f5f3ff;stroke:#8b5cf6;stroke-width:2;filter:url(#shadow)}
+    .line{fill:none;stroke:#64748b;stroke-width:3;marker-end:url(#arrow)}
+    .label{font:600 20px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;text-anchor:middle}
+    .small{font:600 16px system-ui,-apple-system,"Segoe UI",sans-serif;text-anchor:middle}
+    .green{fill:#166534}.amber{fill:#9a3412}
+  </style>
+  <rect class="node" x="350" y="24" width="400" height="84" rx="16"/>
+  <text class="label" x="550" y="60">Manager assigns one or</text>
+  <text class="label" x="550" y="88">several lines</text>
+  <path class="line" d="M550 108 V138"/>
+  <rect class="node" x="350" y="140" width="400" height="72" rx="16"/>
+  <text class="label" x="550" y="185">Team Leader opens My Lines</text>
+  <path class="line" d="M550 212 V248"/>
+  <rect class="node" x="350" y="250" width="400" height="72" rx="16"/>
+  <text class="label" x="550" y="295">Record hourly RAG update</text>
+  <path class="line" d="M550 322 V346"/>
+  <path class="decision" d="M550 348 L690 420 L550 492 L410 420 Z"/>
+  <text class="label" x="550" y="414">Current line</text>
+  <text class="label" x="550" y="442">status</text>
+  <path class="line" d="M410 420 H270 V518"/>
+  <path class="line" d="M690 420 H830 V518"/>
+  <rect x="178" y="455" width="90" height="30" rx="15" fill="#dcfce7"/>
+  <text class="small green" x="223" y="476">Green</text>
+  <rect x="832" y="455" width="150" height="30" rx="15" fill="#ffedd5"/>
+  <text class="small amber" x="907" y="476">Amber or Red</text>
+  <rect class="node" x="70" y="520" width="400" height="84" rx="16"/>
+  <text class="label" x="270" y="557">Continue production</text>
+  <text class="label" x="270" y="585">Schedule next update</text>
+  <rect class="node" x="630" y="520" width="400" height="84" rx="16"/>
+  <text class="label" x="830" y="557">Record issue and action owner</text>
+  <text class="label" x="830" y="585">Escalate and follow up</text>
+  <path class="line" d="M270 604 V655 H440"/>
+  <path class="line" d="M830 604 V655 H660"/>
+  <rect class="node" x="350" y="650" width="400" height="78" rx="16"/>
+  <text class="label" x="550" y="684">Latest status and dashboard</text>
+  <text class="small" x="550" y="710" fill="#475569">One current view for every accessible line</text>
+</svg>
