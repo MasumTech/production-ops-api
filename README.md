@@ -444,6 +444,7 @@ GitHub Actions automatically runs the following checks for changes targeting `ma
 ```text
 production-ops-api/
 ├── .github/workflows/ci.yml    # Automated quality and Docker checks
+├── docs/diagrams/              # Stable SVG workflow and architecture visuals
 ├── config/
 │   ├── settings.py             # Environment-driven Django/DRF settings
 │   ├── urls.py                 # Auth, schema, docs, health, and app routes
