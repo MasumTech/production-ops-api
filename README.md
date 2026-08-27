@@ -105,11 +105,11 @@ erDiagram
 
 ## Access Control Matrix
 
-| Role | Read access | Write access |
+| Role | Visibility | Allowed actions |
 |---|---|---|
-| Public visitor | Health check, JWT token routes, OpenAPI schema, and Swagger UI | None |
-| Authenticated operations user | Production lines, shifts, incidents, and dashboard | Production lines, shifts, and quality incidents |
-| Assigned Team Leader | Own line assignments and own hourly updates | Hourly updates for assigned lines only |
+| Public visitor | Health check, OpenAPI schema, and Swagger UI | Obtain or refresh JWT tokens; no operations data access |
+| Authenticated operations user | Production lines, shifts, incidents, and dashboard | Create, update, and delete production lines, shifts, and quality incidents |
+| Assigned Team Leader | Own line assignments and own hourly updates | Create, update, and delete hourly updates for assigned lines only |
 | Management staff | All assignments and hourly updates | Create, update, and delete assignments; manage all hourly updates |
 
 ## Data Integrity and Business Rules
