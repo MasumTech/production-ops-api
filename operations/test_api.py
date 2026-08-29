@@ -10,6 +10,7 @@ from rest_framework.test import APIClient
 from operations.models import (
     HourlyLineUpdate,
     ProductionLine,
+    ProductMaterialReadiness,
     QualityIncident,
     Shift,
     TeamLeaderAssignment,
@@ -1051,3 +1052,362 @@ def test_hourly_updates_can_be_filtered_by_status(
     assert response.status_code == status.HTTP_200_OK
     assert response.data["count"] == 1
     assert response.data["results"][0]["status"] == (HourlyLineUpdate.Status.RED)
+
+
+@pytest.fixture
+def api_product_material_readiness(
+    api_team_leader_assignment,
+    api_user,
+):
+    return ProductMaterialReadiness.objects.create(
+        assignment=api_team_leader_assignment,
+        sequence_number=1,
+        product_code="PROD-001",
+        product_name="Demo Product A",
+        planned_quantity=1000,
+        status=ProductMaterialReadiness.Status.READY,
+        created_by=api_user,
+    )
+
+
+@pytest.mark.django_db
+def test_product_material_readiness_requires_authentication(api_client):
+    response = api_client.get(
+        reverse("product-material-readiness-list"),
+    )
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+def test_assigned_team_leader_can_create_readiness_item(
+    authenticated_client,
+    api_user,
+    api_team_leader_assignment,
+):
+    response = authenticated_client.post(
+        reverse("product-material-readiness-list"),
+        {
+            "assignment": api_team_leader_assignment.id,
+            "sequence_number": 1,
+            "product_code": "PROD-001",
+            "product_name": "Demo Product A",
+            "planned_quantity": 1000,
+            "status": ProductMaterialReadiness.Status.READY,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["created_by"] == api_user.id
+    assert response.data["production_line_code"] == "LINE-01"
+    assert response.data["sequence_number"] == 1
+
+
+@pytest.mark.django_db
+def test_team_leader_cannot_create_readiness_for_another_line(
+    authenticated_client,
+    other_team_leader_assignment,
+):
+    response = authenticated_client.post(
+        reverse("product-material-readiness-list"),
+        {
+            "assignment": other_team_leader_assignment.id,
+            "sequence_number": 1,
+            "product_code": "PROD-002",
+            "product_name": "Demo Product B",
+            "status": ProductMaterialReadiness.Status.READY,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "assignment" in response.data
+
+
+@pytest.mark.django_db
+def test_team_leader_only_sees_readiness_for_own_lines(
+    authenticated_client,
+    api_user,
+    other_user,
+    api_team_leader_assignment,
+    other_team_leader_assignment,
+):
+    ProductMaterialReadiness.objects.create(
+        assignment=api_team_leader_assignment,
+        sequence_number=1,
+        product_code="PROD-001",
+        product_name="Demo Product A",
+        created_by=api_user,
+    )
+    ProductMaterialReadiness.objects.create(
+        assignment=other_team_leader_assignment,
+        sequence_number=1,
+        product_code="PROD-002",
+        product_name="Demo Product B",
+        created_by=other_user,
+    )
+
+    response = authenticated_client.get(
+        reverse("product-material-readiness-list"),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 1
+    assert response.data["results"][0]["product_code"] == "PROD-001"
+
+
+@pytest.mark.django_db
+def test_staff_can_see_all_readiness_items(
+    staff_client,
+    api_user,
+    other_user,
+    api_team_leader_assignment,
+    other_team_leader_assignment,
+):
+    ProductMaterialReadiness.objects.create(
+        assignment=api_team_leader_assignment,
+        sequence_number=1,
+        product_code="PROD-001",
+        product_name="Demo Product A",
+        created_by=api_user,
+    )
+    ProductMaterialReadiness.objects.create(
+        assignment=other_team_leader_assignment,
+        sequence_number=1,
+        product_code="PROD-002",
+        product_name="Demo Product B",
+        created_by=other_user,
+    )
+
+    response = staff_client.get(
+        reverse("product-material-readiness-list"),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 2
+
+
+@pytest.mark.django_db
+def test_short_readiness_requires_material_recovery_details(
+    authenticated_client,
+    api_team_leader_assignment,
+):
+    response = authenticated_client.post(
+        reverse("product-material-readiness-list"),
+        {
+            "assignment": api_team_leader_assignment.id,
+            "sequence_number": 1,
+            "product_code": "PROD-001",
+            "product_name": "Demo Product A",
+            "status": ProductMaterialReadiness.Status.SHORT,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "shortage_quantity" in response.data
+    assert "owner" in response.data
+    assert "expected_available_at" in response.data
+
+
+@pytest.mark.django_db
+def test_held_readiness_requires_hold_reason(
+    authenticated_client,
+    api_team_leader_assignment,
+):
+    response = authenticated_client.post(
+        reverse("product-material-readiness-list"),
+        {
+            "assignment": api_team_leader_assignment.id,
+            "sequence_number": 1,
+            "product_code": "PROD-001",
+            "product_name": "Demo Product A",
+            "status": ProductMaterialReadiness.Status.HELD,
+            "hold_reason": "",
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "hold_reason" in response.data
+
+
+@pytest.mark.django_db
+def test_readiness_can_be_filtered_by_status(
+    authenticated_client,
+    api_user,
+    api_team_leader_assignment,
+):
+    ProductMaterialReadiness.objects.create(
+        assignment=api_team_leader_assignment,
+        sequence_number=1,
+        product_code="PROD-001",
+        product_name="Ready Product",
+        status=ProductMaterialReadiness.Status.READY,
+        created_by=api_user,
+    )
+    ProductMaterialReadiness.objects.create(
+        assignment=api_team_leader_assignment,
+        sequence_number=2,
+        product_code="PROD-002",
+        product_name="Held Product",
+        status=ProductMaterialReadiness.Status.HELD,
+        hold_reason="Quality release is pending.",
+        created_by=api_user,
+    )
+
+    response = authenticated_client.get(
+        reverse("product-material-readiness-list"),
+        {"status": ProductMaterialReadiness.Status.HELD},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 1
+    assert response.data["results"][0]["product_code"] == "PROD-002"
+
+
+@pytest.mark.django_db
+def test_readiness_filter_rejects_invalid_status(authenticated_client):
+    response = authenticated_client.get(
+        reverse("product-material-readiness-list"),
+        {"status": "invalid-status"},
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "status" in response.data
+
+
+@pytest.mark.django_db
+def test_team_leader_cannot_release_held_material(
+    authenticated_client,
+    api_user,
+    api_team_leader_assignment,
+):
+    readiness = ProductMaterialReadiness.objects.create(
+        assignment=api_team_leader_assignment,
+        sequence_number=1,
+        product_code="PROD-001",
+        product_name="Held Product",
+        status=ProductMaterialReadiness.Status.HELD,
+        hold_reason="Quality release is pending.",
+        created_by=api_user,
+    )
+
+    response = authenticated_client.post(
+        reverse(
+            "product-material-readiness-release",
+            args=(readiness.id,),
+        ),
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_staff_can_release_held_material(
+    staff_client,
+    staff_user,
+    api_user,
+    api_team_leader_assignment,
+):
+    readiness = ProductMaterialReadiness.objects.create(
+        assignment=api_team_leader_assignment,
+        sequence_number=1,
+        product_code="PROD-001",
+        product_name="Held Product",
+        status=ProductMaterialReadiness.Status.HELD,
+        hold_reason="Quality release is pending.",
+        created_by=api_user,
+    )
+
+    response = staff_client.post(
+        reverse(
+            "product-material-readiness-release",
+            args=(readiness.id,),
+        ),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["status"] == ProductMaterialReadiness.Status.READY
+    assert response.data["released_by"] == staff_user.id
+    assert response.data["released_at"] is not None
+
+
+@pytest.mark.django_db
+def test_held_material_cannot_be_released_with_normal_patch(
+    staff_client,
+    api_user,
+    api_team_leader_assignment,
+):
+    readiness = ProductMaterialReadiness.objects.create(
+        assignment=api_team_leader_assignment,
+        sequence_number=1,
+        product_code="PROD-001",
+        product_name="Held Product",
+        status=ProductMaterialReadiness.Status.HELD,
+        hold_reason="Quality release is pending.",
+        created_by=api_user,
+    )
+
+    response = staff_client.patch(
+        reverse(
+            "product-material-readiness-detail",
+            args=(readiness.id,),
+        ),
+        {"status": ProductMaterialReadiness.Status.READY},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "status" in response.data
+
+
+@pytest.mark.django_db
+def test_inactive_user_cannot_own_material_action(
+    authenticated_client,
+    api_team_leader_assignment,
+):
+    inactive_user = get_user_model().objects.create_user(
+        username="inactive.material.owner",
+        password=TEST_PASSWORD,
+        is_active=False,
+    )
+
+    response = authenticated_client.post(
+        reverse("product-material-readiness-list"),
+        {
+            "assignment": api_team_leader_assignment.id,
+            "sequence_number": 1,
+            "product_code": "PROD-001",
+            "product_name": "Demo Product A",
+            "status": ProductMaterialReadiness.Status.SHORT,
+            "shortage_quantity": 100,
+            "owner": inactive_user.id,
+            "expected_available_at": (timezone.now() + timedelta(hours=1)).isoformat(),
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "owner" in response.data
+
+
+@pytest.mark.django_db
+def test_duplicate_readiness_sequence_is_rejected(
+    authenticated_client,
+    api_product_material_readiness,
+):
+    response = authenticated_client.post(
+        reverse("product-material-readiness-list"),
+        {
+            "assignment": api_product_material_readiness.assignment_id,
+            "sequence_number": api_product_material_readiness.sequence_number,
+            "product_code": "PROD-002",
+            "product_name": "Demo Product B",
+            "status": ProductMaterialReadiness.Status.READY,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST

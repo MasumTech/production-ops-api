@@ -4,6 +4,7 @@ from rest_framework import serializers
 from .models import (
     HourlyLineUpdate,
     ProductionLine,
+    ProductMaterialReadiness,
     QualityIncident,
     Shift,
     TeamLeaderAssignment,
@@ -423,4 +424,185 @@ class HourlyLineUpdateFilterSerializer(serializers.Serializer):
         required=False,
         allow_null=True,
         default=None,
+    )
+
+
+class ProductMaterialReadinessSerializer(serializers.ModelSerializer):
+    assignment_date = serializers.DateField(
+        source="assignment.date",
+        read_only=True,
+    )
+    shift_type = serializers.CharField(
+        source="assignment.shift_type",
+        read_only=True,
+    )
+    production_line = serializers.IntegerField(
+        source="assignment.production_line_id",
+        read_only=True,
+    )
+    production_line_code = serializers.CharField(
+        source="assignment.production_line.code",
+        read_only=True,
+    )
+    team_leader_username = serializers.CharField(
+        source="assignment.team_leader.username",
+        read_only=True,
+    )
+    owner_username = serializers.CharField(
+        source="owner.username",
+        read_only=True,
+    )
+    released_by_username = serializers.CharField(
+        source="released_by.username",
+        read_only=True,
+    )
+    created_by_username = serializers.CharField(
+        source="created_by.username",
+        read_only=True,
+    )
+
+    class Meta:
+        model = ProductMaterialReadiness
+        fields = (
+            "id",
+            "assignment",
+            "assignment_date",
+            "shift_type",
+            "production_line",
+            "production_line_code",
+            "team_leader_username",
+            "sequence_number",
+            "product_code",
+            "product_name",
+            "planned_quantity",
+            "status",
+            "shortage_quantity",
+            "owner",
+            "owner_username",
+            "expected_available_at",
+            "hold_reason",
+            "released_at",
+            "released_by",
+            "released_by_username",
+            "created_by",
+            "created_by_username",
+            "notes",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "released_at",
+            "released_by",
+            "released_by_username",
+            "created_by",
+            "created_by_username",
+            "created_at",
+            "updated_at",
+        )
+
+    def validate_assignment(self, value):
+        request = self.context.get("request")
+
+        if (
+            request
+            and request.user.is_authenticated
+            and not request.user.is_staff
+            and value.team_leader_id != request.user.id
+        ):
+            raise serializers.ValidationError(
+                "You can only manage readiness for a line assigned to you."
+            )
+
+        return value
+
+    def validate_owner(self, value):
+        if value is not None and not value.is_active:
+            raise serializers.ValidationError(
+                "An inactive user cannot own a material action."
+            )
+
+        return value
+
+    def validate(self, attrs):
+        instance = self.instance
+        status_value = attrs.get(
+            "status",
+            getattr(instance, "status", ProductMaterialReadiness.Status.READY),
+        )
+        shortage_quantity = attrs.get(
+            "shortage_quantity",
+            getattr(instance, "shortage_quantity", 0),
+        )
+        owner = attrs.get(
+            "owner",
+            getattr(instance, "owner", None),
+        )
+        expected_available_at = attrs.get(
+            "expected_available_at",
+            getattr(instance, "expected_available_at", None),
+        )
+        hold_reason = attrs.get(
+            "hold_reason",
+            getattr(instance, "hold_reason", ""),
+        )
+
+        errors = {}
+
+        if status_value == ProductMaterialReadiness.Status.SHORT:
+            if not shortage_quantity:
+                errors["shortage_quantity"] = (
+                    "Short material must include a shortage quantity."
+                )
+            if owner is None:
+                errors["owner"] = "Short material must have an owner."
+            if expected_available_at is None:
+                errors["expected_available_at"] = (
+                    "Short material must include an expected availability time."
+                )
+        elif shortage_quantity:
+            errors["shortage_quantity"] = (
+                "Shortage quantity must be zero unless material status is Short."
+            )
+
+        if (
+            status_value == ProductMaterialReadiness.Status.HELD
+            and not (hold_reason or "").strip()
+        ):
+            errors["hold_reason"] = "Held material must include a hold reason."
+
+        if (
+            instance
+            and instance.status == ProductMaterialReadiness.Status.HELD
+            and status_value != ProductMaterialReadiness.Status.HELD
+        ):
+            errors["status"] = "Use the release action to release held material."
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        return attrs
+
+
+class ProductMaterialReadinessFilterSerializer(serializers.Serializer):
+    date = serializers.DateField(required=False)
+    shift_type = serializers.ChoiceField(
+        choices=Shift.ShiftType.choices,
+        required=False,
+    )
+    production_line = serializers.IntegerField(
+        required=False,
+        min_value=1,
+    )
+    status = serializers.ChoiceField(
+        choices=ProductMaterialReadiness.Status.choices,
+        required=False,
+    )
+    owner = serializers.IntegerField(
+        required=False,
+        min_value=1,
+    )
+    product_code = serializers.CharField(
+        required=False,
+        max_length=50,
     )

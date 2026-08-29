@@ -1,8 +1,10 @@
 from django.db.models import Count, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import filters, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -10,6 +12,7 @@ from rest_framework.views import APIView
 from .models import (
     HourlyLineUpdate,
     ProductionLine,
+    ProductMaterialReadiness,
     QualityIncident,
     Shift,
     TeamLeaderAssignment,
@@ -24,6 +27,8 @@ from .serializers import (
     OperationsDashboardFilterSerializer,
     OperationsDashboardSummarySerializer,
     ProductionLineSerializer,
+    ProductMaterialReadinessFilterSerializer,
+    ProductMaterialReadinessSerializer,
     QualityIncidentSerializer,
     ShiftSerializer,
     TeamLeaderAssignmentFilterSerializer,
@@ -452,4 +457,132 @@ class HourlyLineUpdateViewSet(viewsets.ModelViewSet):
             return self.get_paginated_response(serializer.data)
 
         serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        parameters=[ProductMaterialReadinessFilterSerializer],
+    ),
+)
+class ProductMaterialReadinessViewSet(viewsets.ModelViewSet):
+    queryset = ProductMaterialReadiness.objects.all()
+    serializer_class = ProductMaterialReadinessSerializer
+    permission_classes = (IsAssignedTeamLeaderOrStaff,)
+    filter_backends = (
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    )
+    search_fields = (
+        "product_code",
+        "product_name",
+        "assignment__production_line__code",
+        "assignment__production_line__name",
+        "assignment__team_leader__username",
+        "owner__username",
+        "hold_reason",
+        "notes",
+    )
+    ordering_fields = (
+        "sequence_number",
+        "product_code",
+        "status",
+        "shortage_quantity",
+        "expected_available_at",
+        "assignment__date",
+        "assignment__production_line__code",
+        "created_at",
+    )
+    ordering = (
+        "-assignment__date",
+        "assignment__shift_type",
+        "assignment__production_line__code",
+        "sequence_number",
+    )
+
+    def get_queryset(self):
+        queryset = self.queryset.select_related(
+            "assignment",
+            "assignment__production_line",
+            "assignment__team_leader",
+            "owner",
+            "released_by",
+            "created_by",
+        )
+
+        if not self.request.user.is_staff:
+            queryset = queryset.filter(
+                assignment__team_leader=self.request.user,
+            )
+
+        filter_serializer = ProductMaterialReadinessFilterSerializer(
+            data=self.request.query_params,
+        )
+        filter_serializer.is_valid(raise_exception=True)
+
+        date = filter_serializer.validated_data.get("date")
+        shift_type = filter_serializer.validated_data.get("shift_type")
+        production_line = filter_serializer.validated_data.get("production_line")
+        status_value = filter_serializer.validated_data.get("status")
+        owner = filter_serializer.validated_data.get("owner")
+        product_code = filter_serializer.validated_data.get("product_code")
+
+        if date is not None:
+            queryset = queryset.filter(assignment__date=date)
+
+        if shift_type is not None:
+            queryset = queryset.filter(
+                assignment__shift_type=shift_type,
+            )
+
+        if production_line is not None:
+            queryset = queryset.filter(
+                assignment__production_line_id=production_line,
+            )
+
+        if status_value is not None:
+            queryset = queryset.filter(status=status_value)
+
+        if owner is not None:
+            queryset = queryset.filter(owner_id=owner)
+
+        if product_code is not None:
+            queryset = queryset.filter(product_code__iexact=product_code)
+
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    @extend_schema(
+        request=None,
+        responses=ProductMaterialReadinessSerializer,
+    )
+    @action(
+        detail=True,
+        methods=("post",),
+        url_path="release",
+    )
+    def release(self, request, pk=None):
+        readiness = self.get_object()
+
+        if not request.user.is_staff:
+            raise PermissionDenied("Only management staff can release held material.")
+
+        if readiness.status != ProductMaterialReadiness.Status.HELD:
+            raise ValidationError({"status": "Only held material can be released."})
+
+        readiness.status = ProductMaterialReadiness.Status.READY
+        readiness.released_at = timezone.now()
+        readiness.released_by = request.user
+        readiness.save(
+            update_fields=(
+                "status",
+                "released_at",
+                "released_by",
+                "updated_at",
+            ),
+        )
+
+        serializer = self.get_serializer(readiness)
         return Response(serializer.data)
