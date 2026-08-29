@@ -3,6 +3,7 @@ from django.contrib import admin
 from .models import (
     HourlyLineUpdate,
     ProductionLine,
+    ProductMaterialReadiness,
     QualityIncident,
     Shift,
     TeamLeaderAssignment,
@@ -173,6 +174,75 @@ class HourlyLineUpdateAdmin(admin.ModelAdmin):
         "recorded_by",
         "action_owner",
     )
+
+    @admin.display(
+        ordering="assignment__production_line__code",
+        description="Production line",
+    )
+    def production_line(self, obj):
+        return obj.assignment.production_line.code
+
+
+@admin.register(ProductMaterialReadiness)
+class ProductMaterialReadinessAdmin(admin.ModelAdmin):
+    list_display = (
+        "assignment_date",
+        "production_line",
+        "sequence_number",
+        "product_code",
+        "product_name",
+        "status",
+        "shortage_quantity",
+        "owner",
+        "expected_available_at",
+        "released_by",
+    )
+    list_filter = (
+        "status",
+        "assignment__date",
+        "assignment__shift_type",
+        "assignment__production_line",
+    )
+    search_fields = (
+        "product_code",
+        "product_name",
+        "assignment__production_line__code",
+        "assignment__team_leader__username",
+        "owner__username",
+    )
+    autocomplete_fields = (
+        "assignment",
+        "owner",
+        "released_by",
+        "created_by",
+    )
+    ordering = (
+        "-assignment__date",
+        "assignment__shift_type",
+        "assignment__production_line__code",
+        "sequence_number",
+    )
+    readonly_fields = (
+        "released_at",
+        "released_by",
+        "created_at",
+        "updated_at",
+    )
+    list_select_related = (
+        "assignment",
+        "assignment__production_line",
+        "assignment__team_leader",
+        "owner",
+        "released_by",
+        "created_by",
+    )
+
+    @admin.display(
+        ordering="assignment__date",
+        description="Assignment date",
+    )
+    def assignment_date(self, obj):
+        return obj.assignment.date
 
     @admin.display(
         ordering="assignment__production_line__code",
