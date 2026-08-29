@@ -1,37 +1,81 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 680" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 790" role="img" aria-labelledby="title desc">
   <title id="title">Multi-Line Production Operations API core data model</title>
-  <desc id="desc">Users lead line assignments and record hourly updates. Production lines receive assignments and run shifts. Shifts report quality incidents.</desc>
+  <desc id="desc">Users lead line assignments and create operational records. Production lines receive assignments and run shifts. Assignments contain hourly updates and product material readiness. Shifts report quality incidents.</desc>
   <defs>
-    <linearGradient id="primary" x1="0" x2="1"><stop offset="0" stop-color="#eff6ff"/><stop offset="1" stop-color="#eef2ff"/></linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#0f172a" flood-opacity=".12"/></filter>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#64748b"/></marker>
+    <linearGradient id="primary" x1="0" x2="1">
+      <stop offset="0" stop-color="#eff6ff"/>
+      <stop offset="1" stop-color="#eef2ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#0f172a" flood-opacity=".12"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 0 L10 5 L0 10z" fill="#64748b"/>
+    </marker>
   </defs>
   <style>
     .node{fill:url(#primary);stroke:#6366f1;stroke-width:2;filter:url(#shadow)}
     .line{fill:none;stroke:#64748b;stroke-width:3;marker-end:url(#arrow)}
-    .label{font:600 19px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;text-anchor:middle}
-    .small{font:500 15px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;text-anchor:middle}
-    .rel{font:600 15px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#4338ca;text-anchor:middle}
+    .label{font:600 18px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;text-anchor:middle}
+    .small{font:500 14px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;text-anchor:middle}
+    .rel{font:600 14px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#4338ca;text-anchor:middle}
   </style>
-  <rect width="1100" height="680" fill="#ffffff"/>
-  <rect class="node" x="90" y="35" width="330" height="92" rx="18"/>
-  <text class="label" x="255" y="76">USER</text><text class="small" x="255" y="103">Team Leader, manager or recorder</text>
-  <rect class="node" x="680" y="35" width="330" height="92" rx="18"/>
-  <text class="label" x="845" y="76">PRODUCTION LINE</text><text class="small" x="845" y="103">Line identity, target and status</text>
-  <path class="line" d="M300 127 V170 H360 V220"/><text class="rel" x="300" y="160">leads 1 → many</text>
-  <path class="line" d="M760 127 V175 H500 V220"/><text class="rel" x="620" y="165">receives 1 → many</text>
-  <rect class="node" x="180" y="220" width="360" height="98" rx="18"/>
-  <text class="label" x="360" y="262">TEAM LEADER ASSIGNMENT</text><text class="small" x="360" y="291">Line + date + shift ownership</text>
-  <rect class="node" x="650" y="220" width="300" height="98" rx="18"/>
-  <text class="label" x="800" y="262">SHIFT</text><text class="small" x="800" y="291">Output, downtime and KPI</text>
-  <path class="line" d="M360 318 V430"/><text class="rel" x="440" y="377">contains 1 → many</text>
-  <path class="line" d="M800 318 V430"/><text class="rel" x="885" y="377">reports 1 → many</text>
-  <path class="line" d="M150 127 V380 H250 V430"/><text class="rel" x="155" y="366">records 1 → many</text>
-  <path class="line" d="M895 127 V220"/><text class="rel" x="965" y="180">runs 1 → many</text>
-  <rect class="node" x="120" y="430" width="370" height="110" rx="18"/>
-  <text class="label" x="305" y="475">HOURLY LINE UPDATE</text><text class="small" x="305" y="505">RAG status, action and follow-up</text><text class="small" x="305" y="528">for an assigned line</text>
-  <rect class="node" x="620" y="430" width="360" height="110" rx="18"/>
-  <text class="label" x="800" y="475">QUALITY INCIDENT</text><text class="small" x="800" y="505">Severity, investigation and</text><text class="small" x="800" y="528">corrective action for a shift</text>
-  <rect x="255" y="590" width="590" height="54" rx="27" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="2"/>
-  <text class="small" x="550" y="623">All domain records include created and updated audit timestamps</text>
+
+  <rect width="1100" height="790" fill="#ffffff"/>
+
+  <rect class="node" x="70" y="35" width="330" height="92" rx="18"/>
+  <text class="label" x="235" y="76">USER</text>
+  <text class="small" x="235" y="103">Team Leader, manager, owner or recorder</text>
+
+  <rect class="node" x="700" y="35" width="330" height="92" rx="18"/>
+  <text class="label" x="865" y="76">PRODUCTION LINE</text>
+  <text class="small" x="865" y="103">Line identity, target and status</text>
+
+  <path class="line" d="M260 127 V168 H335 V205"/>
+  <text class="rel" x="300" y="158">leads 1 → many</text>
+  <path class="line" d="M790 127 V165 H470 V205"/>
+  <text class="rel" x="640" y="155">receives 1 → many</text>
+  <path class="line" d="M900 127 V205"/>
+  <text class="rel" x="968" y="169">runs 1 → many</text>
+
+  <rect class="node" x="155" y="205" width="360" height="98" rx="18"/>
+  <text class="label" x="335" y="247">TEAM LEADER ASSIGNMENT</text>
+  <text class="small" x="335" y="276">Line + date + shift ownership</text>
+
+  <rect class="node" x="700" y="205" width="300" height="98" rx="18"/>
+  <text class="label" x="850" y="247">SHIFT</text>
+  <text class="small" x="850" y="276">Output, downtime and KPI</text>
+
+  <path class="line" d="M275 303 V405"/>
+  <text class="rel" x="210" y="357">contains</text>
+  <path class="line" d="M400 303 V350 H550 V405"/>
+  <text class="rel" x="500" y="340">plans 1 → many</text>
+  <path class="line" d="M850 303 V405"/>
+  <text class="rel" x="930" y="357">reports 1 → many</text>
+
+  <rect class="node" x="35" y="405" width="315" height="115" rx="18"/>
+  <text class="label" x="192" y="451">HOURLY LINE UPDATE</text>
+  <text class="small" x="192" y="480">RAG status, action and follow-up</text>
+  <text class="small" x="192" y="503">for an assigned line</text>
+
+  <rect class="node" x="382" y="405" width="360" height="115" rx="18"/>
+  <text class="label" x="562" y="449">PRODUCT MATERIAL READINESS</text>
+  <text class="small" x="562" y="478">Sequence, state, shortage, owner</text>
+  <text class="small" x="562" y="501">availability and release audit</text>
+
+  <rect class="node" x="775" y="405" width="290" height="115" rx="18"/>
+  <text class="label" x="920" y="451">QUALITY INCIDENT</text>
+  <text class="small" x="920" y="480">Severity, investigation and</text>
+  <text class="small" x="920" y="503">corrective action for a shift</text>
+
+  <path class="line" d="M145 127 V360 H120 V405"/>
+  <text class="rel" x="150" y="350">records</text>
+  <path class="line" d="M235 127 V345 H480 V405"/>
+  <text class="rel" x="360" y="335">owns / creates / releases</text>
+
+  <rect x="245" y="605" width="610" height="58" rx="29" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="2"/>
+  <text class="small" x="550" y="640">All domain records include created and updated audit timestamps</text>
+
+  <rect x="160" y="700" width="780" height="54" rx="27" fill="#eff6ff" stroke="#93c5fd" stroke-width="2"/>
+  <text class="small" x="550" y="733">Held product or material records require an authorised staff release</text>
 </svg>
