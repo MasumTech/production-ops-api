@@ -2,6 +2,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .models import (
+    BreakRecovery,
     HourlyLineUpdate,
     OperationalEscalation,
     ProductionLine,
@@ -1018,4 +1019,217 @@ class ShiftHandoverFilterSerializer(serializers.Serializer):
         required=False,
         allow_null=True,
         default=None,
+    )
+
+
+class BreakRecoverySerializer(serializers.ModelSerializer):
+    production_line = serializers.IntegerField(
+        source="assignment.production_line_id",
+        read_only=True,
+    )
+    production_line_code = serializers.CharField(
+        source="assignment.production_line.code",
+        read_only=True,
+    )
+    assignment_date = serializers.DateField(
+        source="assignment.date",
+        read_only=True,
+    )
+    shift_type = serializers.CharField(
+        source="assignment.shift_type",
+        read_only=True,
+    )
+    team_leader_username = serializers.CharField(
+        source="assignment.team_leader.username",
+        read_only=True,
+    )
+    cover_user_username = serializers.CharField(
+        source="cover_user.username",
+        read_only=True,
+    )
+    created_by_username = serializers.CharField(
+        source="created_by.username",
+        read_only=True,
+    )
+    coverage_accepted_by_username = serializers.CharField(
+        source="coverage_accepted_by.username",
+        read_only=True,
+    )
+    started_by_username = serializers.CharField(
+        source="started_by.username",
+        read_only=True,
+    )
+    recovered_by_username = serializers.CharField(
+        source="recovered_by.username",
+        read_only=True,
+    )
+    cancelled_by_username = serializers.CharField(
+        source="cancelled_by.username",
+        read_only=True,
+    )
+    is_overdue = serializers.BooleanField(read_only=True)
+    needs_attention = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = BreakRecovery
+        fields = (
+            "id",
+            "assignment",
+            "assignment_date",
+            "shift_type",
+            "production_line",
+            "production_line_code",
+            "team_leader_username",
+            "cover_user",
+            "cover_user_username",
+            "status",
+            "planned_start_at",
+            "expected_return_at",
+            "coverage_notes",
+            "created_by",
+            "created_by_username",
+            "coverage_accepted_at",
+            "coverage_accepted_by",
+            "coverage_accepted_by_username",
+            "started_at",
+            "started_by",
+            "started_by_username",
+            "recovered_at",
+            "recovered_by",
+            "recovered_by_username",
+            "recovery_notes",
+            "cancelled_at",
+            "cancelled_by",
+            "cancelled_by_username",
+            "cancellation_reason",
+            "is_overdue",
+            "needs_attention",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "status",
+            "created_by",
+            "created_by_username",
+            "coverage_accepted_at",
+            "coverage_accepted_by",
+            "coverage_accepted_by_username",
+            "started_at",
+            "started_by",
+            "started_by_username",
+            "recovered_at",
+            "recovered_by",
+            "recovered_by_username",
+            "recovery_notes",
+            "cancelled_at",
+            "cancelled_by",
+            "cancelled_by_username",
+            "cancellation_reason",
+            "is_overdue",
+            "needs_attention",
+            "created_at",
+            "updated_at",
+        )
+
+    def validate_assignment(self, value):
+        request = self.context.get("request")
+
+        if (
+            request
+            and request.user.is_authenticated
+            and not request.user.is_staff
+            and value.team_leader_id != request.user.id
+        ):
+            raise serializers.ValidationError(
+                "You can only plan a break for an assignment owned by you."
+            )
+
+        return value
+
+    def validate_cover_user(self, value):
+        if not value.is_active:
+            raise serializers.ValidationError("Break cover must be an active user.")
+
+        return value
+
+    def validate(self, attrs):
+        assignment = attrs.get("assignment")
+        cover_user = attrs.get("cover_user")
+        planned_start_at = attrs.get("planned_start_at")
+        expected_return_at = attrs.get("expected_return_at")
+        errors = {}
+
+        if assignment and cover_user and assignment.team_leader_id == cover_user.id:
+            errors["cover_user"] = (
+                "The assigned Team Leader cannot provide their own break cover."
+            )
+
+        if (
+            planned_start_at
+            and expected_return_at
+            and expected_return_at <= planned_start_at
+        ):
+            errors["expected_return_at"] = (
+                "Expected return time must be later than the planned start time."
+            )
+
+        if expected_return_at and expected_return_at <= timezone.now():
+            errors["expected_return_at"] = "Expected return time must be in the future."
+
+        if (
+            assignment
+            and BreakRecovery.objects.filter(
+                assignment=assignment,
+                status__in=(
+                    BreakRecovery.Status.PLANNED,
+                    BreakRecovery.Status.COVERAGE_ACCEPTED,
+                    BreakRecovery.Status.ACTIVE,
+                ),
+            ).exists()
+        ):
+            errors["assignment"] = "This assignment already has an open break record."
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        return attrs
+
+
+class BreakRecoveryFilterSerializer(serializers.Serializer):
+    date = serializers.DateField(required=False)
+    shift_type = serializers.ChoiceField(
+        choices=Shift.ShiftType.choices,
+        required=False,
+    )
+    production_line = serializers.IntegerField(
+        required=False,
+        min_value=1,
+    )
+    status = serializers.ChoiceField(
+        choices=BreakRecovery.Status.choices,
+        required=False,
+    )
+    cover_user = serializers.IntegerField(
+        required=False,
+        min_value=1,
+    )
+    attention_required = serializers.BooleanField(
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+
+
+class BreakRecoveryCompleteSerializer(serializers.Serializer):
+    recovery_notes = serializers.CharField(
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+
+class BreakRecoveryCancelSerializer(serializers.Serializer):
+    cancellation_reason = serializers.CharField(
+        allow_blank=False,
+        trim_whitespace=True,
     )

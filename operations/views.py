@@ -20,6 +20,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import (
+    BreakRecovery,
     HourlyLineUpdate,
     OperationalEscalation,
     ProductionLine,
@@ -31,11 +32,16 @@ from .models import (
 )
 from .permissions import (
     IsAssignedTeamLeaderOrStaff,
+    IsBreakRecoveryParticipantOrStaff,
     IsEscalationParticipantOrStaff,
     IsHandoverParticipantOrStaff,
     IsStaffOrReadOnly,
 )
 from .serializers import (
+    BreakRecoveryCancelSerializer,
+    BreakRecoveryCompleteSerializer,
+    BreakRecoveryFilterSerializer,
+    BreakRecoverySerializer,
     HourlyLineUpdateFilterSerializer,
     HourlyLineUpdateSerializer,
     OperationalEscalationFilterSerializer,
@@ -1063,4 +1069,298 @@ class ShiftHandoverViewSet(viewsets.ModelViewSet):
         )
 
         serializer = self.get_serializer(handover)
+        return Response(serializer.data)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        parameters=[BreakRecoveryFilterSerializer],
+    ),
+)
+class BreakRecoveryViewSet(viewsets.ModelViewSet):
+    queryset = BreakRecovery.objects.all()
+    serializer_class = BreakRecoverySerializer
+    permission_classes = (IsBreakRecoveryParticipantOrStaff,)
+    http_method_names = (
+        "get",
+        "post",
+        "head",
+        "options",
+    )
+    filter_backends = (
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    )
+    search_fields = (
+        "assignment__production_line__code",
+        "assignment__production_line__name",
+        "assignment__team_leader__username",
+        "cover_user__username",
+        "coverage_notes",
+        "recovery_notes",
+        "cancellation_reason",
+    )
+    ordering_fields = (
+        "planned_start_at",
+        "expected_return_at",
+        "coverage_accepted_at",
+        "started_at",
+        "recovered_at",
+        "status",
+        "assignment__date",
+        "assignment__production_line__code",
+        "created_at",
+    )
+    ordering = (
+        "status",
+        "planned_start_at",
+    )
+
+    def get_queryset(self):
+        queryset = self.queryset.select_related(
+            "assignment",
+            "assignment__production_line",
+            "assignment__team_leader",
+            "cover_user",
+            "created_by",
+            "coverage_accepted_by",
+            "started_by",
+            "recovered_by",
+            "cancelled_by",
+        )
+
+        if not self.request.user.is_staff:
+            queryset = queryset.filter(
+                Q(assignment__team_leader=self.request.user)
+                | Q(cover_user=self.request.user)
+            )
+
+        filter_serializer = BreakRecoveryFilterSerializer(
+            data=self.request.query_params,
+        )
+        filter_serializer.is_valid(raise_exception=True)
+
+        date = filter_serializer.validated_data.get("date")
+        shift_type = filter_serializer.validated_data.get("shift_type")
+        production_line = filter_serializer.validated_data.get("production_line")
+        status_value = filter_serializer.validated_data.get("status")
+        cover_user = filter_serializer.validated_data.get("cover_user")
+        attention_required = filter_serializer.validated_data.get("attention_required")
+
+        if date is not None:
+            queryset = queryset.filter(assignment__date=date)
+
+        if shift_type is not None:
+            queryset = queryset.filter(
+                assignment__shift_type=shift_type,
+            )
+
+        if production_line is not None:
+            queryset = queryset.filter(
+                assignment__production_line_id=production_line,
+            )
+
+        if status_value is not None:
+            queryset = queryset.filter(status=status_value)
+
+        if cover_user is not None:
+            queryset = queryset.filter(cover_user_id=cover_user)
+
+        if attention_required is not None:
+            now = timezone.now()
+            attention_query = Q(
+                status__in=(
+                    BreakRecovery.Status.PLANNED,
+                    BreakRecovery.Status.COVERAGE_ACCEPTED,
+                ),
+                planned_start_at__lt=now,
+            ) | Q(
+                status=BreakRecovery.Status.ACTIVE,
+                expected_return_at__lt=now,
+            )
+
+            if attention_required:
+                queryset = queryset.filter(attention_query)
+            else:
+                queryset = queryset.exclude(attention_query)
+
+        return queryset.distinct()
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    @extend_schema(
+        request=None,
+        responses=BreakRecoverySerializer,
+    )
+    @action(
+        detail=True,
+        methods=("post",),
+        url_path="accept-coverage",
+    )
+    def accept_coverage(self, request, pk=None):
+        break_recovery = self.get_object()
+
+        if break_recovery.status != BreakRecovery.Status.PLANNED:
+            raise ValidationError(
+                {"status": "Only planned break coverage can be accepted."}
+            )
+
+        if break_recovery.cover_user_id != request.user.id:
+            raise PermissionDenied(
+                "Only the nominated cover user can accept break coverage."
+            )
+
+        break_recovery.status = BreakRecovery.Status.COVERAGE_ACCEPTED
+        break_recovery.coverage_accepted_at = timezone.now()
+        break_recovery.coverage_accepted_by = request.user
+        break_recovery.save(
+            update_fields=(
+                "status",
+                "coverage_accepted_at",
+                "coverage_accepted_by",
+                "updated_at",
+            ),
+        )
+
+        serializer = self.get_serializer(break_recovery)
+        return Response(serializer.data)
+
+    @extend_schema(
+        request=None,
+        responses=BreakRecoverySerializer,
+    )
+    @action(
+        detail=True,
+        methods=("post",),
+        url_path="start",
+    )
+    def start(self, request, pk=None):
+        break_recovery = self.get_object()
+
+        if break_recovery.status != BreakRecovery.Status.COVERAGE_ACCEPTED:
+            raise ValidationError(
+                {"status": "Break coverage must be accepted before break start."}
+            )
+
+        if (
+            not request.user.is_staff
+            and break_recovery.assignment.team_leader_id != request.user.id
+        ):
+            raise PermissionDenied(
+                "Only the assigned Team Leader or management staff can start the break."
+            )
+
+        break_recovery.status = BreakRecovery.Status.ACTIVE
+        break_recovery.started_at = timezone.now()
+        break_recovery.started_by = request.user
+        break_recovery.save(
+            update_fields=(
+                "status",
+                "started_at",
+                "started_by",
+                "updated_at",
+            ),
+        )
+
+        serializer = self.get_serializer(break_recovery)
+        return Response(serializer.data)
+
+    @extend_schema(
+        request=BreakRecoveryCompleteSerializer,
+        responses=BreakRecoverySerializer,
+    )
+    @action(
+        detail=True,
+        methods=("post",),
+        url_path="recover",
+    )
+    def recover(self, request, pk=None):
+        break_recovery = self.get_object()
+
+        if break_recovery.status != BreakRecovery.Status.ACTIVE:
+            raise ValidationError({"status": "Only an active break can be recovered."})
+
+        if (
+            not request.user.is_staff
+            and break_recovery.assignment.team_leader_id != request.user.id
+        ):
+            raise PermissionDenied(
+                "Only the assigned Team Leader or management staff can confirm recovery."
+            )
+
+        input_serializer = BreakRecoveryCompleteSerializer(
+            data=request.data,
+        )
+        input_serializer.is_valid(raise_exception=True)
+
+        break_recovery.status = BreakRecovery.Status.RECOVERED
+        break_recovery.recovery_notes = input_serializer.validated_data[
+            "recovery_notes"
+        ]
+        break_recovery.recovered_at = timezone.now()
+        break_recovery.recovered_by = request.user
+        break_recovery.save(
+            update_fields=(
+                "status",
+                "recovery_notes",
+                "recovered_at",
+                "recovered_by",
+                "updated_at",
+            ),
+        )
+
+        serializer = self.get_serializer(break_recovery)
+        return Response(serializer.data)
+
+    @extend_schema(
+        request=BreakRecoveryCancelSerializer,
+        responses=BreakRecoverySerializer,
+    )
+    @action(
+        detail=True,
+        methods=("post",),
+        url_path="cancel",
+    )
+    def cancel(self, request, pk=None):
+        break_recovery = self.get_object()
+
+        if break_recovery.status not in {
+            BreakRecovery.Status.PLANNED,
+            BreakRecovery.Status.COVERAGE_ACCEPTED,
+        }:
+            raise ValidationError(
+                {"status": "Only a planned or accepted break can be cancelled."}
+            )
+
+        if (
+            not request.user.is_staff
+            and break_recovery.assignment.team_leader_id != request.user.id
+        ):
+            raise PermissionDenied(
+                "Only the assigned Team Leader or management staff can cancel the break."
+            )
+
+        input_serializer = BreakRecoveryCancelSerializer(
+            data=request.data,
+        )
+        input_serializer.is_valid(raise_exception=True)
+
+        break_recovery.status = BreakRecovery.Status.CANCELLED
+        break_recovery.cancellation_reason = input_serializer.validated_data[
+            "cancellation_reason"
+        ]
+        break_recovery.cancelled_at = timezone.now()
+        break_recovery.cancelled_by = request.user
+        break_recovery.save(
+            update_fields=(
+                "status",
+                "cancellation_reason",
+                "cancelled_at",
+                "cancelled_by",
+                "updated_at",
+            ),
+        )
+
+        serializer = self.get_serializer(break_recovery)
         return Response(serializer.data)
