@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from operations.models import (
+    BreakRecovery,
     HourlyLineUpdate,
     OperationalEscalation,
     ProductionLine,
@@ -674,3 +675,143 @@ def test_shift_handover_acceptance_metadata_must_be_recorded_together(
 
     with pytest.raises(ValidationError):
         shift_handover.full_clean()
+
+
+@pytest.fixture
+def break_cover_user(db):
+    return get_user_model().objects.create_user(
+        username="break.cover",
+        email="break.cover@example.com",
+        password="test-password",
+    )
+
+
+@pytest.fixture
+def break_recovery(
+    team_leader_assignment,
+    break_cover_user,
+    supervisor,
+):
+    planned_start_at = timezone.now() + timedelta(minutes=10)
+    return BreakRecovery.objects.create(
+        assignment=team_leader_assignment,
+        cover_user=break_cover_user,
+        planned_start_at=planned_start_at,
+        expected_return_at=planned_start_at + timedelta(minutes=30),
+        created_by=supervisor,
+    )
+
+
+@pytest.mark.django_db
+def test_break_recovery_string_representation(break_recovery):
+    assert str(break_recovery) == (
+        f"LINE-01 - {break_recovery.assignment.date} - Day - Planned"
+    )
+
+
+@pytest.mark.django_db
+def test_break_recovery_rejects_invalid_expected_return(
+    team_leader_assignment,
+    break_cover_user,
+    supervisor,
+):
+    planned_start_at = timezone.now()
+    break_record = BreakRecovery(
+        assignment=team_leader_assignment,
+        cover_user=break_cover_user,
+        planned_start_at=planned_start_at,
+        expected_return_at=planned_start_at,
+        created_by=supervisor,
+    )
+
+    with pytest.raises(ValidationError):
+        break_record.full_clean()
+
+
+@pytest.mark.django_db
+def test_team_leader_cannot_cover_own_break(
+    team_leader_assignment,
+    supervisor,
+):
+    planned_start_at = timezone.now() + timedelta(minutes=10)
+    break_record = BreakRecovery(
+        assignment=team_leader_assignment,
+        cover_user=supervisor,
+        planned_start_at=planned_start_at,
+        expected_return_at=planned_start_at + timedelta(minutes=30),
+        created_by=supervisor,
+    )
+
+    with pytest.raises(ValidationError):
+        break_record.full_clean()
+
+
+@pytest.mark.django_db
+def test_inactive_user_cannot_provide_break_cover(
+    team_leader_assignment,
+    supervisor,
+):
+    inactive_user = get_user_model().objects.create_user(
+        username="inactive.break.cover",
+        password="test-password",
+        is_active=False,
+    )
+    planned_start_at = timezone.now() + timedelta(minutes=10)
+    break_record = BreakRecovery(
+        assignment=team_leader_assignment,
+        cover_user=inactive_user,
+        planned_start_at=planned_start_at,
+        expected_return_at=planned_start_at + timedelta(minutes=30),
+        created_by=supervisor,
+    )
+
+    with pytest.raises(ValidationError):
+        break_record.full_clean()
+
+
+@pytest.mark.django_db
+def test_break_coverage_acceptance_metadata_must_be_recorded_together(
+    break_recovery,
+):
+    break_recovery.coverage_accepted_at = timezone.now()
+
+    with pytest.raises(ValidationError):
+        break_recovery.full_clean()
+
+
+@pytest.mark.django_db
+def test_active_break_requires_accepted_coverage_and_start_data(
+    break_recovery,
+):
+    break_recovery.status = BreakRecovery.Status.ACTIVE
+
+    with pytest.raises(ValidationError):
+        break_recovery.full_clean()
+
+
+@pytest.mark.django_db
+def test_active_late_break_is_overdue_and_needs_attention(
+    break_recovery,
+    break_cover_user,
+    supervisor,
+):
+    started_at = timezone.now() - timedelta(minutes=45)
+    break_recovery.status = BreakRecovery.Status.ACTIVE
+    break_recovery.coverage_accepted_at = started_at - timedelta(minutes=5)
+    break_recovery.coverage_accepted_by = break_cover_user
+    break_recovery.started_at = started_at
+    break_recovery.started_by = supervisor
+    break_recovery.expected_return_at = timezone.now() - timedelta(minutes=10)
+
+    assert break_recovery.is_overdue is True
+    assert break_recovery.needs_attention is True
+
+
+@pytest.mark.django_db
+def test_cancelled_break_requires_reason_and_audit_data(
+    break_recovery,
+):
+    break_recovery.status = BreakRecovery.Status.CANCELLED
+
+    with pytest.raises(ValidationError):
+        break_recovery.full_clean()

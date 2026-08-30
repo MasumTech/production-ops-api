@@ -785,3 +785,233 @@ class ShiftHandover(TimeStampedModel):
             f"{self.incoming_assignment.date} "
             f"{self.incoming_assignment.get_shift_type_display()}"
         )
+
+
+class BreakRecovery(TimeStampedModel):
+    class Status(models.TextChoices):
+        PLANNED = "planned", "Planned"
+        COVERAGE_ACCEPTED = "coverage_accepted", "Coverage Accepted"
+        ACTIVE = "active", "Active"
+        RECOVERED = "recovered", "Recovered"
+        CANCELLED = "cancelled", "Cancelled"
+
+    assignment = models.ForeignKey(
+        TeamLeaderAssignment,
+        on_delete=models.PROTECT,
+        related_name="break_recoveries",
+    )
+    cover_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="covered_break_recoveries",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PLANNED,
+    )
+    planned_start_at = models.DateTimeField()
+    expected_return_at = models.DateTimeField()
+    coverage_notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="created_break_recoveries",
+    )
+    coverage_accepted_at = models.DateTimeField(null=True, blank=True)
+    coverage_accepted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="accepted_break_coverages",
+        null=True,
+        blank=True,
+    )
+    started_at = models.DateTimeField(null=True, blank=True)
+    started_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="started_break_recoveries",
+        null=True,
+        blank=True,
+    )
+    recovered_at = models.DateTimeField(null=True, blank=True)
+    recovered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="completed_break_recoveries",
+        null=True,
+        blank=True,
+    )
+    recovery_notes = models.TextField(blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="cancelled_break_recoveries",
+        null=True,
+        blank=True,
+    )
+    cancellation_reason = models.TextField(blank=True)
+
+    class Meta:
+        ordering = [
+            "status",
+            "planned_start_at",
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["assignment"],
+                condition=models.Q(
+                    status__in=(
+                        "planned",
+                        "coverage_accepted",
+                        "active",
+                    ),
+                ),
+                name="unique_open_break_recovery_assignment",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["status", "expected_return_at"],
+            ),
+            models.Index(
+                fields=["cover_user", "status"],
+            ),
+        ]
+
+    @property
+    def is_overdue(self):
+        return (
+            self.status == self.Status.ACTIVE
+            and self.expected_return_at < timezone.now()
+        )
+
+    @property
+    def needs_attention(self):
+        now = timezone.now()
+        return self.is_overdue or (
+            self.status
+            in {
+                self.Status.PLANNED,
+                self.Status.COVERAGE_ACCEPTED,
+            }
+            and self.planned_start_at < now
+        )
+
+    def clean(self):
+        errors = {}
+
+        if (
+            self.planned_start_at
+            and self.expected_return_at
+            and self.expected_return_at <= self.planned_start_at
+        ):
+            errors["expected_return_at"] = (
+                "Expected return time must be later than the planned start time."
+            )
+
+        if (
+            self.assignment_id
+            and self.cover_user_id
+            and self.assignment.team_leader_id == self.cover_user_id
+        ):
+            errors["cover_user"] = (
+                "The assigned Team Leader cannot provide their own break cover."
+            )
+
+        if self.cover_user_id and not self.cover_user.is_active:
+            errors["cover_user"] = "Break cover must be an active user."
+
+        if bool(self.coverage_accepted_at) != bool(self.coverage_accepted_by_id):
+            errors["coverage_accepted_at"] = (
+                "Coverage acceptance time and user must be recorded together."
+            )
+
+        if (
+            self.coverage_accepted_by_id
+            and self.cover_user_id
+            and self.coverage_accepted_by_id != self.cover_user_id
+        ):
+            errors["coverage_accepted_by"] = (
+                "Coverage must be accepted by the nominated cover user."
+            )
+
+        if bool(self.started_at) != bool(self.started_by_id):
+            errors["started_at"] = (
+                "Break start time and starting user must be recorded together."
+            )
+
+        if bool(self.recovered_at) != bool(self.recovered_by_id):
+            errors["recovered_at"] = (
+                "Recovery time and recovering user must be recorded together."
+            )
+
+        if (
+            self.started_at
+            and self.recovered_at
+            and self.recovered_at < self.started_at
+        ):
+            errors["recovered_at"] = (
+                "Recovery time cannot precede the break start time."
+            )
+
+        if bool(self.cancelled_at) != bool(self.cancelled_by_id):
+            errors["cancelled_at"] = (
+                "Cancellation time and cancelling user must be recorded together."
+            )
+
+        if self.status == self.Status.PLANNED and (
+            self.coverage_accepted_at or self.started_at or self.recovered_at
+        ):
+            errors["status"] = "Planned break cannot contain lifecycle completion data."
+
+        if self.status == self.Status.COVERAGE_ACCEPTED:
+            if not self.coverage_accepted_at:
+                errors["status"] = "Accepted coverage must contain acceptance data."
+            elif self.started_at or self.recovered_at:
+                errors["status"] = (
+                    "Accepted coverage cannot contain start or recovery data."
+                )
+
+        if self.status == self.Status.ACTIVE:
+            if not self.coverage_accepted_at or not self.started_at:
+                errors["status"] = (
+                    "Active break requires accepted coverage and start data."
+                )
+            elif self.recovered_at:
+                errors["status"] = "Active break cannot contain recovery data."
+
+        if self.status == self.Status.RECOVERED:
+            if not (
+                self.coverage_accepted_at and self.started_at and self.recovered_at
+            ):
+                errors["status"] = (
+                    "Recovered break requires acceptance, start, and recovery data."
+                )
+            elif not self.recovery_notes.strip():
+                errors["recovery_notes"] = (
+                    "Recovered break must include recovery notes."
+                )
+
+        if self.status == self.Status.CANCELLED:
+            if not self.cancelled_at:
+                errors["status"] = "Cancelled break requires cancellation audit data."
+            elif self.started_at or self.recovered_at:
+                errors["status"] = "A started or recovered break cannot be cancelled."
+            elif not self.cancellation_reason.strip():
+                errors["cancellation_reason"] = "Cancelled break must include a reason."
+
+        if self.status != self.Status.CANCELLED and self.cancelled_at:
+            errors["status"] = "Only a cancelled break can contain cancellation data."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self):
+        return (
+            f"{self.assignment.production_line.code} - "
+            f"{self.assignment.date} - "
+            f"{self.assignment.get_shift_type_display()} - "
+            f"{self.get_status_display()}"
+        )

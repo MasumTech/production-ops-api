@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from .models import (
+    BreakRecovery,
     HourlyLineUpdate,
     OperationalEscalation,
     ProductionLine,
@@ -10,6 +11,87 @@ from .models import (
     ShiftHandover,
     TeamLeaderAssignment,
 )
+
+
+@admin.register(BreakRecovery)
+class BreakRecoveryAdmin(admin.ModelAdmin):
+    list_display = (
+        "planned_start_at",
+        "production_line",
+        "team_leader",
+        "cover_user",
+        "status",
+        "expected_return_at",
+        "is_overdue",
+        "recovered_at",
+        "cancelled_at",
+    )
+    list_filter = (
+        "status",
+        "assignment__date",
+        "assignment__shift_type",
+        "assignment__production_line",
+    )
+    search_fields = (
+        "assignment__production_line__code",
+        "assignment__production_line__name",
+        "assignment__team_leader__username",
+        "cover_user__username",
+        "coverage_notes",
+        "recovery_notes",
+        "cancellation_reason",
+    )
+    autocomplete_fields = (
+        "assignment",
+        "cover_user",
+        "created_by",
+        "coverage_accepted_by",
+        "started_by",
+        "recovered_by",
+        "cancelled_by",
+    )
+    readonly_fields = (
+        "coverage_accepted_at",
+        "coverage_accepted_by",
+        "started_at",
+        "started_by",
+        "recovered_at",
+        "recovered_by",
+        "cancelled_at",
+        "cancelled_by",
+        "created_at",
+        "updated_at",
+    )
+    ordering = (
+        "status",
+        "planned_start_at",
+    )
+    date_hierarchy = "planned_start_at"
+    list_select_related = (
+        "assignment",
+        "assignment__production_line",
+        "assignment__team_leader",
+        "cover_user",
+        "created_by",
+        "coverage_accepted_by",
+        "started_by",
+        "recovered_by",
+        "cancelled_by",
+    )
+
+    @admin.display(
+        ordering="assignment__production_line__code",
+        description="Production line",
+    )
+    def production_line(self, obj):
+        return obj.assignment.production_line.code
+
+    @admin.display(
+        ordering="assignment__team_leader__username",
+        description="Team Leader",
+    )
+    def team_leader(self, obj):
+        return obj.assignment.team_leader.username
 
 
 @admin.register(ProductionLine)
