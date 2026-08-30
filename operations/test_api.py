@@ -9,6 +9,7 @@ from rest_framework.test import APIClient
 
 from operations.models import (
     HourlyLineUpdate,
+    OperationalEscalation,
     ProductionLine,
     ProductMaterialReadiness,
     QualityIncident,
@@ -1411,3 +1412,343 @@ def test_duplicate_readiness_sequence_is_rejected(
     )
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.fixture
+def api_operational_escalation(
+    api_user,
+    api_team_leader_assignment,
+):
+    return OperationalEscalation.objects.create(
+        assignment=api_team_leader_assignment,
+        category=OperationalEscalation.Category.EQUIPMENT,
+        priority=OperationalEscalation.Priority.MEDIUM,
+        summary="Printer is repeatedly stopping.",
+        owner=api_user,
+        raised_by=api_user,
+        response_due_at=timezone.now() + timedelta(minutes=30),
+    )
+
+
+@pytest.mark.django_db
+def test_operational_escalations_require_authentication(
+    api_client,
+):
+    response = api_client.get(
+        reverse("operational-escalation-list"),
+    )
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+def test_team_leader_can_raise_escalation_for_own_line(
+    authenticated_client,
+    api_user,
+    api_team_leader_assignment,
+):
+    response = authenticated_client.post(
+        reverse("operational-escalation-list"),
+        {
+            "assignment": api_team_leader_assignment.id,
+            "category": (OperationalEscalation.Category.EQUIPMENT),
+            "priority": (OperationalEscalation.Priority.MEDIUM),
+            "summary": "Printer is repeatedly stopping.",
+            "response_due_at": (timezone.now() + timedelta(minutes=30)).isoformat(),
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["raised_by"] == api_user.id
+    assert response.data["status"] == (OperationalEscalation.Status.OPEN)
+
+
+@pytest.mark.django_db
+def test_team_leader_cannot_raise_escalation_for_another_line(
+    authenticated_client,
+    other_team_leader_assignment,
+):
+    response = authenticated_client.post(
+        reverse("operational-escalation-list"),
+        {
+            "assignment": other_team_leader_assignment.id,
+            "category": (OperationalEscalation.Category.STAFFING),
+            "priority": (OperationalEscalation.Priority.MEDIUM),
+            "summary": "Additional cover is required.",
+            "response_due_at": (timezone.now() + timedelta(minutes=30)).isoformat(),
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "assignment" in response.data
+
+
+@pytest.mark.django_db
+def test_high_escalation_requires_owner(
+    authenticated_client,
+    api_team_leader_assignment,
+):
+    response = authenticated_client.post(
+        reverse("operational-escalation-list"),
+        {
+            "assignment": api_team_leader_assignment.id,
+            "category": OperationalEscalation.Category.MATERIAL,
+            "priority": OperationalEscalation.Priority.HIGH,
+            "summary": "Packaging material is unavailable.",
+            "response_due_at": (timezone.now() + timedelta(minutes=20)).isoformat(),
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "owner" in response.data
+
+
+@pytest.mark.django_db
+def test_critical_escalation_requires_immediate_action(
+    authenticated_client,
+    api_user,
+    api_team_leader_assignment,
+):
+    response = authenticated_client.post(
+        reverse("operational-escalation-list"),
+        {
+            "assignment": api_team_leader_assignment.id,
+            "category": OperationalEscalation.Category.SAFETY,
+            "priority": OperationalEscalation.Priority.CRITICAL,
+            "summary": "Unsafe equipment condition.",
+            "owner": api_user.id,
+            "response_due_at": (timezone.now() + timedelta(minutes=10)).isoformat(),
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "immediate_action" in response.data
+
+
+@pytest.mark.django_db
+def test_assigned_owner_can_see_escalation(
+    api_client,
+    other_user,
+    api_user,
+    api_team_leader_assignment,
+):
+    escalation = OperationalEscalation.objects.create(
+        assignment=api_team_leader_assignment,
+        category=OperationalEscalation.Category.EQUIPMENT,
+        priority=OperationalEscalation.Priority.MEDIUM,
+        summary="Engineering response is required.",
+        owner=other_user,
+        raised_by=api_user,
+        response_due_at=timezone.now() + timedelta(minutes=30),
+    )
+    api_client.force_authenticate(user=other_user)
+
+    response = api_client.get(
+        reverse("operational-escalation-list"),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 1
+    assert response.data["results"][0]["id"] == escalation.id
+
+
+@pytest.mark.django_db
+def test_assigned_owner_can_acknowledge_escalation(
+    api_client,
+    other_user,
+    api_user,
+    api_team_leader_assignment,
+):
+    escalation = OperationalEscalation.objects.create(
+        assignment=api_team_leader_assignment,
+        category=OperationalEscalation.Category.EQUIPMENT,
+        priority=OperationalEscalation.Priority.MEDIUM,
+        summary="Engineering response is required.",
+        owner=other_user,
+        raised_by=api_user,
+        response_due_at=timezone.now() + timedelta(minutes=30),
+    )
+    api_client.force_authenticate(user=other_user)
+
+    response = api_client.post(
+        reverse(
+            "operational-escalation-acknowledge",
+            args=(escalation.id,),
+        ),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["status"] == (OperationalEscalation.Status.ACKNOWLEDGED)
+    assert response.data["acknowledged_by"] == other_user.id
+
+
+@pytest.mark.django_db
+def test_non_owner_cannot_acknowledge_escalation(
+    authenticated_client,
+    other_user,
+    api_user,
+    api_team_leader_assignment,
+):
+    escalation = OperationalEscalation.objects.create(
+        assignment=api_team_leader_assignment,
+        category=OperationalEscalation.Category.EQUIPMENT,
+        priority=OperationalEscalation.Priority.MEDIUM,
+        summary="Engineering response is required.",
+        owner=other_user,
+        raised_by=api_user,
+        response_due_at=timezone.now() + timedelta(minutes=30),
+    )
+
+    response = authenticated_client.post(
+        reverse(
+            "operational-escalation-acknowledge",
+            args=(escalation.id,),
+        ),
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_open_escalation_cannot_be_resolved(
+    authenticated_client,
+    api_operational_escalation,
+):
+    response = authenticated_client.post(
+        reverse(
+            "operational-escalation-resolve",
+            args=(api_operational_escalation.id,),
+        ),
+        {"resolution_notes": ("Printer reset and verified.")},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "status" in response.data
+
+
+@pytest.mark.django_db
+def test_owner_can_resolve_acknowledged_escalation(
+    authenticated_client,
+    api_user,
+    api_operational_escalation,
+):
+    authenticated_client.post(
+        reverse(
+            "operational-escalation-acknowledge",
+            args=(api_operational_escalation.id,),
+        ),
+    )
+
+    response = authenticated_client.post(
+        reverse(
+            "operational-escalation-resolve",
+            args=(api_operational_escalation.id,),
+        ),
+        {"resolution_notes": ("Printer reset and output verified.")},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["status"] == (OperationalEscalation.Status.RESOLVED)
+    assert response.data["resolved_by"] == api_user.id
+    assert response.data["resolution_notes"] == ("Printer reset and output verified.")
+
+
+@pytest.mark.django_db
+def test_attention_required_returns_overdue_or_unassigned(
+    authenticated_client,
+    api_user,
+    api_team_leader_assignment,
+):
+    overdue = OperationalEscalation.objects.create(
+        assignment=api_team_leader_assignment,
+        category=OperationalEscalation.Category.EQUIPMENT,
+        priority=OperationalEscalation.Priority.MEDIUM,
+        summary="Overdue engineering response.",
+        owner=api_user,
+        raised_by=api_user,
+        raised_at=timezone.now() - timedelta(hours=2),
+        response_due_at=timezone.now() - timedelta(hours=1),
+    )
+    unassigned = OperationalEscalation.objects.create(
+        assignment=api_team_leader_assignment,
+        category=OperationalEscalation.Category.STAFFING,
+        priority=OperationalEscalation.Priority.LOW,
+        summary="Cover request has no owner.",
+        raised_by=api_user,
+        response_due_at=timezone.now() + timedelta(hours=1),
+    )
+    OperationalEscalation.objects.create(
+        assignment=api_team_leader_assignment,
+        category=OperationalEscalation.Category.MATERIAL,
+        priority=OperationalEscalation.Priority.MEDIUM,
+        summary="Material owner is responding.",
+        owner=api_user,
+        raised_by=api_user,
+        response_due_at=timezone.now() + timedelta(hours=1),
+    )
+
+    response = authenticated_client.get(
+        reverse("operational-escalation-attention-required"),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 2
+    assert {item["id"] for item in response.data["results"]} == {
+        overdue.id,
+        unassigned.id,
+    }
+
+
+@pytest.mark.django_db
+def test_escalations_can_be_filtered_by_priority(
+    authenticated_client,
+    api_user,
+    api_team_leader_assignment,
+):
+    for priority in (
+        OperationalEscalation.Priority.LOW,
+        OperationalEscalation.Priority.MEDIUM,
+    ):
+        OperationalEscalation.objects.create(
+            assignment=api_team_leader_assignment,
+            category=OperationalEscalation.Category.OTHER,
+            priority=priority,
+            summary=f"{priority} priority escalation.",
+            owner=api_user,
+            raised_by=api_user,
+            response_due_at=(timezone.now() + timedelta(hours=1)),
+        )
+
+    response = authenticated_client.get(
+        reverse("operational-escalation-list"),
+        {"priority": (OperationalEscalation.Priority.LOW)},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 1
+    assert response.data["results"][0]["priority"] == (
+        OperationalEscalation.Priority.LOW
+    )
+
+
+@pytest.mark.django_db
+def test_escalation_records_cannot_be_directly_patched(
+    authenticated_client,
+    api_operational_escalation,
+):
+    response = authenticated_client.patch(
+        reverse(
+            "operational-escalation-detail",
+            args=(api_operational_escalation.id,),
+        ),
+        {"status": (OperationalEscalation.Status.RESOLVED)},
+        format="json",
+    )
+
+    assert response.status_code == (status.HTTP_405_METHOD_NOT_ALLOWED)

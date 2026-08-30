@@ -1,4 +1,13 @@
-from django.db.models import Count, OuterRef, Q, Subquery, Sum
+from django.db.models import (
+    Case,
+    Count,
+    IntegerField,
+    OuterRef,
+    Q,
+    Subquery,
+    Sum,
+    When,
+)
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema, extend_schema_view
@@ -11,6 +20,7 @@ from rest_framework.views import APIView
 
 from .models import (
     HourlyLineUpdate,
+    OperationalEscalation,
     ProductionLine,
     ProductMaterialReadiness,
     QualityIncident,
@@ -19,11 +29,15 @@ from .models import (
 )
 from .permissions import (
     IsAssignedTeamLeaderOrStaff,
+    IsEscalationParticipantOrStaff,
     IsStaffOrReadOnly,
 )
 from .serializers import (
     HourlyLineUpdateFilterSerializer,
     HourlyLineUpdateSerializer,
+    OperationalEscalationFilterSerializer,
+    OperationalEscalationResolveSerializer,
+    OperationalEscalationSerializer,
     OperationsDashboardFilterSerializer,
     OperationsDashboardSummarySerializer,
     ProductionLineSerializer,
@@ -585,4 +599,284 @@ class ProductMaterialReadinessViewSet(viewsets.ModelViewSet):
         )
 
         serializer = self.get_serializer(readiness)
+        return Response(serializer.data)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        parameters=[OperationalEscalationFilterSerializer],
+    ),
+)
+class OperationalEscalationViewSet(viewsets.ModelViewSet):
+    queryset = OperationalEscalation.objects.all()
+    serializer_class = OperationalEscalationSerializer
+    permission_classes = (IsEscalationParticipantOrStaff,)
+    http_method_names = (
+        "get",
+        "post",
+        "head",
+        "options",
+    )
+    filter_backends = (
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    )
+    search_fields = (
+        "summary",
+        "details",
+        "immediate_action",
+        "resolution_notes",
+        "assignment__production_line__code",
+        "assignment__production_line__name",
+        "assignment__team_leader__username",
+        "owner__username",
+    )
+    ordering_fields = (
+        "raised_at",
+        "response_due_at",
+        "priority",
+        "status",
+        "assignment__date",
+        "assignment__production_line__code",
+        "created_at",
+    )
+    ordering = (
+        "status",
+        "response_due_at",
+        "-raised_at",
+    )
+
+    def get_queryset(self):
+        queryset = self.queryset.select_related(
+            "assignment",
+            "assignment__production_line",
+            "assignment__team_leader",
+            "hourly_update",
+            "quality_incident",
+            "quality_incident__shift",
+            "owner",
+            "raised_by",
+            "acknowledged_by",
+            "resolved_by",
+        )
+
+        if not self.request.user.is_staff:
+            queryset = queryset.filter(
+                Q(assignment__team_leader=self.request.user)
+                | Q(owner=self.request.user)
+            )
+
+        filter_serializer = OperationalEscalationFilterSerializer(
+            data=self.request.query_params,
+        )
+        filter_serializer.is_valid(raise_exception=True)
+
+        date = filter_serializer.validated_data.get("date")
+        shift_type = filter_serializer.validated_data.get("shift_type")
+        production_line = filter_serializer.validated_data.get("production_line")
+        category = filter_serializer.validated_data.get("category")
+        priority = filter_serializer.validated_data.get("priority")
+        status_value = filter_serializer.validated_data.get("status")
+        owner = filter_serializer.validated_data.get("owner")
+        overdue = filter_serializer.validated_data.get("overdue")
+        unassigned = filter_serializer.validated_data.get("unassigned")
+
+        if date is not None:
+            queryset = queryset.filter(
+                assignment__date=date,
+            )
+
+        if shift_type is not None:
+            queryset = queryset.filter(
+                assignment__shift_type=shift_type,
+            )
+
+        if production_line is not None:
+            queryset = queryset.filter(
+                assignment__production_line_id=production_line,
+            )
+
+        if category is not None:
+            queryset = queryset.filter(category=category)
+
+        if priority is not None:
+            queryset = queryset.filter(priority=priority)
+
+        if status_value is not None:
+            queryset = queryset.filter(status=status_value)
+
+        if owner is not None:
+            queryset = queryset.filter(owner_id=owner)
+
+        if overdue is not None:
+            overdue_query = Q(
+                status__in=(
+                    OperationalEscalation.Status.OPEN,
+                    OperationalEscalation.Status.ACKNOWLEDGED,
+                ),
+                response_due_at__lt=timezone.now(),
+            )
+
+            if overdue:
+                queryset = queryset.filter(overdue_query)
+            else:
+                queryset = queryset.exclude(overdue_query)
+
+        if unassigned is not None:
+            queryset = queryset.filter(
+                owner__isnull=unassigned,
+            )
+
+        return queryset.distinct()
+
+    def perform_create(self, serializer):
+        serializer.save(raised_by=self.request.user)
+
+    @extend_schema(
+        request=None,
+        responses=OperationalEscalationSerializer,
+    )
+    @action(
+        detail=True,
+        methods=("post",),
+        url_path="acknowledge",
+    )
+    def acknowledge(self, request, pk=None):
+        escalation = self.get_object()
+
+        if escalation.status != OperationalEscalation.Status.OPEN:
+            raise ValidationError(
+                {"status": ("Only an open escalation can be acknowledged.")}
+            )
+
+        if not request.user.is_staff and escalation.owner_id != request.user.id:
+            raise PermissionDenied(
+                "Only the assigned owner or management staff can acknowledge."
+            )
+
+        update_fields = [
+            "status",
+            "acknowledged_at",
+            "acknowledged_by",
+            "updated_at",
+        ]
+
+        if escalation.owner_id is None:
+            escalation.owner = request.user
+            update_fields.append("owner")
+
+        escalation.status = OperationalEscalation.Status.ACKNOWLEDGED
+        escalation.acknowledged_at = timezone.now()
+        escalation.acknowledged_by = request.user
+        escalation.save(update_fields=update_fields)
+
+        serializer = self.get_serializer(escalation)
+        return Response(serializer.data)
+
+    @extend_schema(
+        request=OperationalEscalationResolveSerializer,
+        responses=OperationalEscalationSerializer,
+    )
+    @action(
+        detail=True,
+        methods=("post",),
+        url_path="resolve",
+    )
+    def resolve(self, request, pk=None):
+        escalation = self.get_object()
+
+        if escalation.status != OperationalEscalation.Status.ACKNOWLEDGED:
+            raise ValidationError(
+                {"status": ("Escalation must be acknowledged before resolution.")}
+            )
+
+        if not request.user.is_staff and escalation.owner_id != request.user.id:
+            raise PermissionDenied(
+                "Only the assigned owner or management staff can resolve."
+            )
+
+        input_serializer = OperationalEscalationResolveSerializer(
+            data=request.data,
+        )
+        input_serializer.is_valid(raise_exception=True)
+
+        escalation.status = OperationalEscalation.Status.RESOLVED
+        escalation.resolution_notes = input_serializer.validated_data[
+            "resolution_notes"
+        ]
+        escalation.resolved_at = timezone.now()
+        escalation.resolved_by = request.user
+        escalation.save(
+            update_fields=(
+                "status",
+                "resolution_notes",
+                "resolved_at",
+                "resolved_by",
+                "updated_at",
+            ),
+        )
+
+        serializer = self.get_serializer(escalation)
+        return Response(serializer.data)
+
+    @extend_schema(
+        parameters=[OperationalEscalationFilterSerializer],
+        responses=OperationalEscalationSerializer(many=True),
+    )
+    @action(
+        detail=False,
+        methods=("get",),
+        url_path="attention-required",
+    )
+    def attention_required(self, request):
+        queryset = (
+            self.filter_queryset(
+                self.get_queryset(),
+            )
+            .filter(
+                Q(owner__isnull=True)
+                | Q(response_due_at__lt=timezone.now())
+                | Q(priority=(OperationalEscalation.Priority.CRITICAL)),
+            )
+            .exclude(
+                status=OperationalEscalation.Status.RESOLVED,
+            )
+            .annotate(
+                attention_priority=Case(
+                    When(
+                        priority=(OperationalEscalation.Priority.CRITICAL),
+                        then=0,
+                    ),
+                    When(
+                        priority=(OperationalEscalation.Priority.HIGH),
+                        then=1,
+                    ),
+                    When(
+                        priority=(OperationalEscalation.Priority.MEDIUM),
+                        then=2,
+                    ),
+                    default=3,
+                    output_field=IntegerField(),
+                ),
+            )
+            .order_by(
+                "attention_priority",
+                "response_due_at",
+                "-raised_at",
+            )
+        )
+
+        page = self.paginate_queryset(queryset)
+
+        if page is not None:
+            serializer = self.get_serializer(
+                page,
+                many=True,
+            )
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(
+            queryset,
+            many=True,
+        )
         return Response(serializer.data)

@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     HourlyLineUpdateViewSet,
+    OperationalEscalationViewSet,
     OperationsDashboardView,
     ProductionLineViewSet,
     ProductMaterialReadinessViewSet,
@@ -41,6 +42,11 @@ router.register(
     "product-material-readiness",
     ProductMaterialReadinessViewSet,
     basename="product-material-readiness",
+)
+router.register(
+    "operational-escalations",
+    OperationalEscalationViewSet,
+    basename="operational-escalation",
 )
 
 urlpatterns = [
