@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from operations.models import (
     HourlyLineUpdate,
+    OperationalEscalation,
     ProductionLine,
     ProductMaterialReadiness,
     QualityIncident,
@@ -406,3 +407,147 @@ def test_material_release_metadata_must_be_recorded_together(
 
     with pytest.raises(ValidationError):
         readiness.full_clean()
+
+
+@pytest.fixture
+def operational_escalation(
+    team_leader_assignment,
+    supervisor,
+):
+    return OperationalEscalation.objects.create(
+        assignment=team_leader_assignment,
+        category=OperationalEscalation.Category.EQUIPMENT,
+        priority=OperationalEscalation.Priority.MEDIUM,
+        summary="Printer is repeatedly stopping.",
+        owner=supervisor,
+        raised_by=supervisor,
+        response_due_at=timezone.now() + timedelta(minutes=30),
+    )
+
+
+@pytest.mark.django_db
+def test_operational_escalation_string_representation(
+    operational_escalation,
+):
+    assert str(operational_escalation) == (
+        "LINE-01 - Medium - Printer is repeatedly stopping."
+    )
+
+
+@pytest.mark.django_db
+def test_escalation_rejects_invalid_response_deadline(
+    team_leader_assignment,
+    supervisor,
+):
+    raised_at = timezone.now()
+
+    escalation = OperationalEscalation(
+        assignment=team_leader_assignment,
+        category=OperationalEscalation.Category.EQUIPMENT,
+        summary="Printer fault.",
+        raised_at=raised_at,
+        response_due_at=raised_at,
+        raised_by=supervisor,
+    )
+
+    with pytest.raises(ValidationError):
+        escalation.full_clean()
+
+
+@pytest.mark.django_db
+def test_critical_escalation_requires_owner_and_immediate_action(
+    team_leader_assignment,
+    supervisor,
+):
+    escalation = OperationalEscalation(
+        assignment=team_leader_assignment,
+        category=OperationalEscalation.Category.SAFETY,
+        priority=OperationalEscalation.Priority.CRITICAL,
+        summary="Unsafe guard condition.",
+        immediate_action="",
+        raised_by=supervisor,
+        response_due_at=timezone.now() + timedelta(minutes=10),
+    )
+
+    with pytest.raises(ValidationError) as exc_info:
+        escalation.full_clean()
+
+    assert "owner" in exc_info.value.message_dict
+    assert "immediate_action" in exc_info.value.message_dict
+
+
+@pytest.mark.django_db
+def test_escalation_rejects_multiple_source_records(
+    team_leader_assignment,
+    hourly_line_update,
+    shift,
+    supervisor,
+):
+    incident = QualityIncident.objects.create(
+        shift=shift,
+        title="Seal failure",
+        category=QualityIncident.Category.PACKAGING,
+        description="Seal inspection failed.",
+        occurred_at=timezone.now(),
+    )
+
+    escalation = OperationalEscalation(
+        assignment=team_leader_assignment,
+        hourly_update=hourly_line_update,
+        quality_incident=incident,
+        category=OperationalEscalation.Category.QUALITY,
+        summary="Quality support required.",
+        raised_by=supervisor,
+        response_due_at=timezone.now() + timedelta(minutes=30),
+    )
+
+    with pytest.raises(ValidationError):
+        escalation.full_clean()
+
+
+@pytest.mark.django_db
+def test_escalation_rejects_hourly_update_from_another_assignment(
+    team_leader_assignment,
+    supervisor,
+):
+    second_line = ProductionLine.objects.create(
+        code="LINE-02",
+        name="Secondary Packing Line",
+    )
+    second_assignment = TeamLeaderAssignment.objects.create(
+        team_leader=supervisor,
+        production_line=second_line,
+        date=team_leader_assignment.date,
+        shift_type=team_leader_assignment.shift_type,
+    )
+    recorded_at = timezone.now()
+    update = HourlyLineUpdate.objects.create(
+        assignment=second_assignment,
+        status=HourlyLineUpdate.Status.GREEN,
+        recorded_at=recorded_at,
+        next_update_due_at=recorded_at + timedelta(hours=1),
+        recorded_by=supervisor,
+    )
+
+    escalation = OperationalEscalation(
+        assignment=team_leader_assignment,
+        hourly_update=update,
+        category=OperationalEscalation.Category.EQUIPMENT,
+        summary="Printer fault.",
+        raised_by=supervisor,
+        response_due_at=timezone.now() + timedelta(minutes=30),
+    )
+
+    with pytest.raises(ValidationError):
+        escalation.full_clean()
+
+
+@pytest.mark.django_db
+def test_resolved_escalation_requires_complete_audit_data(
+    operational_escalation,
+):
+    operational_escalation.status = OperationalEscalation.Status.RESOLVED
+    operational_escalation.resolution_notes = ""
+
+    with pytest.raises(ValidationError):
+        operational_escalation.full_clean()
