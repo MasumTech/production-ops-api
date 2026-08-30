@@ -8,6 +8,7 @@ from django.utils import timezone
 from operations.models import (
     HourlyLineUpdate,
     ProductionLine,
+    ProductMaterialReadiness,
     QualityIncident,
     Shift,
     TeamLeaderAssignment,
@@ -287,3 +288,121 @@ def test_red_update_requires_follow_up(
 
     with pytest.raises(ValidationError):
         update.full_clean()
+
+
+@pytest.fixture
+def product_material_readiness(
+    team_leader_assignment,
+    supervisor,
+):
+    return ProductMaterialReadiness.objects.create(
+        assignment=team_leader_assignment,
+        sequence_number=1,
+        product_code="PROD-001",
+        product_name="Demo Product A",
+        planned_quantity=1000,
+        status=ProductMaterialReadiness.Status.READY,
+        created_by=supervisor,
+    )
+
+
+@pytest.mark.django_db
+def test_product_material_readiness_string_representation(
+    product_material_readiness,
+):
+    assert str(product_material_readiness) == ("LINE-01 - 1 - PROD-001 - Ready")
+
+
+@pytest.mark.django_db
+def test_duplicate_product_sequence_is_rejected(
+    product_material_readiness,
+    supervisor,
+):
+    duplicate = ProductMaterialReadiness(
+        assignment=product_material_readiness.assignment,
+        sequence_number=product_material_readiness.sequence_number,
+        product_code="PROD-002",
+        product_name="Demo Product B",
+        created_by=supervisor,
+    )
+
+    with pytest.raises(ValidationError):
+        duplicate.full_clean()
+
+
+@pytest.mark.django_db
+def test_short_material_requires_quantity_owner_and_expected_time(
+    team_leader_assignment,
+    supervisor,
+):
+    readiness = ProductMaterialReadiness(
+        assignment=team_leader_assignment,
+        sequence_number=1,
+        product_code="PROD-001",
+        product_name="Demo Product A",
+        status=ProductMaterialReadiness.Status.SHORT,
+        created_by=supervisor,
+    )
+
+    with pytest.raises(ValidationError) as exc_info:
+        readiness.full_clean()
+
+    assert "shortage_quantity" in exc_info.value.message_dict
+    assert "owner" in exc_info.value.message_dict
+    assert "expected_available_at" in exc_info.value.message_dict
+
+
+@pytest.mark.django_db
+def test_non_short_material_rejects_shortage_quantity(
+    team_leader_assignment,
+    supervisor,
+):
+    readiness = ProductMaterialReadiness(
+        assignment=team_leader_assignment,
+        sequence_number=1,
+        product_code="PROD-001",
+        product_name="Demo Product A",
+        status=ProductMaterialReadiness.Status.READY,
+        shortage_quantity=10,
+        created_by=supervisor,
+    )
+
+    with pytest.raises(ValidationError):
+        readiness.full_clean()
+
+
+@pytest.mark.django_db
+def test_held_material_requires_hold_reason(
+    team_leader_assignment,
+    supervisor,
+):
+    readiness = ProductMaterialReadiness(
+        assignment=team_leader_assignment,
+        sequence_number=1,
+        product_code="PROD-001",
+        product_name="Demo Product A",
+        status=ProductMaterialReadiness.Status.HELD,
+        hold_reason="",
+        created_by=supervisor,
+    )
+
+    with pytest.raises(ValidationError):
+        readiness.full_clean()
+
+
+@pytest.mark.django_db
+def test_material_release_metadata_must_be_recorded_together(
+    team_leader_assignment,
+    supervisor,
+):
+    readiness = ProductMaterialReadiness(
+        assignment=team_leader_assignment,
+        sequence_number=1,
+        product_code="PROD-001",
+        product_name="Demo Product A",
+        released_at=timezone.now(),
+        created_by=supervisor,
+    )
+
+    with pytest.raises(ValidationError):
+        readiness.full_clean()

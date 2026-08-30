@@ -12,7 +12,7 @@ class IsStaffOrReadOnly(BasePermission):
 
 
 class IsAssignedTeamLeaderOrStaff(BasePermission):
-    message = "You can only access updates for your assigned lines."
+    message = "You can only access records for your assigned lines."
 
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated)

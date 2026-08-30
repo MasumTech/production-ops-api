@@ -70,6 +70,7 @@ The API addresses five operational control gaps:
 |---|---|---|
 | Workforce coordination | Date- and shift-specific Team Leader assignments across one or several lines | Makes line ownership explicit |
 | Live line control | Green, Amber, and Red updates with issues, actions, owners, support needs, and deadlines | Shows the current condition and required response |
+| Product and material readiness | Ordered product sequence with Ready, In Process, Short, and Held states, recovery ownership, expected availability, and release audit | Makes the next production risk visible before it stops the line |
 | Production performance | Planned output, actual output, downtime, and calculated performance percentage | Turns shift activity into measurable KPIs |
 | Quality incident management | Category, severity, lifecycle status, root cause, and corrective action | Supports structured investigation and closure |
 | Management oversight | Dashboard aggregates, latest status, search, filtering, and ordering | Reduces manual status chasing |
@@ -81,6 +82,7 @@ The API addresses five operational control gaps:
 - Clear responsibility across several production lines during the same shift
 - Faster visibility of stopped, at-risk, and stable lines
 - Consistent escalation with named owners and next-update deadlines
+- Earlier visibility of material shortages, held products, recovery ownership, and expected availability
 - Less reliance on radio calls, paper notes, and fragmented spreadsheets
 - An auditable operational history for management and shift handovers
 - Scoped visibility: Team Leaders see their own lines while staff retain oversight
@@ -93,8 +95,8 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 |---|---|---|---|
 | 1. Operations foundation | Production lines, shifts, output, downtime, quality incidents, dashboard, JWT, PostgreSQL, Docker, CI, health checks | API, Swagger, Django Admin | **Built** |
 | 2. Multi-line control | Date/shift assignments, `my-lines`, hourly RAG updates, owners, deadlines, follow-up, `latest-status` | Team Leader and management API | **Built** |
-| 3. Product and material readiness | Product sequence, READY/IN PROCESS/SHORT/HELD state, shortage quantity, owner, expected availability, authorised release visibility | Batcher, Team Leader, Operations | **Next backend phase** |
-| 4. Handover and recovery workflows | Structured issue categories, acknowledgements, unresolved-item handover, break/recovery controls, overdue/no-owner rules | Team Leader, incoming lead, Operations | **Planned backend phase** |
+| 3. Product and material readiness | Product sequence, READY/IN PROCESS/SHORT/HELD state, shortage quantity, owner, expected availability, authorised release visibility | Batcher, Team Leader, Operations | **Built** |
+| 4. Handover and recovery workflows | Structured issue categories, acknowledgements, unresolved-item handover, break/recovery controls, overdue/no-owner rules | Team Leader, incoming lead, Operations | **Next backend phase** |
 | 5. Tablet-first frontend | My Lines, Raise Issue, Materials, Break & Recovery, and Handover in a fast responsive PWA | Team Leader tablet | **Planned frontend phase** |
 | 6. Manager web console | Live Floor priority board, all-line status, output position, open actions, late updates, and current material risk | Operations desktop/laptop | **Planned frontend phase** |
 | 7. Real-time event layer | Live status delivery, support notifications, overdue reminders, offline queue, and safe re-sync | Tablet and web interfaces | **Future phase** |
@@ -128,7 +130,7 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 
 ## Core Data Model
 
-![Core data model relationships for users, lines, assignments, updates, shifts, and incidents](docs/diagrams/core-data-model.svg)
+![Core data model relationships for users, lines, assignments, updates, product and material readiness, shifts, and incidents](docs/diagrams/core-data-model.svg)
 
 ## Access Control Matrix
 
@@ -136,8 +138,8 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 |---|---|---|
 | Public visitor | Health check, OpenAPI schema, and Swagger UI | Obtain or refresh JWT tokens; no operations data access |
 | Authenticated operations user | Production lines, shifts, incidents, and dashboard | Create, update, and delete production lines, shifts, and quality incidents |
-| Assigned Team Leader | Own line assignments and own hourly updates | Create, update, and delete hourly updates for assigned lines only |
-| Management staff | All assignments and hourly updates | Create, update, and delete assignments; manage all hourly updates |
+| Assigned Team Leader | Own line assignments, hourly updates, and product/material readiness | Manage hourly updates and readiness for assigned lines; cannot release held material |
+| Management staff | All assignments, hourly updates, and product/material readiness | Manage all records and perform the audited release of held material |
 
 ## Data Integrity and Business Rules
 
@@ -148,12 +150,14 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 | Quality incident | Resolution cannot precede occurrence; Resolved or Closed incidents require a resolution time |
 | Line assignment | One assignee per line/date/shift; inactive users and inactive lines cannot receive new assignments |
 | Hourly update | Team Leaders can use only their own assignments; Amber/Red need an issue summary; Red requires follow-up |
+| Product/material readiness | Sequence is unique per assignment; Short requires quantity, owner, and expected availability; Held requires a reason and staff release |
 | Audit trail | Reporter/recorder is captured from the authenticated user; update deadlines must be in the future |
 
 ## Engineering Highlights
 
 - Relational domain modelling with database constraints and targeted indexes
 - Assignment-scoped access control for Team Leaders and management staff
+- Audited staff-only release workflow for held product and material records
 - Business validation for incident resolution, line status, and follow-up deadlines
 - Efficient related-object loading and aggregate dashboard queries
 - Versioned migrations, interactive OpenAPI documentation, and JWT authentication
@@ -187,6 +191,7 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 | `QualityIncident` | Quality and operational issue lifecycle | Category, severity, status, actions, root cause, corrective action, occurrence, resolution, and reporter |
 | `TeamLeaderAssignment` | Line ownership for a date and shift | Team Leader, line, assignment creator, and notes; supports multi-line responsibility |
 | `HourlyLineUpdate` | Timestamped RAG condition for an assigned line | Product, issue, action, owner, support required, follow-up, recorder, and next-update deadline |
+| `ProductMaterialReadiness` | Ordered product and material state for an assigned line | Sequence, product, planned and shortage quantities, owner, expected availability, hold reason, creator, and release audit |
 ## API Endpoints
 
 | Method | Endpoint | Description |
@@ -209,6 +214,9 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 | `GET, POST` | `/api/hourly-line-updates/` | List or create hourly line updates |
 | `GET, PUT, PATCH, DELETE` | `/api/hourly-line-updates/{id}/` | Manage one accessible hourly update |
 | `GET` | `/api/hourly-line-updates/latest-status/` | Return the latest update for every accessible assignment |
+| `GET, POST` | `/api/product-material-readiness/` | List or create accessible product/material readiness items |
+| `GET, PUT, PATCH, DELETE` | `/api/product-material-readiness/{id}/` | Manage one accessible readiness item |
+| `POST` | `/api/product-material-readiness/{id}/release/` | Staff-only audited release of a held item |
 
 Business operations endpoints, including the dashboard and resource routes, require a JWT access token:
 
@@ -235,6 +243,26 @@ Authorization: Bearer <access-token>
 }
 ```
 
+## Example Product and Material Readiness Response
+
+```json
+{
+  "id": 18,
+  "assignment": 7,
+  "production_line_code": "LINE-01",
+  "sequence_number": 2,
+  "product_code": "PROD-002",
+  "product_name": "Demo Product B",
+  "planned_quantity": 1200,
+  "status": "short",
+  "shortage_quantity": 200,
+  "owner_username": "material.controller",
+  "expected_available_at": "2026-08-29T15:30:00Z",
+  "released_at": null,
+  "released_by_username": null
+}
+```
+
 ## Pagination
 
 List endpoints return a maximum of 20 records per page.
@@ -254,6 +282,7 @@ Request another page using the `page` query parameter:
 /api/production-lines/?page=2
 /api/shifts/?page=2
 /api/quality-incidents/?page=2
+/api/product-material-readiness/?page=2
 ```
 
 Pagination can be combined with filtering, search, and ordering:
@@ -272,6 +301,7 @@ Pagination can be combined with filtering, search, and ordering:
 | Quality incidents | `status`, `severity`, `category`, `shift` | Search title/description/root cause/line; order by occurrence/resolution/severity/status |
 | Team Leader assignments | `date`, `shift_type`, `production_line` | Search line/leader; order by date/shift/line/leader |
 | Hourly line updates | `date`, `shift_type`, `production_line`, `status`, `requires_follow_up` | Search line/leader/product/issue/action/support; order by recorded time/deadline/status/line |
+| Product/material readiness | `date`, `shift_type`, `production_line`, `status`, `owner`, `product_code` | Search product/line/leader/owner/hold reason/notes; order by sequence/product/status/shortage/availability/date/line |
 | Dashboard summary | `date_from`, `date_to` | Aggregates only the selected date range |
 
 Representative queries:
@@ -283,6 +313,8 @@ Representative queries:
 /api/team-leader-assignments/my-lines/?date=2026-08-26&shift_type=day
 /api/hourly-line-updates/?status=red&requires_follow_up=true
 /api/hourly-line-updates/latest-status/?status=amber
+/api/product-material-readiness/?status=short&production_line=1
+/api/product-material-readiness/?product_code=PROD-002&ordering=sequence_number
 /api/dashboard/summary/?date_from=2026-08-01&date_to=2026-08-31
 ```
 
@@ -407,7 +439,7 @@ curl http://localhost:8000/api/production-lines/ \
 
 ## Testing and Code Quality
 
-The current suite contains **54 automated tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, and validation.
+The current suite contains **74 automated tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, release auditing, and validation.
 
 Run the complete test suite:
 

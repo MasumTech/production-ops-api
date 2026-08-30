@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -319,4 +320,116 @@ class HourlyLineUpdate(TimeStampedModel):
             f"{self.assignment.production_line.code} - "
             f"{self.get_status_display()} - "
             f"{self.recorded_at:%Y-%m-%d %H:%M}"
+        )
+
+
+class ProductMaterialReadiness(TimeStampedModel):
+    class Status(models.TextChoices):
+        READY = "ready", "Ready"
+        IN_PROCESS = "in_process", "In Process"
+        SHORT = "short", "Short"
+        HELD = "held", "Held"
+
+    assignment = models.ForeignKey(
+        TeamLeaderAssignment,
+        on_delete=models.PROTECT,
+        related_name="product_material_readiness",
+    )
+    sequence_number = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)],
+    )
+    product_code = models.CharField(max_length=50)
+    product_name = models.CharField(max_length=150)
+    planned_quantity = models.PositiveIntegerField(default=0)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.READY,
+    )
+    shortage_quantity = models.PositiveIntegerField(default=0)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="owned_material_readiness_items",
+        null=True,
+        blank=True,
+    )
+    expected_available_at = models.DateTimeField(null=True, blank=True)
+    hold_reason = models.TextField(blank=True)
+    released_at = models.DateTimeField(null=True, blank=True)
+    released_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="released_material_readiness_items",
+        null=True,
+        blank=True,
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="created_material_readiness_items",
+    )
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = [
+            "-assignment__date",
+            "assignment__shift_type",
+            "assignment__production_line__code",
+            "sequence_number",
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["assignment", "sequence_number"],
+                name="unique_assignment_product_sequence",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["assignment", "sequence_number"],
+            ),
+            models.Index(
+                fields=["status", "expected_available_at"],
+            ),
+            models.Index(
+                fields=["owner", "status"],
+            ),
+        ]
+
+    def clean(self):
+        errors = {}
+
+        if self.status == self.Status.SHORT:
+            if not self.shortage_quantity:
+                errors["shortage_quantity"] = (
+                    "Short material must include a shortage quantity."
+                )
+            if self.owner_id is None:
+                errors["owner"] = "Short material must have an owner."
+            if self.expected_available_at is None:
+                errors["expected_available_at"] = (
+                    "Short material must include an expected availability time."
+                )
+        elif self.shortage_quantity:
+            errors["shortage_quantity"] = (
+                "Shortage quantity must be zero unless material status is Short."
+            )
+
+        if self.status == self.Status.HELD and not self.hold_reason.strip():
+            errors["hold_reason"] = "Held material must include a hold reason."
+
+        if bool(self.released_at) != bool(self.released_by_id):
+            errors["released_at"] = (
+                "Release time and releasing user must be recorded together."
+            )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self):
+        return (
+            f"{self.assignment.production_line.code} - "
+            f"{self.sequence_number} - "
+            f"{self.product_code} - "
+            f"{self.get_status_display()}"
         )

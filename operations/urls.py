@@ -5,6 +5,7 @@ from .views import (
     HourlyLineUpdateViewSet,
     OperationsDashboardView,
     ProductionLineViewSet,
+    ProductMaterialReadinessViewSet,
     QualityIncidentViewSet,
     ShiftViewSet,
     TeamLeaderAssignmentViewSet,
@@ -35,6 +36,11 @@ router.register(
     "hourly-line-updates",
     HourlyLineUpdateViewSet,
     basename="hourly-line-update",
+)
+router.register(
+    "product-material-readiness",
+    ProductMaterialReadinessViewSet,
+    basename="product-material-readiness",
 )
 
 urlpatterns = [
