@@ -8,6 +8,7 @@ from .models import (
     ProductMaterialReadiness,
     QualityIncident,
     Shift,
+    ShiftHandover,
     TeamLeaderAssignment,
 )
 
@@ -837,4 +838,184 @@ class OperationalEscalationResolveSerializer(serializers.Serializer):
     resolution_notes = serializers.CharField(
         allow_blank=False,
         trim_whitespace=True,
+    )
+
+
+class ShiftHandoverSerializer(serializers.ModelSerializer):
+    production_line = serializers.IntegerField(
+        source="outgoing_assignment.production_line_id",
+        read_only=True,
+    )
+    production_line_code = serializers.CharField(
+        source="outgoing_assignment.production_line.code",
+        read_only=True,
+    )
+    outgoing_date = serializers.DateField(
+        source="outgoing_assignment.date",
+        read_only=True,
+    )
+    outgoing_shift_type = serializers.CharField(
+        source="outgoing_assignment.shift_type",
+        read_only=True,
+    )
+    outgoing_team_leader_username = serializers.CharField(
+        source="outgoing_assignment.team_leader.username",
+        read_only=True,
+    )
+    incoming_date = serializers.DateField(
+        source="incoming_assignment.date",
+        read_only=True,
+    )
+    incoming_shift_type = serializers.CharField(
+        source="incoming_assignment.shift_type",
+        read_only=True,
+    )
+    incoming_team_leader_username = serializers.CharField(
+        source="incoming_assignment.team_leader.username",
+        read_only=True,
+    )
+    escalation_ids = serializers.PrimaryKeyRelatedField(
+        source="escalations",
+        queryset=OperationalEscalation.objects.all(),
+        many=True,
+        write_only=True,
+        allow_empty=False,
+    )
+    escalations = OperationalEscalationSerializer(
+        many=True,
+        read_only=True,
+    )
+    handed_over_by_username = serializers.CharField(
+        source="handed_over_by.username",
+        read_only=True,
+    )
+    accepted_by_username = serializers.CharField(
+        source="accepted_by.username",
+        read_only=True,
+    )
+
+    class Meta:
+        model = ShiftHandover
+        fields = (
+            "id",
+            "outgoing_assignment",
+            "incoming_assignment",
+            "production_line",
+            "production_line_code",
+            "outgoing_date",
+            "outgoing_shift_type",
+            "outgoing_team_leader_username",
+            "incoming_date",
+            "incoming_shift_type",
+            "incoming_team_leader_username",
+            "escalation_ids",
+            "escalations",
+            "status",
+            "operational_summary",
+            "notes",
+            "handed_over_at",
+            "handed_over_by",
+            "handed_over_by_username",
+            "accepted_at",
+            "accepted_by",
+            "accepted_by_username",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "status",
+            "handed_over_at",
+            "handed_over_by",
+            "handed_over_by_username",
+            "accepted_at",
+            "accepted_by",
+            "accepted_by_username",
+            "created_at",
+            "updated_at",
+        )
+
+    def validate(self, attrs):
+        outgoing = attrs.get("outgoing_assignment")
+        incoming = attrs.get("incoming_assignment")
+        escalations = attrs.get("escalations", ())
+        request = self.context.get("request")
+        errors = {}
+
+        if outgoing and incoming:
+            if outgoing.id == incoming.id:
+                errors["incoming_assignment"] = (
+                    "Incoming assignment must differ from outgoing assignment."
+                )
+            elif outgoing.production_line_id != incoming.production_line_id:
+                errors["incoming_assignment"] = (
+                    "Incoming assignment must belong to the same production line."
+                )
+            elif ShiftHandover.assignment_order(
+                incoming
+            ) <= ShiftHandover.assignment_order(outgoing):
+                errors["incoming_assignment"] = (
+                    "Incoming assignment must occur after outgoing assignment."
+                )
+
+        if incoming and not incoming.team_leader.is_active:
+            errors["incoming_assignment"] = "Incoming Team Leader must be active."
+
+        if (
+            request
+            and request.user.is_authenticated
+            and not request.user.is_staff
+            and outgoing
+            and outgoing.team_leader_id != request.user.id
+        ):
+            errors["outgoing_assignment"] = (
+                "You can only hand over an assignment currently assigned to you."
+            )
+
+        escalation_errors = []
+
+        for escalation in escalations:
+            if outgoing and escalation.assignment_id != outgoing.id:
+                escalation_errors.append(
+                    f"Escalation {escalation.id} does not belong "
+                    "to the outgoing assignment."
+                )
+            elif escalation.status == OperationalEscalation.Status.RESOLVED:
+                escalation_errors.append(
+                    f"Escalation {escalation.id} is already resolved."
+                )
+
+        if escalation_errors:
+            errors["escalation_ids"] = escalation_errors
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        return attrs
+
+    def create(self, validated_data):
+        escalations = validated_data.pop("escalations")
+        handover = ShiftHandover.objects.create(**validated_data)
+        handover.escalations.set(escalations)
+        return handover
+
+
+class ShiftHandoverFilterSerializer(serializers.Serializer):
+    date = serializers.DateField(required=False)
+    shift_type = serializers.ChoiceField(
+        choices=Shift.ShiftType.choices,
+        required=False,
+    )
+    production_line = serializers.IntegerField(
+        required=False,
+        min_value=1,
+    )
+    status = serializers.ChoiceField(
+        choices=ShiftHandover.Status.choices,
+        required=False,
+    )
+    awaiting_acceptance = serializers.BooleanField(
+        required=False,
+        allow_null=True,
+        default=None,
     )

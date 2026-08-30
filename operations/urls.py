@@ -8,6 +8,7 @@ from .views import (
     ProductionLineViewSet,
     ProductMaterialReadinessViewSet,
     QualityIncidentViewSet,
+    ShiftHandoverViewSet,
     ShiftViewSet,
     TeamLeaderAssignmentViewSet,
 )
@@ -47,6 +48,11 @@ router.register(
     "operational-escalations",
     OperationalEscalationViewSet,
     basename="operational-escalation",
+)
+router.register(
+    "shift-handovers",
+    ShiftHandoverViewSet,
+    basename="shift-handover",
 )
 
 urlpatterns = [

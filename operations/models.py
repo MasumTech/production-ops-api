@@ -663,3 +663,125 @@ class OperationalEscalation(TimeStampedModel):
             f"{self.get_priority_display()} - "
             f"{self.summary}"
         )
+
+
+class ShiftHandover(TimeStampedModel):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending Acceptance"
+        ACCEPTED = "accepted", "Accepted"
+
+    outgoing_assignment = models.ForeignKey(
+        TeamLeaderAssignment,
+        on_delete=models.PROTECT,
+        related_name="outgoing_shift_handovers",
+    )
+    incoming_assignment = models.ForeignKey(
+        TeamLeaderAssignment,
+        on_delete=models.PROTECT,
+        related_name="incoming_shift_handovers",
+    )
+    escalations = models.ManyToManyField(
+        OperationalEscalation,
+        related_name="shift_handovers",
+        blank=True,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    operational_summary = models.TextField()
+    notes = models.TextField(blank=True)
+    handed_over_at = models.DateTimeField(default=timezone.now)
+    handed_over_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="created_shift_handovers",
+    )
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    accepted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="accepted_shift_handovers",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        ordering = [
+            "status",
+            "-handed_over_at",
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "outgoing_assignment",
+                    "incoming_assignment",
+                ],
+                name="unique_assignment_shift_handover",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["status", "handed_over_at"],
+            ),
+            models.Index(
+                fields=["incoming_assignment", "status"],
+            ),
+        ]
+
+    @staticmethod
+    def assignment_order(assignment):
+        shift_order = {
+            Shift.ShiftType.DAY: 0,
+            Shift.ShiftType.NIGHT: 1,
+        }
+        return (
+            assignment.date,
+            shift_order[assignment.shift_type],
+        )
+
+    def clean(self):
+        errors = {}
+
+        if self.outgoing_assignment_id and self.incoming_assignment_id:
+            outgoing = self.outgoing_assignment
+            incoming = self.incoming_assignment
+
+            if outgoing.id == incoming.id:
+                errors["incoming_assignment"] = (
+                    "Incoming assignment must differ from outgoing assignment."
+                )
+
+            if outgoing.production_line_id != incoming.production_line_id:
+                errors["incoming_assignment"] = (
+                    "Incoming assignment must belong to the same production line."
+                )
+
+            if self.assignment_order(incoming) <= self.assignment_order(outgoing):
+                errors["incoming_assignment"] = (
+                    "Incoming assignment must occur after outgoing assignment."
+                )
+
+        if bool(self.accepted_at) != bool(self.accepted_by_id):
+            errors["accepted_at"] = (
+                "Acceptance time and accepting user must be recorded together."
+            )
+
+        if self.status == self.Status.PENDING and self.accepted_at:
+            errors["status"] = "Pending handover cannot contain acceptance data."
+
+        if self.status == self.Status.ACCEPTED and not self.accepted_at:
+            errors["status"] = "Accepted handover must contain acceptance data."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self):
+        return (
+            f"{self.outgoing_assignment.production_line.code} - "
+            f"{self.outgoing_assignment.date} "
+            f"{self.outgoing_assignment.get_shift_type_display()} to "
+            f"{self.incoming_assignment.date} "
+            f"{self.incoming_assignment.get_shift_type_display()}"
+        )

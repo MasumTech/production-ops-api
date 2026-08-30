@@ -12,6 +12,7 @@ from operations.models import (
     ProductMaterialReadiness,
     QualityIncident,
     Shift,
+    ShiftHandover,
     TeamLeaderAssignment,
 )
 
@@ -551,3 +552,125 @@ def test_resolved_escalation_requires_complete_audit_data(
 
     with pytest.raises(ValidationError):
         operational_escalation.full_clean()
+
+
+@pytest.fixture
+def incoming_team_leader(db):
+    return get_user_model().objects.create_user(
+        username="incoming.team.leader",
+        email="incoming@example.com",
+        password="test-password",
+    )
+
+
+@pytest.fixture
+def incoming_team_leader_assignment(
+    team_leader_assignment,
+    incoming_team_leader,
+):
+    return TeamLeaderAssignment.objects.create(
+        team_leader=incoming_team_leader,
+        production_line=team_leader_assignment.production_line,
+        date=team_leader_assignment.date,
+        shift_type=Shift.ShiftType.NIGHT,
+    )
+
+
+@pytest.fixture
+def shift_handover(
+    team_leader_assignment,
+    incoming_team_leader_assignment,
+    operational_escalation,
+    supervisor,
+):
+    handover = ShiftHandover.objects.create(
+        outgoing_assignment=team_leader_assignment,
+        incoming_assignment=incoming_team_leader_assignment,
+        operational_summary="Printer escalation remains under engineering control.",
+        handed_over_by=supervisor,
+    )
+    handover.escalations.add(operational_escalation)
+    return handover
+
+
+@pytest.mark.django_db
+def test_shift_handover_string_representation(shift_handover):
+    assert str(shift_handover) == (
+        f"LINE-01 - {shift_handover.outgoing_assignment.date} Day to "
+        f"{shift_handover.incoming_assignment.date} Night"
+    )
+
+
+@pytest.mark.django_db
+def test_shift_handover_rejects_same_assignment(
+    team_leader_assignment,
+    supervisor,
+):
+    handover = ShiftHandover(
+        outgoing_assignment=team_leader_assignment,
+        incoming_assignment=team_leader_assignment,
+        operational_summary="Open work remains.",
+        handed_over_by=supervisor,
+    )
+
+    with pytest.raises(ValidationError):
+        handover.full_clean()
+
+
+@pytest.mark.django_db
+def test_shift_handover_requires_same_production_line(
+    team_leader_assignment,
+    supervisor,
+):
+    second_line = ProductionLine.objects.create(
+        code="LINE-02",
+        name="Secondary Packing Line",
+    )
+    incoming_assignment = TeamLeaderAssignment.objects.create(
+        team_leader=supervisor,
+        production_line=second_line,
+        date=team_leader_assignment.date,
+        shift_type=Shift.ShiftType.NIGHT,
+    )
+    handover = ShiftHandover(
+        outgoing_assignment=team_leader_assignment,
+        incoming_assignment=incoming_assignment,
+        operational_summary="Open work remains.",
+        handed_over_by=supervisor,
+    )
+
+    with pytest.raises(ValidationError):
+        handover.full_clean()
+
+
+@pytest.mark.django_db
+def test_shift_handover_requires_later_incoming_assignment(
+    team_leader_assignment,
+    incoming_team_leader,
+    supervisor,
+):
+    previous_assignment = TeamLeaderAssignment.objects.create(
+        team_leader=incoming_team_leader,
+        production_line=team_leader_assignment.production_line,
+        date=team_leader_assignment.date - timedelta(days=1),
+        shift_type=Shift.ShiftType.NIGHT,
+    )
+    handover = ShiftHandover(
+        outgoing_assignment=team_leader_assignment,
+        incoming_assignment=previous_assignment,
+        operational_summary="Open work remains.",
+        handed_over_by=supervisor,
+    )
+
+    with pytest.raises(ValidationError):
+        handover.full_clean()
+
+
+@pytest.mark.django_db
+def test_shift_handover_acceptance_metadata_must_be_recorded_together(
+    shift_handover,
+):
+    shift_handover.accepted_at = timezone.now()
+
+    with pytest.raises(ValidationError):
+        shift_handover.full_clean()

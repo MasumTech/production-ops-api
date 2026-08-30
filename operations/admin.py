@@ -7,6 +7,7 @@ from .models import (
     ProductMaterialReadiness,
     QualityIncident,
     Shift,
+    ShiftHandover,
     TeamLeaderAssignment,
 )
 
@@ -315,3 +316,79 @@ class OperationalEscalationAdmin(admin.ModelAdmin):
     )
     def production_line(self, obj):
         return obj.assignment.production_line.code
+
+
+@admin.register(ShiftHandover)
+class ShiftHandoverAdmin(admin.ModelAdmin):
+    list_display = (
+        "handed_over_at",
+        "production_line",
+        "outgoing_team_leader",
+        "incoming_team_leader",
+        "status",
+        "handed_over_by",
+        "accepted_by",
+        "accepted_at",
+    )
+    list_filter = (
+        "status",
+        "outgoing_assignment__date",
+        "outgoing_assignment__shift_type",
+        "outgoing_assignment__production_line",
+    )
+    search_fields = (
+        "operational_summary",
+        "notes",
+        "outgoing_assignment__production_line__code",
+        "outgoing_assignment__team_leader__username",
+        "incoming_assignment__team_leader__username",
+    )
+    autocomplete_fields = (
+        "outgoing_assignment",
+        "incoming_assignment",
+        "handed_over_by",
+        "accepted_by",
+    )
+    filter_horizontal = ("escalations",)
+    readonly_fields = (
+        "handed_over_at",
+        "accepted_at",
+        "accepted_by",
+        "created_at",
+        "updated_at",
+    )
+    date_hierarchy = "handed_over_at"
+    ordering = (
+        "status",
+        "-handed_over_at",
+    )
+    list_select_related = (
+        "outgoing_assignment",
+        "outgoing_assignment__production_line",
+        "outgoing_assignment__team_leader",
+        "incoming_assignment",
+        "incoming_assignment__team_leader",
+        "handed_over_by",
+        "accepted_by",
+    )
+
+    @admin.display(
+        ordering="outgoing_assignment__production_line__code",
+        description="Production line",
+    )
+    def production_line(self, obj):
+        return obj.outgoing_assignment.production_line.code
+
+    @admin.display(
+        ordering="outgoing_assignment__team_leader__username",
+        description="Outgoing Team Leader",
+    )
+    def outgoing_team_leader(self, obj):
+        return obj.outgoing_assignment.team_leader.username
+
+    @admin.display(
+        ordering="incoming_assignment__team_leader__username",
+        description="Incoming Team Leader",
+    )
+    def incoming_team_leader(self, obj):
+        return obj.incoming_assignment.team_leader.username

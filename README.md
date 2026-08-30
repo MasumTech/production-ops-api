@@ -77,6 +77,7 @@ The API addresses five operational control gaps:
 | API usability | JWT authentication, pagination, validation, health checks, OpenAPI schema, and Swagger UI | Provides a predictable integration surface |
 | Delivery and reliability | Automated tests, Ruff, GitHub Actions, Docker Compose, Gunicorn, and health checks | Demonstrates a repeatable production-style delivery process |
 | Operational escalation | Structured category, priority, response owner, deadline, acknowledgement, resolution, and attention queue | Turns a reported blocker into an owned and auditable response |
+| Shift handover | Unresolved escalation carry-over between consecutive assignments with receiver acceptance | Preserves ownership, deadlines, and operational context across shift changes |
 
 ## Expected Operational Value
 
@@ -98,7 +99,7 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 | 1. Operations foundation | Production lines, shifts, output, downtime, quality incidents, dashboard, JWT, PostgreSQL, Docker, CI, health checks | API, Swagger, Django Admin | **Built** |
 | 2. Multi-line control | Date/shift assignments, `my-lines`, hourly RAG updates, owners, deadlines, follow-up, `latest-status` | Team Leader and management API | **Built** |
 | 3. Product and material readiness | Product sequence, READY/IN PROCESS/SHORT/HELD state, shortage quantity, owner, expected availability, authorised release visibility | Batcher, Team Leader, Operations | **Built** |
-| 4. Handover and recovery workflows | Structured issue categories, acknowledgements, unresolved-item handover, break/recovery controls, overdue/no-owner rules | Team Leader, incoming lead, Operations | **In progress — escalation built; handover/recovery next** |
+| 4. Handover and recovery workflows | Structured issue categories, acknowledgements, unresolved-item handover, break/recovery controls, overdue/no-owner rules | Team Leader, incoming lead, Operations | **In progress — escalation and handover built; break/recovery next** |
 | 5. Tablet-first frontend | My Lines, Raise Issue, Materials, Break & Recovery, and Handover in a fast responsive PWA | Team Leader tablet | **Planned frontend phase** |
 | 6. Manager web console | Live Floor priority board, all-line status, output position, open actions, late updates, and current material risk | Operations desktop/laptop | **Planned frontend phase** |
 | 7. Real-time event layer | Live status delivery, support notifications, overdue reminders, offline queue, and safe re-sync | Tablet and web interfaces | **Future phase** |
@@ -142,6 +143,7 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 | Authenticated operations user | Production lines, shifts, incidents, and dashboard | Create, update, and delete production lines, shifts, and quality incidents |
 | Assigned Team Leader | Own line assignments, hourly updates, and product/material readiness | Manage hourly updates and readiness for assigned lines; cannot release held material |
 | Management staff | All assignments, hourly updates, and product/material readiness | Manage all records and perform the audited release of held material |
+| Incoming Team Leader | Handovers and unresolved escalations carried into own assignment | Review operational context and explicitly accept a pending handover |
 
 ## Data Integrity and Business Rules
 
@@ -154,6 +156,7 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 | Hourly update | Team Leaders can use only their own assignments; Amber/Red need an issue summary; Red requires follow-up |
 | Product/material readiness | Sequence is unique per assignment; Short requires quantity, owner, and expected availability; Held requires a reason and staff release |
 | Audit trail | Reporter/recorder is captured from the authenticated user; update deadlines must be in the future |
+| Shift handover | Assignments must use the same line and move forward in date/shift order; only unresolved escalations are carried; acceptance captures receiver and time |
 
 ## Engineering Highlights
 
@@ -195,6 +198,7 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 | `HourlyLineUpdate` | Timestamped RAG condition for an assigned line | Product, issue, action, owner, support required, follow-up, recorder, and next-update deadline |
 | `ProductMaterialReadiness` | Ordered product and material state for an assigned line | Sequence, product, planned and shortage quantities, owner, expected availability, hold reason, creator, and release audit |
 | `OperationalEscalation` | Audited response lifecycle for a line blocker | Source update/incident, category, priority, owner, deadline, acknowledgement, resolution, overdue and attention state |
+| `ShiftHandover` | Controlled transfer between consecutive line assignments | Outgoing/incoming assignments, unresolved escalations, operational summary, creator, receiver, and acceptance audit |
 
 ## API Endpoints
 
@@ -226,6 +230,9 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 | `POST` | `/api/operational-escalations/{id}/acknowledge/` | Assigned owner or staff acknowledgement |
 | `POST` | `/api/operational-escalations/{id}/resolve/` | Resolve an acknowledged escalation with notes |
 | `GET` | `/api/operational-escalations/attention-required/` | List visible overdue, critical, or unassigned escalations |
+| `GET, POST` | `/api/shift-handovers/` | List participant-visible handovers or create one from an owned assignment |
+| `GET` | `/api/shift-handovers/{id}/` | Retrieve one participant-visible handover |
+| `POST` | `/api/shift-handovers/{id}/accept/` | Incoming Team Leader or staff acceptance |
 
 Business operations endpoints, including the dashboard and resource routes, require a JWT access token:
 
@@ -313,6 +320,7 @@ Pagination can be combined with filtering, search, and ordering:
 | Product/material readiness | `date`, `shift_type`, `production_line`, `status`, `owner`, `product_code` | Search product/line/leader/owner/hold reason/notes; order by sequence/product/status/shortage/availability/date/line |
 | Dashboard summary | `date_from`, `date_to` | Aggregates only the selected date range |
 | Operational escalations | `date`, `shift_type`, `production_line`, `category`, `priority`, `status`, `owner`, `overdue`, `unassigned` | Search summary/details/action/resolution/line/leader/owner; order by raised time/deadline/priority/status/date/line |
+| Shift handovers | `date`, `shift_type`, `production_line`, `status`, `awaiting_acceptance` | Search summary/notes/line/outgoing/incoming leaders/escalations; order by handover/acceptance time/status/date/line |
 
 Representative queries:
 
@@ -453,7 +461,7 @@ curl http://localhost:8000/api/production-lines/ \
 
 ## Testing and Code Quality
 
-The current suite contains **93 automated tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, release auditing, and validation.
+The current suite contains **112 automated tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, release, escalation and handover auditing, and validation.
 
 Run the complete test suite:
 

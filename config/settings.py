@@ -135,10 +135,10 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     "TITLE": "Multi-Line Production Operations API",
     "DESCRIPTION": (
-        "Backend API for the Multi-Line Team Leader Digital "
-        "Solution, including line assignments, hourly RAG "
-        "updates, product and material readiness, operational "
-        "escalations, shifts, KPIs, and quality incidents."
+        "Backend API for the Multi-Line Team Leader Digital Solution, including "
+        "line assignments, hourly RAG updates, product and material readiness, "
+        "operational escalations, shift handovers, shifts, KPIs, and quality "
+        "incidents."
     ),
     "VERSION": "1.0.0",
     "ENUM_NAME_OVERRIDES": {
