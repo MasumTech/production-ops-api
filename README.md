@@ -78,6 +78,7 @@ The API addresses five operational control gaps:
 | Delivery and reliability | Automated tests, Ruff, GitHub Actions, Docker Compose, Gunicorn, and health checks | Demonstrates a repeatable production-style delivery process |
 | Operational escalation | Structured category, priority, response owner, deadline, acknowledgement, resolution, and attention queue | Turns a reported blocker into an owned and auditable response |
 | Shift handover | Unresolved escalation carry-over between consecutive assignments with receiver acceptance | Preserves ownership, deadlines, and operational context across shift changes |
+| Break and recovery control | Planned cover, cover acceptance, controlled break start, recovery confirmation, and late-return attention | Keeps temporary line responsibility explicit while a Team Leader is away |
 
 ## Expected Operational Value
 
@@ -89,6 +90,7 @@ The API addresses five operational control gaps:
 - An auditable operational history for management and shift handovers
 - Scoped visibility: Team Leaders see their own lines while staff retain oversight
 - Visible overdue, critical, and unassigned escalations with acknowledgement evidence
+- Explicit temporary cover, missed-start visibility, late-return attention, and recovery evidence
 
 ## Product Roadmap
 
@@ -99,7 +101,7 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 | 1. Operations foundation | Production lines, shifts, output, downtime, quality incidents, dashboard, JWT, PostgreSQL, Docker, CI, health checks | API, Swagger, Django Admin | **Built** |
 | 2. Multi-line control | Date/shift assignments, `my-lines`, hourly RAG updates, owners, deadlines, follow-up, `latest-status` | Team Leader and management API | **Built** |
 | 3. Product and material readiness | Product sequence, READY/IN PROCESS/SHORT/HELD state, shortage quantity, owner, expected availability, authorised release visibility | Batcher, Team Leader, Operations | **Built** |
-| 4. Handover and recovery workflows | Structured issue categories, acknowledgements, unresolved-item handover, break/recovery controls, overdue/no-owner rules | Team Leader, incoming lead, Operations | **In progress — escalation and handover built; break/recovery next** |
+| 4. Handover and recovery workflows | Structured issue categories, acknowledgements, unresolved-item handover, break/recovery controls, overdue/no-owner rules | Team Leader, incoming lead, cover user, Operations | **Built** |
 | 5. Tablet-first frontend | My Lines, Raise Issue, Materials, Break & Recovery, and Handover in a fast responsive PWA | Team Leader tablet | **Planned frontend phase** |
 | 6. Manager web console | Live Floor priority board, all-line status, output position, open actions, late updates, and current material risk | Operations desktop/laptop | **Planned frontend phase** |
 | 7. Real-time event layer | Live status delivery, support notifications, overdue reminders, offline queue, and safe re-sync | Tablet and web interfaces | **Future phase** |
@@ -144,6 +146,7 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 | Assigned Team Leader | Own line assignments, hourly updates, and product/material readiness | Manage hourly updates and readiness for assigned lines; cannot release held material |
 | Management staff | All assignments, hourly updates, and product/material readiness | Manage all records and perform the audited release of held material |
 | Incoming Team Leader | Handovers and unresolved escalations carried into own assignment | Review operational context and explicitly accept a pending handover |
+| Nominated break cover | Break records where the authenticated user is nominated as cover | Review line context and explicitly accept temporary coverage |
 
 ## Data Integrity and Business Rules
 
@@ -157,6 +160,7 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 | Product/material readiness | Sequence is unique per assignment; Short requires quantity, owner, and expected availability; Held requires a reason and staff release |
 | Audit trail | Reporter/recorder is captured from the authenticated user; update deadlines must be in the future |
 | Shift handover | Assignments must use the same line and move forward in date/shift order; only unresolved escalations are carried; acceptance captures receiver and time |
+| Break and recovery | One open break per assignment; cover must be active and different from the Team Leader; coverage acceptance precedes start; recovery requires notes and audit data |
 
 ## Engineering Highlights
 
@@ -168,6 +172,7 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 - Versioned migrations, interactive OpenAPI documentation, and JWT authentication
 - Automated formatting, linting, system checks, tests, Compose validation, and Docker builds
 - Non-root Gunicorn container with application and PostgreSQL health checks
+- Four-stage break workflow with cover acceptance, recovery evidence, cancellation audit, and overdue visibility
 
 
 ## Technology Stack
@@ -199,6 +204,7 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 | `ProductMaterialReadiness` | Ordered product and material state for an assigned line | Sequence, product, planned and shortage quantities, owner, expected availability, hold reason, creator, and release audit |
 | `OperationalEscalation` | Audited response lifecycle for a line blocker | Source update/incident, category, priority, owner, deadline, acknowledgement, resolution, overdue and attention state |
 | `ShiftHandover` | Controlled transfer between consecutive line assignments | Outgoing/incoming assignments, unresolved escalations, operational summary, creator, receiver, and acceptance audit |
+| `BreakRecovery` | Temporary line-control workflow during a Team Leader break | Assignment, nominated cover, planned timing, acceptance, start, recovery, cancellation, attention state, and audit users |
 
 ## API Endpoints
 
@@ -233,6 +239,12 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 | `GET, POST` | `/api/shift-handovers/` | List participant-visible handovers or create one from an owned assignment |
 | `GET` | `/api/shift-handovers/{id}/` | Retrieve one participant-visible handover |
 | `POST` | `/api/shift-handovers/{id}/accept/` | Incoming Team Leader or staff acceptance |
+| `GET, POST` | `/api/break-recoveries/` | List participant-visible break records or create a plan for an owned assignment |
+| `GET` | `/api/break-recoveries/{id}/` | Retrieve one participant-visible break record |
+| `POST` | `/api/break-recoveries/{id}/accept-coverage/` | Nominated cover-user acceptance |
+| `POST` | `/api/break-recoveries/{id}/start/` | Assigned Team Leader or staff starts an accepted break |
+| `POST` | `/api/break-recoveries/{id}/recover/` | Assigned Team Leader or staff confirms recovery with notes |
+| `POST` | `/api/break-recoveries/{id}/cancel/` | Assigned Team Leader or staff cancels an unstarted plan with a reason |
 
 Business operations endpoints, including the dashboard and resource routes, require a JWT access token:
 
@@ -299,6 +311,9 @@ Request another page using the `page` query parameter:
 /api/shifts/?page=2
 /api/quality-incidents/?page=2
 /api/product-material-readiness/?page=2
+/api/operational-escalations/?page=2
+/api/shift-handovers/?page=2
+/api/break-recoveries/?page=2
 ```
 
 Pagination can be combined with filtering, search, and ordering:
@@ -321,6 +336,7 @@ Pagination can be combined with filtering, search, and ordering:
 | Dashboard summary | `date_from`, `date_to` | Aggregates only the selected date range |
 | Operational escalations | `date`, `shift_type`, `production_line`, `category`, `priority`, `status`, `owner`, `overdue`, `unassigned` | Search summary/details/action/resolution/line/leader/owner; order by raised time/deadline/priority/status/date/line |
 | Shift handovers | `date`, `shift_type`, `production_line`, `status`, `awaiting_acceptance` | Search summary/notes/line/outgoing/incoming leaders/escalations; order by handover/acceptance time/status/date/line |
+| Break recoveries | `date`, `shift_type`, `production_line`, `status`, `cover_user`, `attention_required` | Search line/Team Leader/cover/notes; order by planned start/expected return/lifecycle times/status/date/line |
 
 Representative queries:
 
@@ -338,9 +354,13 @@ Representative queries:
 /api/operational-escalations/?overdue=true
 /api/operational-escalations/?unassigned=true
 /api/operational-escalations/attention-required/?production_line=1
+/api/shift-handovers/?production_line=1&status=accepted
+/api/break-recoveries/?attention_required=true
+/api/break-recoveries/?production_line=1&status=active
 ```
 
 `date_from` and `date_to` use `YYYY-MM-DD`. The API returns `400 Bad Request` when `date_from` is later than `date_to`. Invalid typed filters, such as an invalid date or status, are also rejected.
+
 ## Quick Start with Docker
 
 ### Prerequisites
@@ -461,7 +481,7 @@ curl http://localhost:8000/api/production-lines/ \
 
 ## Testing and Code Quality
 
-The current suite contains **112 automated tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, release, escalation and handover auditing, and validation.
+The current suite contains **141 automated tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, release, escalation, handover, break/recovery auditing, and validation.
 
 Run the complete test suite:
 
