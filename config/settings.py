@@ -137,8 +137,8 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": (
         "Backend API for the Multi-Line Team Leader Digital Solution, including "
         "line assignments, hourly RAG updates, product and material readiness, "
-        "operational escalations, shift handovers, shifts, KPIs, and quality "
-        "incidents."
+        "operational escalations, shift handovers, break and recovery control, "
+        "shifts, KPIs, and quality incidents."
     ),
     "VERSION": "1.0.0",
     "ENUM_NAME_OVERRIDES": {

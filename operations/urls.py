@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    BreakRecoveryViewSet,
     HourlyLineUpdateViewSet,
     OperationalEscalationViewSet,
     OperationsDashboardView,
@@ -53,6 +54,11 @@ router.register(
     "shift-handovers",
     ShiftHandoverViewSet,
     basename="shift-handover",
+)
+router.register(
+    "break-recoveries",
+    BreakRecoveryViewSet,
+    basename="break-recovery",
 )
 
 urlpatterns = [

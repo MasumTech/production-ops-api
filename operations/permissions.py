@@ -57,3 +57,19 @@ class IsHandoverParticipantOrStaff(BasePermission):
             obj.outgoing_assignment.team_leader_id,
             obj.incoming_assignment.team_leader_id,
         }
+
+
+class IsBreakRecoveryParticipantOrStaff(BasePermission):
+    message = "You can only access break records involving you or your assignment."
+
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_staff:
+            return True
+
+        return request.user.id in {
+            obj.assignment.team_leader_id,
+            obj.cover_user_id,
+        }

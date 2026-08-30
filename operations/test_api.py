@@ -8,6 +8,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from operations.models import (
+    BreakRecovery,
     HourlyLineUpdate,
     OperationalEscalation,
     ProductionLine,
@@ -2073,6 +2074,473 @@ def test_handover_records_cannot_be_directly_patched(
     response = authenticated_client.patch(
         reverse("shift-handover-detail", args=(api_shift_handover.id,)),
         {"status": ShiftHandover.Status.ACCEPTED},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+
+
+@pytest.fixture
+def api_break_recovery(
+    api_user,
+    other_user,
+    api_team_leader_assignment,
+):
+    planned_start_at = timezone.now() + timedelta(minutes=10)
+    return BreakRecovery.objects.create(
+        assignment=api_team_leader_assignment,
+        cover_user=other_user,
+        planned_start_at=planned_start_at,
+        expected_return_at=planned_start_at + timedelta(minutes=30),
+        coverage_notes="Cover Line 01 and escalate any Red condition immediately.",
+        created_by=api_user,
+    )
+
+
+@pytest.fixture
+def unrelated_break_user(db):
+    return get_user_model().objects.create_user(
+        username="unrelated.break.user",
+        email="unrelated.break@example.com",
+        password=TEST_PASSWORD,
+    )
+
+
+@pytest.mark.django_db
+def test_break_recoveries_require_authentication(api_client):
+    response = api_client.get(reverse("break-recovery-list"))
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+def test_assigned_team_leader_can_plan_break(
+    authenticated_client,
+    api_user,
+    other_user,
+    api_team_leader_assignment,
+):
+    planned_start_at = timezone.now() + timedelta(minutes=10)
+    response = authenticated_client.post(
+        reverse("break-recovery-list"),
+        {
+            "assignment": api_team_leader_assignment.id,
+            "cover_user": other_user.id,
+            "planned_start_at": planned_start_at.isoformat(),
+            "expected_return_at": (
+                planned_start_at + timedelta(minutes=30)
+            ).isoformat(),
+            "coverage_notes": "Cover Line 01 during the planned break.",
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["status"] == BreakRecovery.Status.PLANNED
+    assert response.data["created_by"] == api_user.id
+    assert response.data["cover_user"] == other_user.id
+
+
+@pytest.mark.django_db
+def test_team_leader_cannot_plan_break_for_another_assignment(
+    authenticated_client,
+    api_user,
+    other_team_leader_assignment,
+):
+    planned_start_at = timezone.now() + timedelta(minutes=10)
+    response = authenticated_client.post(
+        reverse("break-recovery-list"),
+        {
+            "assignment": other_team_leader_assignment.id,
+            "cover_user": api_user.id,
+            "planned_start_at": planned_start_at.isoformat(),
+            "expected_return_at": (
+                planned_start_at + timedelta(minutes=30)
+            ).isoformat(),
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "assignment" in response.data
+
+
+@pytest.mark.django_db
+def test_inactive_user_cannot_be_nominated_for_break_cover(
+    authenticated_client,
+    api_team_leader_assignment,
+):
+    inactive_user = get_user_model().objects.create_user(
+        username="inactive.break.cover",
+        password=TEST_PASSWORD,
+        is_active=False,
+    )
+    planned_start_at = timezone.now() + timedelta(minutes=10)
+    response = authenticated_client.post(
+        reverse("break-recovery-list"),
+        {
+            "assignment": api_team_leader_assignment.id,
+            "cover_user": inactive_user.id,
+            "planned_start_at": planned_start_at.isoformat(),
+            "expected_return_at": (
+                planned_start_at + timedelta(minutes=30)
+            ).isoformat(),
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "cover_user" in response.data
+
+
+@pytest.mark.django_db
+def test_team_leader_cannot_nominate_self_for_break_cover(
+    authenticated_client,
+    api_user,
+    api_team_leader_assignment,
+):
+    planned_start_at = timezone.now() + timedelta(minutes=10)
+    response = authenticated_client.post(
+        reverse("break-recovery-list"),
+        {
+            "assignment": api_team_leader_assignment.id,
+            "cover_user": api_user.id,
+            "planned_start_at": planned_start_at.isoformat(),
+            "expected_return_at": (
+                planned_start_at + timedelta(minutes=30)
+            ).isoformat(),
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "cover_user" in response.data
+
+
+@pytest.mark.django_db
+def test_assignment_cannot_have_two_open_break_records(
+    authenticated_client,
+    other_user,
+    api_team_leader_assignment,
+    api_break_recovery,
+):
+    planned_start_at = timezone.now() + timedelta(hours=1)
+    response = authenticated_client.post(
+        reverse("break-recovery-list"),
+        {
+            "assignment": api_team_leader_assignment.id,
+            "cover_user": other_user.id,
+            "planned_start_at": planned_start_at.isoformat(),
+            "expected_return_at": (
+                planned_start_at + timedelta(minutes=30)
+            ).isoformat(),
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "assignment" in response.data
+
+
+@pytest.mark.django_db
+def test_nominated_cover_user_can_see_break_record(
+    api_client,
+    other_user,
+    api_break_recovery,
+):
+    api_client.force_authenticate(user=other_user)
+
+    response = api_client.get(reverse("break-recovery-list"))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 1
+    assert response.data["results"][0]["id"] == api_break_recovery.id
+
+
+@pytest.mark.django_db
+def test_unrelated_user_cannot_see_break_record(
+    api_client,
+    unrelated_break_user,
+    api_break_recovery,
+):
+    api_client.force_authenticate(user=unrelated_break_user)
+
+    response = api_client.get(reverse("break-recovery-list"))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 0
+
+
+@pytest.mark.django_db
+def test_nominated_cover_user_can_accept_coverage(
+    api_client,
+    other_user,
+    api_break_recovery,
+):
+    api_client.force_authenticate(user=other_user)
+
+    response = api_client.post(
+        reverse(
+            "break-recovery-accept-coverage",
+            args=(api_break_recovery.id,),
+        ),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["status"] == BreakRecovery.Status.COVERAGE_ACCEPTED
+    assert response.data["coverage_accepted_by"] == other_user.id
+    assert response.data["coverage_accepted_at"] is not None
+
+
+@pytest.mark.django_db
+def test_assigned_team_leader_cannot_accept_coverage(
+    authenticated_client,
+    api_break_recovery,
+):
+    response = authenticated_client.post(
+        reverse(
+            "break-recovery-accept-coverage",
+            args=(api_break_recovery.id,),
+        ),
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_break_cannot_start_before_coverage_acceptance(
+    authenticated_client,
+    api_break_recovery,
+):
+    response = authenticated_client.post(
+        reverse("break-recovery-start", args=(api_break_recovery.id,)),
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "status" in response.data
+
+
+@pytest.mark.django_db
+def test_assigned_team_leader_can_start_break_after_acceptance(
+    api_client,
+    api_user,
+    other_user,
+    api_break_recovery,
+):
+    api_client.force_authenticate(user=other_user)
+    api_client.post(
+        reverse(
+            "break-recovery-accept-coverage",
+            args=(api_break_recovery.id,),
+        ),
+    )
+    api_client.force_authenticate(user=api_user)
+
+    response = api_client.post(
+        reverse("break-recovery-start", args=(api_break_recovery.id,)),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["status"] == BreakRecovery.Status.ACTIVE
+    assert response.data["started_by"] == api_user.id
+    assert response.data["started_at"] is not None
+
+
+@pytest.mark.django_db
+def test_cover_user_cannot_start_break(
+    api_client,
+    other_user,
+    api_break_recovery,
+):
+    api_break_recovery.status = BreakRecovery.Status.COVERAGE_ACCEPTED
+    api_break_recovery.coverage_accepted_at = timezone.now()
+    api_break_recovery.coverage_accepted_by = other_user
+    api_break_recovery.save()
+    api_client.force_authenticate(user=other_user)
+
+    response = api_client.post(
+        reverse("break-recovery-start", args=(api_break_recovery.id,)),
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_assigned_team_leader_can_confirm_recovery(
+    authenticated_client,
+    api_user,
+    other_user,
+    api_break_recovery,
+):
+    started_at = timezone.now() - timedelta(minutes=20)
+    api_break_recovery.status = BreakRecovery.Status.ACTIVE
+    api_break_recovery.coverage_accepted_at = started_at - timedelta(minutes=5)
+    api_break_recovery.coverage_accepted_by = other_user
+    api_break_recovery.started_at = started_at
+    api_break_recovery.started_by = api_user
+    api_break_recovery.save()
+
+    response = authenticated_client.post(
+        reverse("break-recovery-recover", args=(api_break_recovery.id,)),
+        {"recovery_notes": "Team Leader returned and resumed line control."},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["status"] == BreakRecovery.Status.RECOVERED
+    assert response.data["recovered_by"] == api_user.id
+    assert response.data["recovered_at"] is not None
+
+
+@pytest.mark.django_db
+def test_recovery_requires_notes(
+    authenticated_client,
+    api_user,
+    other_user,
+    api_break_recovery,
+):
+    started_at = timezone.now() - timedelta(minutes=20)
+    api_break_recovery.status = BreakRecovery.Status.ACTIVE
+    api_break_recovery.coverage_accepted_at = started_at - timedelta(minutes=5)
+    api_break_recovery.coverage_accepted_by = other_user
+    api_break_recovery.started_at = started_at
+    api_break_recovery.started_by = api_user
+    api_break_recovery.save()
+
+    response = authenticated_client.post(
+        reverse("break-recovery-recover", args=(api_break_recovery.id,)),
+        {"recovery_notes": ""},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "recovery_notes" in response.data
+
+
+@pytest.mark.django_db
+def test_cover_user_cannot_confirm_recovery(
+    api_client,
+    api_user,
+    other_user,
+    api_break_recovery,
+):
+    started_at = timezone.now() - timedelta(minutes=20)
+    api_break_recovery.status = BreakRecovery.Status.ACTIVE
+    api_break_recovery.coverage_accepted_at = started_at - timedelta(minutes=5)
+    api_break_recovery.coverage_accepted_by = other_user
+    api_break_recovery.started_at = started_at
+    api_break_recovery.started_by = api_user
+    api_break_recovery.save()
+    api_client.force_authenticate(user=other_user)
+
+    response = api_client.post(
+        reverse("break-recovery-recover", args=(api_break_recovery.id,)),
+        {"recovery_notes": "Attempted recovery."},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_attention_filter_returns_overdue_active_break(
+    authenticated_client,
+    api_user,
+    other_user,
+    api_break_recovery,
+):
+    started_at = timezone.now() - timedelta(minutes=45)
+    api_break_recovery.status = BreakRecovery.Status.ACTIVE
+    api_break_recovery.coverage_accepted_at = started_at - timedelta(minutes=5)
+    api_break_recovery.coverage_accepted_by = other_user
+    api_break_recovery.started_at = started_at
+    api_break_recovery.started_by = api_user
+    api_break_recovery.expected_return_at = timezone.now() - timedelta(minutes=10)
+    api_break_recovery.save()
+
+    response = authenticated_client.get(
+        reverse("break-recovery-list"),
+        {"attention_required": "true"},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 1
+    assert response.data["results"][0]["is_overdue"] is True
+
+
+@pytest.mark.django_db
+def test_assigned_team_leader_can_cancel_planned_break(
+    authenticated_client,
+    api_user,
+    api_break_recovery,
+):
+    response = authenticated_client.post(
+        reverse("break-recovery-cancel", args=(api_break_recovery.id,)),
+        {"cancellation_reason": "Production plan changed before break start."},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["status"] == BreakRecovery.Status.CANCELLED
+    assert response.data["cancelled_by"] == api_user.id
+    assert response.data["cancelled_at"] is not None
+
+
+@pytest.mark.django_db
+def test_cover_user_cannot_cancel_break(
+    api_client,
+    other_user,
+    api_break_recovery,
+):
+    api_client.force_authenticate(user=other_user)
+
+    response = api_client.post(
+        reverse("break-recovery-cancel", args=(api_break_recovery.id,)),
+        {"cancellation_reason": "Cover is unavailable."},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_cancelled_break_allows_new_break_plan(
+    authenticated_client,
+    other_user,
+    api_team_leader_assignment,
+    api_break_recovery,
+):
+    authenticated_client.post(
+        reverse("break-recovery-cancel", args=(api_break_recovery.id,)),
+        {"cancellation_reason": "Break time changed."},
+        format="json",
+    )
+    planned_start_at = timezone.now() + timedelta(hours=1)
+
+    response = authenticated_client.post(
+        reverse("break-recovery-list"),
+        {
+            "assignment": api_team_leader_assignment.id,
+            "cover_user": other_user.id,
+            "planned_start_at": planned_start_at.isoformat(),
+            "expected_return_at": (
+                planned_start_at + timedelta(minutes=30)
+            ).isoformat(),
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+
+
+@pytest.mark.django_db
+def test_break_recovery_records_cannot_be_directly_patched(
+    authenticated_client,
+    api_break_recovery,
+):
+    response = authenticated_client.patch(
+        reverse("break-recovery-detail", args=(api_break_recovery.id,)),
+        {"status": BreakRecovery.Status.RECOVERED},
         format="json",
     )
 
