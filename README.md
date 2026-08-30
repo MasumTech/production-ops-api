@@ -76,6 +76,7 @@ The API addresses five operational control gaps:
 | Management oversight | Dashboard aggregates, latest status, search, filtering, and ordering | Reduces manual status chasing |
 | API usability | JWT authentication, pagination, validation, health checks, OpenAPI schema, and Swagger UI | Provides a predictable integration surface |
 | Delivery and reliability | Automated tests, Ruff, GitHub Actions, Docker Compose, Gunicorn, and health checks | Demonstrates a repeatable production-style delivery process |
+| Operational escalation | Structured category, priority, response owner, deadline, acknowledgement, resolution, and attention queue | Turns a reported blocker into an owned and auditable response |
 
 ## Expected Operational Value
 
@@ -86,6 +87,7 @@ The API addresses five operational control gaps:
 - Less reliance on radio calls, paper notes, and fragmented spreadsheets
 - An auditable operational history for management and shift handovers
 - Scoped visibility: Team Leaders see their own lines while staff retain oversight
+- Visible overdue, critical, and unassigned escalations with acknowledgement evidence
 
 ## Product Roadmap
 
@@ -96,7 +98,7 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 | 1. Operations foundation | Production lines, shifts, output, downtime, quality incidents, dashboard, JWT, PostgreSQL, Docker, CI, health checks | API, Swagger, Django Admin | **Built** |
 | 2. Multi-line control | Date/shift assignments, `my-lines`, hourly RAG updates, owners, deadlines, follow-up, `latest-status` | Team Leader and management API | **Built** |
 | 3. Product and material readiness | Product sequence, READY/IN PROCESS/SHORT/HELD state, shortage quantity, owner, expected availability, authorised release visibility | Batcher, Team Leader, Operations | **Built** |
-| 4. Handover and recovery workflows | Structured issue categories, acknowledgements, unresolved-item handover, break/recovery controls, overdue/no-owner rules | Team Leader, incoming lead, Operations | **Next backend phase** |
+| 4. Handover and recovery workflows | Structured issue categories, acknowledgements, unresolved-item handover, break/recovery controls, overdue/no-owner rules | Team Leader, incoming lead, Operations | **In progress — escalation built; handover/recovery next** |
 | 5. Tablet-first frontend | My Lines, Raise Issue, Materials, Break & Recovery, and Handover in a fast responsive PWA | Team Leader tablet | **Planned frontend phase** |
 | 6. Manager web console | Live Floor priority board, all-line status, output position, open actions, late updates, and current material risk | Operations desktop/laptop | **Planned frontend phase** |
 | 7. Real-time event layer | Live status delivery, support notifications, overdue reminders, offline queue, and safe re-sync | Tablet and web interfaces | **Future phase** |
@@ -192,6 +194,8 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 | `TeamLeaderAssignment` | Line ownership for a date and shift | Team Leader, line, assignment creator, and notes; supports multi-line responsibility |
 | `HourlyLineUpdate` | Timestamped RAG condition for an assigned line | Product, issue, action, owner, support required, follow-up, recorder, and next-update deadline |
 | `ProductMaterialReadiness` | Ordered product and material state for an assigned line | Sequence, product, planned and shortage quantities, owner, expected availability, hold reason, creator, and release audit |
+| `OperationalEscalation` | Audited response lifecycle for a line blocker | Source update/incident, category, priority, owner, deadline, acknowledgement, resolution, overdue and attention state |
+
 ## API Endpoints
 
 | Method | Endpoint | Description |
@@ -217,6 +221,11 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 | `GET, POST` | `/api/product-material-readiness/` | List or create accessible product/material readiness items |
 | `GET, PUT, PATCH, DELETE` | `/api/product-material-readiness/{id}/` | Manage one accessible readiness item |
 | `POST` | `/api/product-material-readiness/{id}/release/` | Staff-only audited release of a held item |
+| `GET, POST` | `/api/operational-escalations/` | List visible escalations or raise one for an assigned line |
+| `GET` | `/api/operational-escalations/{id}/` | Retrieve one visible escalation |
+| `POST` | `/api/operational-escalations/{id}/acknowledge/` | Assigned owner or staff acknowledgement |
+| `POST` | `/api/operational-escalations/{id}/resolve/` | Resolve an acknowledged escalation with notes |
+| `GET` | `/api/operational-escalations/attention-required/` | List visible overdue, critical, or unassigned escalations |
 
 Business operations endpoints, including the dashboard and resource routes, require a JWT access token:
 
@@ -303,6 +312,7 @@ Pagination can be combined with filtering, search, and ordering:
 | Hourly line updates | `date`, `shift_type`, `production_line`, `status`, `requires_follow_up` | Search line/leader/product/issue/action/support; order by recorded time/deadline/status/line |
 | Product/material readiness | `date`, `shift_type`, `production_line`, `status`, `owner`, `product_code` | Search product/line/leader/owner/hold reason/notes; order by sequence/product/status/shortage/availability/date/line |
 | Dashboard summary | `date_from`, `date_to` | Aggregates only the selected date range |
+| Operational escalations | `date`, `shift_type`, `production_line`, `category`, `priority`, `status`, `owner`, `overdue`, `unassigned` | Search summary/details/action/resolution/line/leader/owner; order by raised time/deadline/priority/status/date/line |
 
 Representative queries:
 
@@ -316,6 +326,10 @@ Representative queries:
 /api/product-material-readiness/?status=short&production_line=1
 /api/product-material-readiness/?product_code=PROD-002&ordering=sequence_number
 /api/dashboard/summary/?date_from=2026-08-01&date_to=2026-08-31
+/api/operational-escalations/?priority=critical&status=open
+/api/operational-escalations/?overdue=true
+/api/operational-escalations/?unassigned=true
+/api/operational-escalations/attention-required/?production_line=1
 ```
 
 `date_from` and `date_to` use `YYYY-MM-DD`. The API returns `400 Bad Request` when `date_from` is later than `date_to`. Invalid typed filters, such as an invalid date or status, are also rejected.
@@ -439,7 +453,7 @@ curl http://localhost:8000/api/production-lines/ \
 
 ## Testing and Code Quality
 
-The current suite contains **74 automated tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, release auditing, and validation.
+The current suite contains **93 automated tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, release auditing, and validation.
 
 Run the complete test suite:
 
