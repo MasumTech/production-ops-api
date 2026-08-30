@@ -3,6 +3,7 @@ from django.db.models import (
     Count,
     IntegerField,
     OuterRef,
+    Prefetch,
     Q,
     Subquery,
     Sum,
@@ -25,11 +26,13 @@ from .models import (
     ProductMaterialReadiness,
     QualityIncident,
     Shift,
+    ShiftHandover,
     TeamLeaderAssignment,
 )
 from .permissions import (
     IsAssignedTeamLeaderOrStaff,
     IsEscalationParticipantOrStaff,
+    IsHandoverParticipantOrStaff,
     IsStaffOrReadOnly,
 )
 from .serializers import (
@@ -44,6 +47,8 @@ from .serializers import (
     ProductMaterialReadinessFilterSerializer,
     ProductMaterialReadinessSerializer,
     QualityIncidentSerializer,
+    ShiftHandoverFilterSerializer,
+    ShiftHandoverSerializer,
     ShiftSerializer,
     TeamLeaderAssignmentFilterSerializer,
     TeamLeaderAssignmentSerializer,
@@ -664,8 +669,12 @@ class OperationalEscalationViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(
                 Q(assignment__team_leader=self.request.user)
                 | Q(owner=self.request.user)
+                | Q(
+                    shift_handovers__incoming_assignment__team_leader=(
+                        self.request.user
+                    )
+                )
             )
-
         filter_serializer = OperationalEscalationFilterSerializer(
             data=self.request.query_params,
         )
@@ -879,4 +888,179 @@ class OperationalEscalationViewSet(viewsets.ModelViewSet):
             queryset,
             many=True,
         )
+        return Response(serializer.data)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        parameters=[ShiftHandoverFilterSerializer],
+    ),
+)
+class ShiftHandoverViewSet(viewsets.ModelViewSet):
+    queryset = ShiftHandover.objects.all()
+    serializer_class = ShiftHandoverSerializer
+    permission_classes = (IsHandoverParticipantOrStaff,)
+    http_method_names = (
+        "get",
+        "post",
+        "head",
+        "options",
+    )
+    filter_backends = (
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    )
+    search_fields = (
+        "operational_summary",
+        "notes",
+        "outgoing_assignment__production_line__code",
+        "outgoing_assignment__production_line__name",
+        "outgoing_assignment__team_leader__username",
+        "incoming_assignment__team_leader__username",
+        "escalations__summary",
+        "escalations__owner__username",
+    )
+    ordering_fields = (
+        "handed_over_at",
+        "accepted_at",
+        "status",
+        "outgoing_assignment__date",
+        "incoming_assignment__date",
+        "outgoing_assignment__production_line__code",
+        "created_at",
+    )
+    ordering = (
+        "status",
+        "-handed_over_at",
+    )
+
+    def get_queryset(self):
+        escalation_queryset = OperationalEscalation.objects.select_related(
+            "assignment",
+            "assignment__production_line",
+            "assignment__team_leader",
+            "hourly_update",
+            "quality_incident",
+            "quality_incident__shift",
+            "owner",
+            "raised_by",
+            "acknowledged_by",
+            "resolved_by",
+        )
+        queryset = self.queryset.select_related(
+            "outgoing_assignment",
+            "outgoing_assignment__production_line",
+            "outgoing_assignment__team_leader",
+            "incoming_assignment",
+            "incoming_assignment__production_line",
+            "incoming_assignment__team_leader",
+            "handed_over_by",
+            "accepted_by",
+        ).prefetch_related(
+            Prefetch(
+                "escalations",
+                queryset=escalation_queryset,
+            ),
+        )
+
+        if not self.request.user.is_staff:
+            queryset = queryset.filter(
+                Q(outgoing_assignment__team_leader=self.request.user)
+                | Q(incoming_assignment__team_leader=self.request.user)
+            )
+
+        filter_serializer = ShiftHandoverFilterSerializer(
+            data=self.request.query_params,
+        )
+        filter_serializer.is_valid(raise_exception=True)
+
+        date = filter_serializer.validated_data.get("date")
+        shift_type = filter_serializer.validated_data.get("shift_type")
+        production_line = filter_serializer.validated_data.get("production_line")
+        status_value = filter_serializer.validated_data.get("status")
+        awaiting_acceptance = filter_serializer.validated_data.get(
+            "awaiting_acceptance"
+        )
+
+        if date is not None:
+            queryset = queryset.filter(
+                outgoing_assignment__date=date,
+            )
+
+        if shift_type is not None:
+            queryset = queryset.filter(
+                outgoing_assignment__shift_type=shift_type,
+            )
+
+        if production_line is not None:
+            queryset = queryset.filter(
+                outgoing_assignment__production_line_id=production_line,
+            )
+
+        if status_value is not None:
+            queryset = queryset.filter(status=status_value)
+
+        if awaiting_acceptance is not None:
+            if awaiting_acceptance:
+                queryset = queryset.filter(
+                    status=ShiftHandover.Status.PENDING,
+                )
+                if not self.request.user.is_staff:
+                    queryset = queryset.filter(
+                        incoming_assignment__team_leader=self.request.user,
+                    )
+            else:
+                queryset = queryset.exclude(
+                    status=ShiftHandover.Status.PENDING,
+                )
+
+        return queryset.distinct()
+
+    def perform_create(self, serializer):
+        serializer.save(handed_over_by=self.request.user)
+
+    @extend_schema(
+        request=None,
+        responses=ShiftHandoverSerializer,
+    )
+    @action(
+        detail=True,
+        methods=("post",),
+        url_path="accept",
+    )
+    def accept(self, request, pk=None):
+        handover = self.get_object()
+
+        if handover.status != ShiftHandover.Status.PENDING:
+            raise ValidationError(
+                {"status": "Only a pending handover can be accepted."}
+            )
+
+        if (
+            not request.user.is_staff
+            and handover.incoming_assignment.team_leader_id != request.user.id
+        ):
+            raise PermissionDenied(
+                "Only the incoming Team Leader or management "
+                "staff can accept this handover."
+            )
+
+        unresolved_escalations = handover.escalations.exclude(
+            status=OperationalEscalation.Status.RESOLVED,
+        )
+        handover.escalations.set(unresolved_escalations)
+
+        handover.status = ShiftHandover.Status.ACCEPTED
+        handover.accepted_at = timezone.now()
+        handover.accepted_by = request.user
+        handover.save(
+            update_fields=(
+                "status",
+                "accepted_at",
+                "accepted_by",
+                "updated_at",
+            ),
+        )
+
+        serializer = self.get_serializer(handover)
         return Response(serializer.data)

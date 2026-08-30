@@ -14,6 +14,7 @@ from operations.models import (
     ProductMaterialReadiness,
     QualityIncident,
     Shift,
+    ShiftHandover,
     TeamLeaderAssignment,
 )
 
@@ -1752,3 +1753,327 @@ def test_escalation_records_cannot_be_directly_patched(
     )
 
     assert response.status_code == (status.HTTP_405_METHOD_NOT_ALLOWED)
+
+
+@pytest.fixture
+def incoming_user(db):
+    return get_user_model().objects.create_user(
+        username="incoming.team.leader",
+        email="incoming@example.com",
+        password=TEST_PASSWORD,
+    )
+
+
+@pytest.fixture
+def incoming_assignment(
+    api_team_leader_assignment,
+    incoming_user,
+):
+    return TeamLeaderAssignment.objects.create(
+        team_leader=incoming_user,
+        production_line=api_team_leader_assignment.production_line,
+        date=api_team_leader_assignment.date,
+        shift_type=Shift.ShiftType.NIGHT,
+    )
+
+
+@pytest.fixture
+def api_shift_handover(
+    api_user,
+    api_team_leader_assignment,
+    incoming_assignment,
+    api_operational_escalation,
+):
+    handover = ShiftHandover.objects.create(
+        outgoing_assignment=api_team_leader_assignment,
+        incoming_assignment=incoming_assignment,
+        operational_summary=("Printer escalation remains under engineering control."),
+        handed_over_by=api_user,
+    )
+    handover.escalations.add(api_operational_escalation)
+    return handover
+
+
+@pytest.mark.django_db
+def test_shift_handovers_require_authentication(api_client):
+    response = api_client.get(reverse("shift-handover-list"))
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+def test_outgoing_team_leader_can_create_shift_handover(
+    authenticated_client,
+    api_user,
+    api_team_leader_assignment,
+    incoming_assignment,
+    api_operational_escalation,
+):
+    response = authenticated_client.post(
+        reverse("shift-handover-list"),
+        {
+            "outgoing_assignment": api_team_leader_assignment.id,
+            "incoming_assignment": incoming_assignment.id,
+            "escalation_ids": [api_operational_escalation.id],
+            "operational_summary": (
+                "Printer escalation remains under engineering control."
+            ),
+            "notes": "Confirm output after the engineering reset.",
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["status"] == ShiftHandover.Status.PENDING
+    assert response.data["handed_over_by"] == api_user.id
+    assert response.data["incoming_team_leader_username"] == ("incoming.team.leader")
+    assert response.data["escalations"][0]["id"] == api_operational_escalation.id
+
+
+@pytest.mark.django_db
+def test_team_leader_cannot_create_handover_for_another_outgoing_assignment(
+    authenticated_client,
+    other_team_leader_assignment,
+    api_operational_escalation,
+):
+    incoming = TeamLeaderAssignment.objects.create(
+        team_leader=other_team_leader_assignment.team_leader,
+        production_line=other_team_leader_assignment.production_line,
+        date=other_team_leader_assignment.date,
+        shift_type=Shift.ShiftType.NIGHT,
+    )
+
+    response = authenticated_client.post(
+        reverse("shift-handover-list"),
+        {
+            "outgoing_assignment": other_team_leader_assignment.id,
+            "incoming_assignment": incoming.id,
+            "escalation_ids": [api_operational_escalation.id],
+            "operational_summary": "Open work remains.",
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "outgoing_assignment" in response.data
+
+
+@pytest.mark.django_db
+def test_resolved_escalation_cannot_be_carried_into_handover(
+    authenticated_client,
+    api_user,
+    api_team_leader_assignment,
+    incoming_assignment,
+):
+    now = timezone.now()
+    escalation = OperationalEscalation.objects.create(
+        assignment=api_team_leader_assignment,
+        category=OperationalEscalation.Category.EQUIPMENT,
+        priority=OperationalEscalation.Priority.MEDIUM,
+        status=OperationalEscalation.Status.RESOLVED,
+        summary="Printer issue has been resolved.",
+        owner=api_user,
+        raised_by=api_user,
+        response_due_at=now + timedelta(minutes=30),
+        acknowledged_at=now,
+        acknowledged_by=api_user,
+        resolution_notes="Printer reset and verified.",
+        resolved_at=now,
+        resolved_by=api_user,
+    )
+
+    response = authenticated_client.post(
+        reverse("shift-handover-list"),
+        {
+            "outgoing_assignment": api_team_leader_assignment.id,
+            "incoming_assignment": incoming_assignment.id,
+            "escalation_ids": [escalation.id],
+            "operational_summary": "No open work remains.",
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "escalation_ids" in response.data
+
+
+@pytest.mark.django_db
+def test_handover_rejects_escalation_from_another_assignment(
+    authenticated_client,
+    api_user,
+    api_team_leader_assignment,
+    incoming_assignment,
+    other_team_leader_assignment,
+):
+    escalation = OperationalEscalation.objects.create(
+        assignment=other_team_leader_assignment,
+        category=OperationalEscalation.Category.STAFFING,
+        priority=OperationalEscalation.Priority.MEDIUM,
+        summary="Additional cover is required.",
+        owner=api_user,
+        raised_by=api_user,
+        response_due_at=timezone.now() + timedelta(minutes=30),
+    )
+
+    response = authenticated_client.post(
+        reverse("shift-handover-list"),
+        {
+            "outgoing_assignment": api_team_leader_assignment.id,
+            "incoming_assignment": incoming_assignment.id,
+            "escalation_ids": [escalation.id],
+            "operational_summary": "Open work remains.",
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "escalation_ids" in response.data
+
+
+@pytest.mark.django_db
+def test_incoming_team_leader_can_see_handover(
+    api_client,
+    incoming_user,
+    api_shift_handover,
+):
+    api_client.force_authenticate(user=incoming_user)
+
+    response = api_client.get(reverse("shift-handover-list"))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 1
+    assert response.data["results"][0]["id"] == api_shift_handover.id
+
+
+@pytest.mark.django_db
+def test_incoming_team_leader_can_see_carried_escalation(
+    api_client,
+    incoming_user,
+    api_shift_handover,
+    api_operational_escalation,
+):
+    api_client.force_authenticate(user=incoming_user)
+
+    response = api_client.get(reverse("operational-escalation-list"))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 1
+    assert response.data["results"][0]["id"] == api_operational_escalation.id
+
+
+@pytest.mark.django_db
+def test_unrelated_user_cannot_see_handover(
+    api_client,
+    other_user,
+    api_shift_handover,
+):
+    api_client.force_authenticate(user=other_user)
+
+    response = api_client.get(reverse("shift-handover-list"))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 0
+
+
+@pytest.mark.django_db
+def test_incoming_team_leader_can_accept_handover(
+    api_client,
+    incoming_user,
+    api_shift_handover,
+):
+    api_client.force_authenticate(user=incoming_user)
+
+    response = api_client.post(
+        reverse("shift-handover-accept", args=(api_shift_handover.id,)),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["status"] == ShiftHandover.Status.ACCEPTED
+    assert response.data["accepted_by"] == incoming_user.id
+    assert response.data["accepted_at"] is not None
+
+
+@pytest.mark.django_db
+def test_outgoing_team_leader_cannot_accept_handover(
+    authenticated_client,
+    api_shift_handover,
+):
+    response = authenticated_client.post(
+        reverse("shift-handover-accept", args=(api_shift_handover.id,)),
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_acceptance_prunes_escalations_resolved_after_handover_creation(
+    api_client,
+    api_user,
+    incoming_user,
+    api_shift_handover,
+    api_operational_escalation,
+):
+    now = timezone.now()
+    api_operational_escalation.status = OperationalEscalation.Status.RESOLVED
+    api_operational_escalation.acknowledged_at = now
+    api_operational_escalation.acknowledged_by = api_user
+    api_operational_escalation.resolution_notes = "Printer reset and verified."
+    api_operational_escalation.resolved_at = now
+    api_operational_escalation.resolved_by = api_user
+    api_operational_escalation.save()
+    api_client.force_authenticate(user=incoming_user)
+
+    response = api_client.post(
+        reverse("shift-handover-accept", args=(api_shift_handover.id,)),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["escalations"] == []
+
+
+@pytest.mark.django_db
+def test_accepted_handover_cannot_be_accepted_again(
+    api_client,
+    incoming_user,
+    api_shift_handover,
+):
+    api_client.force_authenticate(user=incoming_user)
+    url = reverse("shift-handover-accept", args=(api_shift_handover.id,))
+    api_client.post(url)
+
+    response = api_client.post(url)
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "status" in response.data
+
+
+@pytest.mark.django_db
+def test_shift_handovers_can_be_filtered_by_awaiting_acceptance(
+    api_client,
+    incoming_user,
+    api_shift_handover,
+):
+    api_client.force_authenticate(user=incoming_user)
+
+    response = api_client.get(
+        reverse("shift-handover-list"),
+        {"awaiting_acceptance": "true"},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 1
+    assert response.data["results"][0]["id"] == api_shift_handover.id
+
+
+@pytest.mark.django_db
+def test_handover_records_cannot_be_directly_patched(
+    authenticated_client,
+    api_shift_handover,
+):
+    response = authenticated_client.patch(
+        reverse("shift-handover-detail", args=(api_shift_handover.id,)),
+        {"status": ShiftHandover.Status.ACCEPTED},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
