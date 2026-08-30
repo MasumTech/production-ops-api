@@ -3,6 +3,7 @@ from rest_framework import serializers
 
 from .models import (
     HourlyLineUpdate,
+    OperationalEscalation,
     ProductionLine,
     ProductMaterialReadiness,
     QualityIncident,
@@ -605,4 +606,235 @@ class ProductMaterialReadinessFilterSerializer(serializers.Serializer):
     product_code = serializers.CharField(
         required=False,
         max_length=50,
+    )
+
+
+class OperationalEscalationSerializer(serializers.ModelSerializer):
+    assignment_date = serializers.DateField(
+        source="assignment.date",
+        read_only=True,
+    )
+    shift_type = serializers.CharField(
+        source="assignment.shift_type",
+        read_only=True,
+    )
+    production_line = serializers.IntegerField(
+        source="assignment.production_line_id",
+        read_only=True,
+    )
+    production_line_code = serializers.CharField(
+        source="assignment.production_line.code",
+        read_only=True,
+    )
+    team_leader_username = serializers.CharField(
+        source="assignment.team_leader.username",
+        read_only=True,
+    )
+    owner_username = serializers.CharField(
+        source="owner.username",
+        read_only=True,
+    )
+    raised_by_username = serializers.CharField(
+        source="raised_by.username",
+        read_only=True,
+    )
+    acknowledged_by_username = serializers.CharField(
+        source="acknowledged_by.username",
+        read_only=True,
+    )
+    resolved_by_username = serializers.CharField(
+        source="resolved_by.username",
+        read_only=True,
+    )
+    is_overdue = serializers.BooleanField(read_only=True)
+    needs_attention = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = OperationalEscalation
+        fields = (
+            "id",
+            "assignment",
+            "assignment_date",
+            "shift_type",
+            "production_line",
+            "production_line_code",
+            "team_leader_username",
+            "hourly_update",
+            "quality_incident",
+            "category",
+            "priority",
+            "status",
+            "summary",
+            "details",
+            "immediate_action",
+            "owner",
+            "owner_username",
+            "raised_at",
+            "response_due_at",
+            "raised_by",
+            "raised_by_username",
+            "acknowledged_at",
+            "acknowledged_by",
+            "acknowledged_by_username",
+            "resolution_notes",
+            "resolved_at",
+            "resolved_by",
+            "resolved_by_username",
+            "is_overdue",
+            "needs_attention",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "status",
+            "raised_at",
+            "raised_by",
+            "raised_by_username",
+            "acknowledged_at",
+            "acknowledged_by",
+            "acknowledged_by_username",
+            "resolution_notes",
+            "resolved_at",
+            "resolved_by",
+            "resolved_by_username",
+            "is_overdue",
+            "needs_attention",
+            "created_at",
+            "updated_at",
+        )
+
+    def validate_assignment(self, value):
+        request = self.context.get("request")
+
+        if (
+            request
+            and request.user.is_authenticated
+            and not request.user.is_staff
+            and value.team_leader_id != request.user.id
+        ):
+            raise serializers.ValidationError(
+                "You can only raise an escalation for a line assigned to you."
+            )
+
+        return value
+
+    def validate_owner(self, value):
+        if value is not None and not value.is_active:
+            raise serializers.ValidationError(
+                "An inactive user cannot own an escalation."
+            )
+
+        return value
+
+    def validate(self, attrs):
+        assignment = attrs.get("assignment")
+        hourly_update = attrs.get("hourly_update")
+        quality_incident = attrs.get("quality_incident")
+        priority = attrs.get(
+            "priority",
+            OperationalEscalation.Priority.MEDIUM,
+        )
+        owner = attrs.get("owner")
+        immediate_action = attrs.get("immediate_action", "")
+        response_due_at = attrs.get("response_due_at")
+        errors = {}
+
+        if response_due_at and response_due_at <= timezone.now():
+            errors["response_due_at"] = (
+                "Response deadline must be later than the raised time."
+            )
+
+        if hourly_update and quality_incident:
+            errors["hourly_update"] = (
+                "Link either an hourly update or a quality incident, not both."
+            )
+
+        if (
+            assignment
+            and hourly_update
+            and hourly_update.assignment_id != assignment.id
+        ):
+            errors["hourly_update"] = (
+                "The hourly update must belong to the selected assignment."
+            )
+
+        if assignment and quality_incident:
+            incident_shift = quality_incident.shift
+
+            if (
+                incident_shift.production_line_id != assignment.production_line_id
+                or incident_shift.date != assignment.date
+                or incident_shift.shift_type != assignment.shift_type
+            ):
+                errors["quality_incident"] = (
+                    "The quality incident must belong to the selected line and shift."
+                )
+
+        if (
+            priority
+            in {
+                OperationalEscalation.Priority.HIGH,
+                OperationalEscalation.Priority.CRITICAL,
+            }
+            and owner is None
+        ):
+            errors["owner"] = "High or Critical escalation must have an owner."
+
+        if (
+            priority == OperationalEscalation.Priority.CRITICAL
+            and not (immediate_action or "").strip()
+        ):
+            errors["immediate_action"] = (
+                "Critical escalation must record an immediate action."
+            )
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        return attrs
+
+
+class OperationalEscalationFilterSerializer(serializers.Serializer):
+    date = serializers.DateField(required=False)
+    shift_type = serializers.ChoiceField(
+        choices=Shift.ShiftType.choices,
+        required=False,
+    )
+    production_line = serializers.IntegerField(
+        required=False,
+        min_value=1,
+    )
+    category = serializers.ChoiceField(
+        choices=OperationalEscalation.Category.choices,
+        required=False,
+    )
+    priority = serializers.ChoiceField(
+        choices=OperationalEscalation.Priority.choices,
+        required=False,
+    )
+    status = serializers.ChoiceField(
+        choices=OperationalEscalation.Status.choices,
+        required=False,
+    )
+    owner = serializers.IntegerField(
+        required=False,
+        min_value=1,
+    )
+    overdue = serializers.BooleanField(
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+    unassigned = serializers.BooleanField(
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+
+
+class OperationalEscalationResolveSerializer(serializers.Serializer):
+    resolution_notes = serializers.CharField(
+        allow_blank=False,
+        trim_whitespace=True,
     )

@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from .models import (
     HourlyLineUpdate,
+    OperationalEscalation,
     ProductionLine,
     ProductMaterialReadiness,
     QualityIncident,
@@ -243,6 +244,70 @@ class ProductMaterialReadinessAdmin(admin.ModelAdmin):
     )
     def assignment_date(self, obj):
         return obj.assignment.date
+
+    @admin.display(
+        ordering="assignment__production_line__code",
+        description="Production line",
+    )
+    def production_line(self, obj):
+        return obj.assignment.production_line.code
+
+
+@admin.register(OperationalEscalation)
+class OperationalEscalationAdmin(admin.ModelAdmin):
+    list_display = (
+        "raised_at",
+        "production_line",
+        "category",
+        "priority",
+        "status",
+        "owner",
+        "response_due_at",
+        "is_overdue",
+    )
+    list_filter = (
+        "category",
+        "priority",
+        "status",
+        "assignment__date",
+        "assignment__shift_type",
+    )
+    search_fields = (
+        "summary",
+        "details",
+        "assignment__production_line__code",
+        "assignment__team_leader__username",
+        "owner__username",
+    )
+    autocomplete_fields = (
+        "assignment",
+        "hourly_update",
+        "quality_incident",
+        "owner",
+        "raised_by",
+        "acknowledged_by",
+        "resolved_by",
+    )
+    readonly_fields = (
+        "raised_at",
+        "acknowledged_at",
+        "acknowledged_by",
+        "resolved_at",
+        "resolved_by",
+        "created_at",
+        "updated_at",
+    )
+    date_hierarchy = "raised_at"
+    ordering = (
+        "status",
+        "response_due_at",
+    )
+    list_select_related = (
+        "assignment",
+        "assignment__production_line",
+        "owner",
+        "raised_by",
+    )
 
     @admin.display(
         ordering="assignment__production_line__code",

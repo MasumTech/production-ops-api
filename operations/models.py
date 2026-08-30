@@ -433,3 +433,233 @@ class ProductMaterialReadiness(TimeStampedModel):
             f"{self.product_code} - "
             f"{self.get_status_display()}"
         )
+
+
+class OperationalEscalation(TimeStampedModel):
+    class Category(models.TextChoices):
+        EQUIPMENT = "equipment", "Equipment"
+        MATERIAL = "material", "Material"
+        QUALITY = "quality", "Quality"
+        STAFFING = "staffing", "Staffing"
+        SAFETY = "safety", "Safety"
+        OTHER = "other", "Other"
+
+    class Priority(models.TextChoices):
+        LOW = "low", "Low"
+        MEDIUM = "medium", "Medium"
+        HIGH = "high", "High"
+        CRITICAL = "critical", "Critical"
+
+    class Status(models.TextChoices):
+        OPEN = "open", "Open"
+        ACKNOWLEDGED = "acknowledged", "Acknowledged"
+        RESOLVED = "resolved", "Resolved"
+
+    assignment = models.ForeignKey(
+        TeamLeaderAssignment,
+        on_delete=models.PROTECT,
+        related_name="operational_escalations",
+    )
+    hourly_update = models.ForeignKey(
+        HourlyLineUpdate,
+        on_delete=models.PROTECT,
+        related_name="operational_escalations",
+        null=True,
+        blank=True,
+    )
+    quality_incident = models.ForeignKey(
+        QualityIncident,
+        on_delete=models.PROTECT,
+        related_name="operational_escalations",
+        null=True,
+        blank=True,
+    )
+    category = models.CharField(
+        max_length=20,
+        choices=Category.choices,
+    )
+    priority = models.CharField(
+        max_length=10,
+        choices=Priority.choices,
+        default=Priority.MEDIUM,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.OPEN,
+    )
+    summary = models.CharField(max_length=255)
+    details = models.TextField(blank=True)
+    immediate_action = models.TextField(blank=True)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="owned_operational_escalations",
+        null=True,
+        blank=True,
+    )
+    raised_at = models.DateTimeField(default=timezone.now)
+    response_due_at = models.DateTimeField()
+    raised_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="raised_operational_escalations",
+    )
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    acknowledged_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="acknowledged_operational_escalations",
+        null=True,
+        blank=True,
+    )
+    resolution_notes = models.TextField(blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="resolved_operational_escalations",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        ordering = [
+            "status",
+            "response_due_at",
+            "-raised_at",
+        ]
+        indexes = [
+            models.Index(
+                fields=["status", "priority", "response_due_at"],
+            ),
+            models.Index(
+                fields=["assignment", "status"],
+            ),
+            models.Index(
+                fields=["owner", "status"],
+            ),
+        ]
+
+    @property
+    def is_overdue(self):
+        return (
+            self.status != self.Status.RESOLVED
+            and self.response_due_at < timezone.now()
+        )
+
+    @property
+    def needs_attention(self):
+        return self.status != self.Status.RESOLVED and (
+            self.owner_id is None
+            or self.is_overdue
+            or self.priority == self.Priority.CRITICAL
+        )
+
+    def clean(self):
+        errors = {}
+
+        if (
+            self.response_due_at
+            and self.raised_at
+            and self.response_due_at <= self.raised_at
+        ):
+            errors["response_due_at"] = (
+                "Response deadline must be later than the raised time."
+            )
+
+        if self.owner_id and not self.owner.is_active:
+            errors["owner"] = "An inactive user cannot own an escalation."
+
+        if self.hourly_update_id and self.quality_incident_id:
+            errors["hourly_update"] = (
+                "Link either an hourly update or a quality incident, not both."
+            )
+
+        if (
+            self.hourly_update_id
+            and self.assignment_id
+            and self.hourly_update.assignment_id != self.assignment_id
+        ):
+            errors["hourly_update"] = (
+                "The hourly update must belong to the selected assignment."
+            )
+
+        if self.quality_incident_id and self.assignment_id:
+            incident_shift = self.quality_incident.shift
+            assignment = self.assignment
+
+            if (
+                incident_shift.production_line_id != assignment.production_line_id
+                or incident_shift.date != assignment.date
+                or incident_shift.shift_type != assignment.shift_type
+            ):
+                errors["quality_incident"] = (
+                    "The quality incident must belong to the selected line and shift."
+                )
+
+        if (
+            self.priority
+            in {
+                self.Priority.HIGH,
+                self.Priority.CRITICAL,
+            }
+            and self.owner_id is None
+        ):
+            errors["owner"] = "High or Critical escalation must have an owner."
+
+        if (
+            self.priority == self.Priority.CRITICAL
+            and not self.immediate_action.strip()
+        ):
+            errors["immediate_action"] = (
+                "Critical escalation must record an immediate action."
+            )
+
+        if bool(self.acknowledged_at) != bool(self.acknowledged_by_id):
+            errors["acknowledged_at"] = (
+                "Acknowledgement time and user must be recorded together."
+            )
+
+        if bool(self.resolved_at) != bool(self.resolved_by_id):
+            errors["resolved_at"] = (
+                "Resolution time and user must be recorded together."
+            )
+
+        if self.status == self.Status.OPEN and self.acknowledged_at:
+            errors["status"] = "Open escalation cannot contain acknowledgement data."
+
+        if self.status == self.Status.ACKNOWLEDGED:
+            if not self.acknowledged_at:
+                errors["status"] = (
+                    "Acknowledged escalation must contain acknowledgement data."
+                )
+
+            if self.resolved_at:
+                errors["status"] = (
+                    "Acknowledged escalation cannot contain resolution data."
+                )
+
+        if self.status == self.Status.RESOLVED:
+            if not self.acknowledged_at:
+                errors["status"] = (
+                    "Escalation must be acknowledged before it is resolved."
+                )
+
+            if not self.resolved_at:
+                errors["status"] = "Resolved escalation must contain resolution data."
+
+            if not self.resolution_notes.strip():
+                errors["resolution_notes"] = (
+                    "Resolved escalation must include resolution notes."
+                )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self):
+        return (
+            f"{self.assignment.production_line.code} - "
+            f"{self.get_priority_display()} - "
+            f"{self.summary}"
+        )
