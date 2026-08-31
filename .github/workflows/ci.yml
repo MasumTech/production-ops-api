@@ -46,6 +46,13 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -77,6 +84,18 @@ jobs:
             --cov-report=term-missing \
             --cov-fail-under=80
 
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Check frontend types
+        run: npm run --prefix frontend typecheck
+
+      - name: Run frontend tests
+        run: npm run --prefix frontend test
+
+      - name: Build tablet PWA
+        run: npm run --prefix frontend build
+
       - name: Prepare Docker environment
         run: cp .env.docker.example .env.docker
 
@@ -84,4 +103,4 @@ jobs:
         run: docker compose config --quiet
 
       - name: Build Docker image
-        run: docker compose build web
+        run: docker compose build web frontend

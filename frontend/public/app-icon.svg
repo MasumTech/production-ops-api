@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Multi-Line Control">
+  <rect width="512" height="512" rx="112" fill="#07131f"/>
+  <path d="M116 130h280v60H116zm0 96h200v60H116zm0 96h280v60H116z" fill="#d9ff5b"/>
+  <circle cx="366" cy="256" r="42" fill="#ffb84d"/>
+</svg>
