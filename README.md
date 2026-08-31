@@ -10,11 +10,11 @@
 
 A production-focused platform for coordinating two or three manufacturing lines through clear ownership, hourly RAG status, issue escalation, shift KPIs, downtime, and quality records.
 
-This repository implements the Django REST Framework backend and the React + TypeScript tablet PWA using JWT authentication, PostgreSQL, Docker, automated testing, and continuous integration.
+This repository implements the Django REST Framework backend, React + TypeScript Team Leader PWA, and Operations Manager web console using JWT authentication, PostgreSQL, Docker, automated testing, and continuous integration.
 
-**Current repository scope:** The Multi-Line Production Operations API and Team Leader tablet PWA, focused on production workflows, fast shopfloor capture, data integrity, access control, automated quality gates, and containerized delivery.
+**Current repository scope:** The Multi-Line Production Operations API, Team Leader tablet PWA, and Operations Manager console, focused on production workflows, fast shopfloor capture, management-wide priority visibility, data integrity, access control, automated quality gates, and containerized delivery.
 
-**Product direction:** The wider platform will add an Operations Manager web console, live events, operational analytics, and optional mobile access after the tablet workflow is validated.
+**Product direction:** The wider platform will add live events, operational analytics, explainable risk briefing, and optional mobile access after the tablet and manager workflows are validated.
 
 [Scope](#product-scope-and-naming) · [Problem](#the-real-world-problem) · [Scenario](#representative-shift-scenario) · [Workflow](#operational-workflow) · [Capabilities](#key-capabilities) · [Roadmap](#product-roadmap) · [Architecture](#system-architecture) · [API](#api-endpoints) · [Run locally](#quick-start-with-docker)
 
@@ -24,7 +24,7 @@ This repository implements the Django REST Framework backend and the React + Typ
 |---|---|---|
 | Complete product | **Multi-Line Production Operations Platform** | The full tablet, web, backend, live-event, analytics, and future mobile direction |
 | Operational proposal | **Multi-Line Team Leader Digital Solution** | The management-facing workflow for one Team Leader coordinating two or three production lines |
-| Current repository | **Multi-Line Production Operations API + Team Leader PWA** | The implemented Django backend, business rules, access control, operational data, integration endpoints, and tablet workflow |
+| Current repository | **Multi-Line Production Operations Platform foundation** | The implemented Django backend, business rules, Team Leader tablet workflow, Operations Manager console, access control, and operational data |
 
 The repository slug remains `production-ops-api` so existing GitHub, clone, CV, and portfolio links stay stable while the wider product develops in phases.
 
@@ -80,6 +80,7 @@ The API addresses five operational control gaps:
 | Shift handover | Unresolved escalation carry-over between consecutive assignments with receiver acceptance | Preserves ownership, deadlines, and operational context across shift changes |
 | Break and recovery control | Planned cover, cover acceptance, controlled break start, recovery confirmation, and late-return attention | Keeps temporary line responsibility explicit while a Team Leader is away |
 | Team Leader tablet PWA | My Lines, line updates, escalation, materials, break/recovery, and handover actions in an installable responsive interface | Turns the API workflows into a fast shopfloor control surface |
+| Operations Manager console | Priority-sorted all-line status, late and missing updates, output position, open actions, and material risk | Gives management one desktop view of the current operational position without waiting for individual calls |
 
 ## Expected Operational Value
 
@@ -95,9 +96,9 @@ The API addresses five operational control gaps:
 
 ## Product Roadmap
 
-This repository is the API and Team Leader tablet foundation for the wider **Multi-Line Production Operations Platform** and its **Multi-Line Team Leader Digital Solution** workflow. The sequence below keeps the solution useful and safe: prove the workflow first, build reliable operational data next, then add broader interfaces, live events, analytics, and only later consider AI.
+This repository is the API, Team Leader tablet, and Operations Manager console foundation for the wider **Multi-Line Production Operations Platform** and its **Multi-Line Team Leader Digital Solution** workflow. The sequence below keeps the solution useful and safe: prove the workflow first, build reliable operational data next, then add broader interfaces, live events, analytics, and only later consider AI.
 
-Roadmap completion is tracked as a ten-checkpoint delivery index: each published phase contributes 10 percentage points when its defined scope is built. It is a transparent feature-state measure, not an engineering-hours estimate. With Phase 5 built, the complete published product roadmap is **50% complete**; the backend and Team Leader tablet scope through Phase 5 is **100% complete**.
+Roadmap completion is tracked as a ten-checkpoint delivery index: each published phase contributes 10 percentage points when its defined scope is built. It is a transparent feature-state measure, not an engineering-hours estimate. With Phase 6 built, the complete published product roadmap is **60% complete**; the backend, Team Leader tablet, and manager-console scope through Phase 6 is **100% complete**.
 
 | Phase | Scope | Main users/interface | Status |
 |---|---|---|---|
@@ -106,7 +107,7 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 | 3. Product and material readiness | Product sequence, READY/IN PROCESS/SHORT/HELD state, shortage quantity, owner, expected availability, authorised release visibility | Batcher, Team Leader, Operations | **Built** |
 | 4. Handover and recovery workflows | Structured issue categories, acknowledgements, unresolved-item handover, break/recovery controls, overdue/no-owner rules | Team Leader, incoming lead, cover user, Operations | **Built** |
 | 5. Tablet-first frontend | My Lines, Raise Issue, Materials, Break & Recovery, and Handover in a fast responsive PWA | Team Leader tablet | **Built** |
-| 6. Manager web console | Live Floor priority board, all-line status, output position, open actions, late updates, and current material risk | Operations desktop/laptop | **Planned frontend phase** |
+| 6. Manager web console | Live Floor priority board, all-line status, output position, open actions, late updates, and current material risk | Operations desktop/laptop | **Built** |
 | 7. Real-time event layer | Live status delivery, support notifications, overdue reminders, offline queue, and safe re-sync | Tablet and web interfaces | **Future phase** |
 | 8. Loss and asset analytics | Repeated fault history, downtime impact, material delays, recurring line combinations, repair-versus-replace evidence | Operations and Engineering | **Future phase** |
 | 9. AI daily risk briefing | Explainable plan-completion, downtime, and material-delay risk with confidence and missing-data warnings | Authorised managers/support roles | **Data-dependent future phase** |
@@ -118,7 +119,7 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 |---|---|---|
 | Backend and API | Continue with Django, DRF, PostgreSQL, and versioned REST endpoints | Reuses the tested foundation and keeps business rules central |
 | Tablet frontend | React + TypeScript responsive Progressive Web App | Provides an installable Team Leader workflow with app-shell caching and clear offline state |
-| Manager frontend | React + TypeScript web console in the next product phase | Separates shopfloor speed from management-wide oversight while reusing shared contracts |
+| Manager frontend | React + TypeScript role-gated web console with a 60-second operational snapshot | Separates shopfloor speed from management-wide oversight while reusing shared contracts |
 | Live updates | Django Channels/WebSockets with Redis after the pilot proves the need | Pushes important status changes without constant manual refresh |
 | Background work | Celery with Redis for approved reminders, overdue checks, and scheduled reports | Keeps asynchronous work outside API requests |
 | Optional mobile | PWA first; consider React Native/Expo only if native notifications, scanning, or stronger offline use is justified | Avoids maintaining a second client too early |
@@ -180,6 +181,7 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 - Four-stage break workflow with cover acceptance, recovery evidence, cancellation audit, and overdue visibility
 - Tablet-first responsive PWA with session-scoped JWT refresh, accessible controls, offline-state warning, and API-backed workflow actions
 - Frontend type checking, component/API-client tests, production build, service-worker generation, and container build in CI
+- Staff-only Operations Manager console with deterministic priority ordering, all-line filters, output KPIs, late-update control, and open-action/material-risk queues
 
 
 ## Technology Stack
@@ -197,7 +199,7 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 | Testing | pytest and pytest-django |
 | Code quality | Ruff |
 | Continuous integration | GitHub Actions |
-| Tablet frontend | React 19, TypeScript, Vite, Vitest, and Vite PWA |
+| Tablet and manager frontend | React 19, TypeScript, Vite, Vitest, and Vite PWA |
 | Frontend delivery | Nginx container with same-origin API proxy and SPA fallback |
 
 ## Domain Model Responsibilities
@@ -418,7 +420,7 @@ The application will be available at:
 
 | Service | URL |
 |---|---|
-| Team Leader tablet PWA | http://localhost:3000/ |
+| Team Leader PWA and Manager Console | http://localhost:3000/ |
 | Swagger documentation | http://localhost:8000/api/docs/ |
 | Django admin | http://localhost:8000/admin/ |
 | OpenAPI schema | http://localhost:8000/api/schema/ |
@@ -476,7 +478,7 @@ python manage.py createsuperuser
 python manage.py runserver
 ```
 
-In a second terminal, start the tablet PWA development server:
+In a second terminal, start the operations frontend development server:
 
 ```bash
 cd frontend
@@ -505,7 +507,7 @@ curl http://localhost:8000/api/production-lines/ \
 
 ## Testing and Code Quality
 
-The current suite contains **146 backend tests** and **5 frontend tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, release, escalation, handover, break/recovery auditing, tablet rendering, form contracts, pagination, token refresh, and validation.
+The current suite contains **146 backend tests** and **9 frontend tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, release, escalation, handover, break/recovery auditing, tablet rendering, manager role routing, deterministic priority ordering, line-risk filtering, form contracts, pagination, token refresh, and validation.
 
 Run the complete test suite:
 
@@ -582,7 +584,7 @@ production-ops-api/
 │   ├── tests.py                # Model tests
 │   └── test_api.py             # API, permission, and workflow tests
 ├── frontend/
-│   ├── src/                    # Tablet screens, API client, components, and tests
+│   ├── src/                    # Tablet and manager screens, API client, components, and tests
 │   ├── public/                 # PWA icon and static assets
 │   ├── Dockerfile              # Reproducible Node build and Nginx runtime
 │   ├── nginx.conf              # SPA routing and same-origin API proxy

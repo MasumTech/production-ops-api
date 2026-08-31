@@ -4,6 +4,7 @@ import { ApiError, apiList, apiRequest, clearSession, hasSession, login } from "
 import { ErrorBanner } from "./components";
 import { BreakRecoveryPanel } from "./features/BreakRecoveryPanel";
 import { HandoversPanel } from "./features/HandoversPanel";
+import { ManagerConsole } from "./features/ManagerConsole";
 import { MaterialsPanel } from "./features/MaterialsPanel";
 import { MyLinesPanel } from "./features/MyLinesPanel";
 import { RaiseIssuePanel } from "./features/RaiseIssuePanel";
@@ -13,7 +14,9 @@ import type {
   BreakRecovery,
   Escalation,
   LineUpdate,
+  ManagerWorkspaceData,
   MaterialReadiness,
+  ShiftRecord,
   ShiftHandover,
   UserChoice,
   UserSummary,
@@ -29,6 +32,23 @@ const EMPTY_DATA: WorkspaceData = {
   breaks: [],
   handovers: [],
   users: [],
+};
+
+const EMPTY_MANAGER_DATA: ManagerWorkspaceData = {
+  assignments: [],
+  updates: [],
+  materials: [],
+  escalations: [],
+  shifts: [],
+  summary: {
+    total_shifts: 0,
+    total_planned_output: 0,
+    total_actual_output: 0,
+    overall_performance_percentage: null,
+    total_downtime_minutes: 0,
+    open_incidents: 0,
+    critical_incidents: 0,
+  },
 };
 
 const NAV_ITEMS: Array<{ id: WorkspaceTab; label: string; shortLabel: string }> = [
@@ -76,6 +96,25 @@ async function loadWorkspaceData(operationalDate: string): Promise<WorkspaceData
   return { assignments, updates, materials, escalations, breaks, handovers, users };
 }
 
+async function loadManagerData(operationalDate: string): Promise<ManagerWorkspaceData> {
+  const [assignments, updates, materials, escalations, shifts, summary] = await Promise.all([
+    apiList<Assignment>(`/team-leader-assignments/?date=${operationalDate}`),
+    apiList<LineUpdate>(`/hourly-line-updates/latest-status/?date=${operationalDate}`),
+    apiList<MaterialReadiness>(
+      `/product-material-readiness/?date=${operationalDate}&ordering=sequence_number`,
+    ),
+    apiList<Escalation>(
+      `/operational-escalations/?date=${operationalDate}&ordering=-raised_at`,
+    ),
+    apiList<ShiftRecord>(`/shifts/?date=${operationalDate}&ordering=-actual_output`),
+    apiRequest<ManagerWorkspaceData["summary"]>(
+      `/dashboard/summary/?date_from=${operationalDate}&date_to=${operationalDate}`,
+    ),
+  ]);
+
+  return { assignments, updates, materials, escalations, shifts, summary };
+}
+
 export function LoginScreen({ onAuthenticated }: { onAuthenticated: () => void }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -102,9 +141,9 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: () => void }
         <div className="brand-mark" aria-hidden="true">
           ML
         </div>
-        <span className="eyebrow">Team Leader tablet</span>
+        <span className="eyebrow">Production operations workspace</span>
         <h1 id="login-title">Multi-Line Control</h1>
-        <p>See line risk, raise issues, manage material readiness, breaks, and handover.</p>
+        <p>Team Leaders control assigned lines. Managers see the full Live Floor priority board.</p>
         {error ? <ErrorBanner message={error} /> : null}
         <form onSubmit={submit} className="stack-form">
           <label>
@@ -142,12 +181,14 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: () => void }
 export default function App() {
   const [profile, setProfile] = useState<UserSummary | null>(null);
   const [data, setData] = useState<WorkspaceData>(EMPTY_DATA);
+  const [managerData, setManagerData] = useState<ManagerWorkspaceData>(EMPTY_MANAGER_DATA);
   const [loading, setLoading] = useState(hasSession());
   const [error, setError] = useState("");
   const [tab, setTab] = useState<WorkspaceTab>("lines");
   const [selectedAssignment, setSelectedAssignment] = useState<number | null>(null);
   const [operationalDate, setOperationalDate] = useState(localDate());
   const [toast, setToast] = useState("");
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const online = useOnlineStatus();
 
   const load = useCallback(async () => {
@@ -155,9 +196,13 @@ export default function App() {
     setError("");
     try {
       const currentProfile = await apiRequest<UserSummary>("/auth/me/");
-      const workspace = await loadWorkspaceData(operationalDate);
       setProfile(currentProfile);
-      setData(workspace);
+      if (currentProfile.is_staff) {
+        setManagerData(await loadManagerData(operationalDate));
+      } else {
+        setData(await loadWorkspaceData(operationalDate));
+      }
+      setLastUpdatedAt(new Date().toISOString());
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 401) {
         clearSession();
@@ -170,6 +215,29 @@ export default function App() {
     }
   }, [operationalDate]);
 
+  const refresh = useCallback(async () => {
+    if (!profile) return;
+    setLoading(true);
+    setError("");
+    try {
+      if (profile.is_staff) {
+        setManagerData(await loadManagerData(operationalDate));
+      } else {
+        setData(await loadWorkspaceData(operationalDate));
+      }
+      setLastUpdatedAt(new Date().toISOString());
+    } catch (caught) {
+      if (caught instanceof ApiError && caught.status === 401) {
+        clearSession();
+        setProfile(null);
+      } else {
+        setError(caught instanceof Error ? caught.message : "Could not refresh the workspace.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [operationalDate, profile]);
+
   useEffect(() => {
     if (hasSession()) void load();
   }, [load]);
@@ -180,10 +248,11 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const refresh = useCallback(async () => {
-    const workspace = await loadWorkspaceData(operationalDate);
-    setData(workspace);
-  }, [operationalDate]);
+  useEffect(() => {
+    if (!profile?.is_staff || !online) return;
+    const timer = window.setInterval(() => void refresh(), 60_000);
+    return () => window.clearInterval(timer);
+  }, [online, profile?.is_staff, refresh]);
 
   const openIssueFor = (assignmentId: number) => {
     setSelectedAssignment(assignmentId);
@@ -210,7 +279,26 @@ export default function App() {
     clearSession();
     setProfile(null);
     setData(EMPTY_DATA);
+    setManagerData(EMPTY_MANAGER_DATA);
+    setLastUpdatedAt(null);
   };
+
+  if (profile?.is_staff) {
+    return (
+      <ManagerConsole
+        profile={profile}
+        data={managerData}
+        operationalDate={operationalDate}
+        lastUpdatedAt={lastUpdatedAt}
+        online={online}
+        busy={loading}
+        error={error}
+        onDateChange={setOperationalDate}
+        onRefresh={() => void refresh()}
+        onSignOut={signOut}
+      />
+    );
+  }
 
   return (
     <div className="app-shell">

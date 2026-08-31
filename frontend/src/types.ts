@@ -128,6 +128,30 @@ export interface ShiftHandover {
   handed_over_at: string;
 }
 
+export interface ShiftRecord {
+  id: number;
+  production_line: number;
+  production_line_code: string;
+  supervisor: number;
+  supervisor_username: string;
+  date: string;
+  shift_type: "day" | "night";
+  planned_output: number;
+  actual_output: number;
+  downtime_minutes: number;
+  performance_percentage: number | null;
+}
+
+export interface DashboardSummary {
+  total_shifts: number;
+  total_planned_output: number;
+  total_actual_output: number;
+  overall_performance_percentage: number | null;
+  total_downtime_minutes: number;
+  open_incidents: number;
+  critical_incidents: number;
+}
+
 export interface WorkspaceData {
   assignments: Assignment[];
   updates: LineUpdate[];
@@ -136,6 +160,15 @@ export interface WorkspaceData {
   breaks: BreakRecovery[];
   handovers: ShiftHandover[];
   users: UserChoice[];
+}
+
+export interface ManagerWorkspaceData {
+  assignments: Assignment[];
+  updates: LineUpdate[];
+  materials: MaterialReadiness[];
+  escalations: Escalation[];
+  shifts: ShiftRecord[];
+  summary: DashboardSummary;
 }
 
 export type WorkspaceTab = "lines" | "issues" | "materials" | "breaks" | "handover";
