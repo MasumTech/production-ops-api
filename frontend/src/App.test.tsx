@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "./api";
-import { LoginScreen } from "./App";
+import App, { LoginScreen } from "./App";
 import { MyLinesPanel } from "./features/MyLinesPanel";
 import { RaiseIssuePanel } from "./features/RaiseIssuePanel";
 import type { Assignment, UserSummary, WorkspaceData } from "./types";
@@ -25,6 +25,13 @@ const user: UserSummary = {
   username: "team.leader",
   display_name: "Team Leader",
   is_staff: false,
+};
+
+const manager: UserSummary = {
+  id: 1,
+  username: "operations.manager",
+  display_name: "Operations Manager",
+  is_staff: true,
 };
 
 afterEach(() => vi.restoreAllMocks());
@@ -126,5 +133,33 @@ describe("tablet workspace", () => {
       }),
     );
     expect(onSaved).toHaveBeenCalledWith("Line status recorded.");
+  });
+
+  it("routes management staff to the manager console", async () => {
+    sessionStorage.setItem(
+      "production-ops-session",
+      JSON.stringify({ access: "test-access", refresh: "test-refresh" }),
+    );
+    vi.spyOn(api, "apiList").mockResolvedValue([]);
+    vi.spyOn(api, "apiRequest").mockImplementation(async (path) => {
+      if (path === "/auth/me/") return manager as never;
+      return {
+        total_shifts: 0,
+        total_planned_output: 0,
+        total_actual_output: 0,
+        overall_performance_percentage: null,
+        total_downtime_minutes: 0,
+        open_incidents: 0,
+        critical_incidents: 0,
+      } as never;
+    });
+
+    render(<App />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Live Floor priority board" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Operations Manager Console")).toBeInTheDocument();
+    expect(screen.queryByText("My Lines")).not.toBeInTheDocument();
   });
 });

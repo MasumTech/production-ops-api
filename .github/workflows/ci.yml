@@ -93,7 +93,7 @@ jobs:
       - name: Run frontend tests
         run: npm run --prefix frontend test
 
-      - name: Build tablet PWA
+      - name: Build operations frontend
         run: npm run --prefix frontend build
 
       - name: Prepare Docker environment

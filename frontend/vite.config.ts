@@ -11,7 +11,7 @@ export default defineConfig({
       manifest: {
         name: "Multi-Line Production Operations",
         short_name: "Line Control",
-        description: "Tablet-first Team Leader production control workspace.",
+        description: "Team Leader tablet and Operations Manager production control workspace.",
         theme_color: "#07131f",
         background_color: "#07131f",
         display: "standalone",
