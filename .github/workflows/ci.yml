@@ -15,11 +15,26 @@ jobs:
   quality-checks:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: production_ops_ci
+          POSTGRES_USER: production_ops_ci
+          POSTGRES_PASSWORD: production-ops-ci-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U production_ops_ci -d production_ops_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     env:
-      DJANGO_SECRET_KEY: ci-only-secret-key
+      DJANGO_SECRET_KEY: ci-only-secret-key-with-at-least-32-bytes
       DJANGO_DEBUG: "False"
       DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
-      DATABASE_URL: sqlite:///db.sqlite3
+      DATABASE_URL: postgresql://production_ops_ci:production-ops-ci-password@127.0.0.1:5432/production_ops_ci
 
     steps:
       - name: Checkout repository
@@ -45,8 +60,22 @@ jobs:
       - name: Run Django system checks
         run: python manage.py check
 
+      - name: Check for missing migrations
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Validate OpenAPI schema
+        run: |
+          python manage.py spectacular \
+            --file /tmp/production-ops-schema.yml \
+            --validate
+
       - name: Run tests
-        run: python -m pytest
+        run: |
+          python -m pytest \
+            --cov=operations \
+            --cov=config \
+            --cov-report=term-missing \
+            --cov-fail-under=80
 
       - name: Prepare Docker environment
         run: cp .env.docker.example .env.docker
