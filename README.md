@@ -521,9 +521,11 @@ GitHub Actions automatically runs the following checks for changes targeting `ma
 2. Ruff formatting check
 3. Ruff lint check
 4. Django system check
-5. pytest test suite
-6. Docker Compose configuration validation
-7. Docker image build
+5. Missing migration detection
+6. OpenAPI schema validation
+7. PostgreSQL-backed pytest suite with a minimum 80% coverage gate
+8. Docker Compose configuration validation
+9. Docker image build
 
 ## Project Structure
 
