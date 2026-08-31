@@ -117,6 +117,58 @@ def test_user_can_obtain_jwt_tokens(api_client, api_user):
 
 
 @pytest.mark.django_db
+def test_current_user_endpoint_returns_safe_profile(
+    authenticated_client,
+    api_user,
+):
+    response = authenticated_client.get(reverse("current-user"))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data == {
+        "id": api_user.id,
+        "username": api_user.username,
+        "display_name": api_user.username,
+        "is_staff": False,
+    }
+    assert "email" not in response.data
+
+
+@pytest.mark.django_db
+def test_active_user_list_requires_authentication(api_client):
+    response = api_client.get(reverse("active-user-list"))
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+def test_active_user_list_excludes_inactive_users(
+    authenticated_client,
+    api_user,
+    other_user,
+):
+    inactive_user = get_user_model().objects.create_user(
+        username="inactive.user",
+        password=TEST_PASSWORD,
+        is_active=False,
+    )
+    superuser = get_user_model().objects.create_superuser(
+        username="technical.admin",
+        password=TEST_PASSWORD,
+    )
+
+    response = authenticated_client.get(reverse("active-user-list"))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert [user["username"] for user in response.data] == [
+        api_user.username,
+        other_user.username,
+    ]
+    assert inactive_user.username not in {user["username"] for user in response.data}
+    assert superuser.username not in {user["username"] for user in response.data}
+    assert all("email" not in user and "is_staff" not in user for user in response.data)
+
+
+@pytest.mark.django_db
 def test_authenticated_user_can_create_production_line(
     authenticated_client,
 ):
@@ -468,6 +520,52 @@ def test_team_leader_assignments_require_authentication(api_client):
     )
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+def test_team_leader_can_list_valid_handover_options(
+    authenticated_client,
+    api_team_leader_assignment,
+    incoming_assignment,
+    other_user,
+    second_production_line,
+):
+    TeamLeaderAssignment.objects.create(
+        team_leader=other_user,
+        production_line=second_production_line,
+        date=api_team_leader_assignment.date + timedelta(days=1),
+        shift_type=Shift.ShiftType.DAY,
+    )
+
+    response = authenticated_client.get(
+        reverse(
+            "team-leader-assignment-handover-options",
+            args=(api_team_leader_assignment.id,),
+        )
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert [assignment["id"] for assignment in response.data] == [
+        incoming_assignment.id
+    ]
+
+
+@pytest.mark.django_db
+def test_unrelated_user_cannot_list_handover_options(
+    api_client,
+    other_user,
+    api_team_leader_assignment,
+):
+    api_client.force_authenticate(user=other_user)
+
+    response = api_client.get(
+        reverse(
+            "team-leader-assignment-handover-options",
+            args=(api_team_leader_assignment.id,),
+        )
+    )
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
 @pytest.mark.django_db

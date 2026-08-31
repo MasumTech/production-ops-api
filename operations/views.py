@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from django.db.models import (
     Case,
     Count,
@@ -42,6 +43,7 @@ from .serializers import (
     BreakRecoveryCompleteSerializer,
     BreakRecoveryFilterSerializer,
     BreakRecoverySerializer,
+    CurrentUserSerializer,
     HourlyLineUpdateFilterSerializer,
     HourlyLineUpdateSerializer,
     OperationalEscalationFilterSerializer,
@@ -58,7 +60,30 @@ from .serializers import (
     ShiftSerializer,
     TeamLeaderAssignmentFilterSerializer,
     TeamLeaderAssignmentSerializer,
+    UserChoiceSerializer,
 )
+
+User = get_user_model()
+
+
+class CurrentUserView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    @extend_schema(responses=CurrentUserSerializer)
+    def get(self, request):
+        return Response(CurrentUserSerializer(request.user).data)
+
+
+class ActiveUserListView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    @extend_schema(responses=UserChoiceSerializer(many=True))
+    def get(self, request):
+        users = User.objects.filter(
+            is_active=True,
+            is_superuser=False,
+        ).order_by("username")
+        return Response(UserChoiceSerializer(users, many=True).data)
 
 
 class OperationsDashboardView(APIView):
@@ -360,6 +385,43 @@ class TeamLeaderAssignmentViewSet(viewsets.ModelViewSet):
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @extend_schema(
+        responses=TeamLeaderAssignmentSerializer(many=True),
+    )
+    @action(
+        detail=True,
+        methods=("get",),
+        url_path="handover-options",
+    )
+    def handover_options(self, request, pk=None):
+        outgoing_assignment = self.get_object()
+
+        later_assignment_query = Q(date__gt=outgoing_assignment.date)
+        if outgoing_assignment.shift_type == Shift.ShiftType.DAY:
+            later_assignment_query |= Q(
+                date=outgoing_assignment.date,
+                shift_type=Shift.ShiftType.NIGHT,
+            )
+
+        queryset = (
+            self.queryset.select_related(
+                "production_line",
+                "team_leader",
+                "assigned_by",
+            )
+            .filter(
+                later_assignment_query,
+                production_line=outgoing_assignment.production_line,
+                team_leader__is_active=True,
+            )
+            .exclude(pk=outgoing_assignment.pk)
+            .exclude(team_leader=outgoing_assignment.team_leader)
+            .order_by("date", "shift_type", "id")
+        )
 
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
