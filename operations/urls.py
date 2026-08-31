@@ -2,7 +2,9 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    ActiveUserListView,
     BreakRecoveryViewSet,
+    CurrentUserView,
     HourlyLineUpdateViewSet,
     OperationalEscalationViewSet,
     OperationsDashboardView,
@@ -62,6 +64,16 @@ router.register(
 )
 
 urlpatterns = [
+    path(
+        "auth/me/",
+        CurrentUserView.as_view(),
+        name="current-user",
+    ),
+    path(
+        "active-users/",
+        ActiveUserListView.as_view(),
+        name="active-user-list",
+    ),
     path(
         "dashboard/summary/",
         OperationsDashboardView.as_view(),

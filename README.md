@@ -10,11 +10,11 @@
 
 A production-focused platform for coordinating two or three manufacturing lines through clear ownership, hourly RAG status, issue escalation, shift KPIs, downtime, and quality records.
 
-This repository implements the backend API foundation using Django REST Framework, JWT authentication, PostgreSQL, Docker, automated testing, and continuous integration.
+This repository implements the Django REST Framework backend and the React + TypeScript tablet PWA using JWT authentication, PostgreSQL, Docker, automated testing, and continuous integration.
 
-**Current repository scope:** The Multi-Line Production Operations API, focused on production workflows, data integrity, access control, automated quality gates, and containerized delivery.
+**Current repository scope:** The Multi-Line Production Operations API and Team Leader tablet PWA, focused on production workflows, fast shopfloor capture, data integrity, access control, automated quality gates, and containerized delivery.
 
-**Product direction:** The wider platform will add a tablet-first Team Leader experience, an Operations Manager web console, live events, operational analytics, and optional mobile access after the core workflow is validated.
+**Product direction:** The wider platform will add an Operations Manager web console, live events, operational analytics, and optional mobile access after the tablet workflow is validated.
 
 [Scope](#product-scope-and-naming) · [Problem](#the-real-world-problem) · [Scenario](#representative-shift-scenario) · [Workflow](#operational-workflow) · [Capabilities](#key-capabilities) · [Roadmap](#product-roadmap) · [Architecture](#system-architecture) · [API](#api-endpoints) · [Run locally](#quick-start-with-docker)
 
@@ -24,7 +24,7 @@ This repository implements the backend API foundation using Django REST Framewor
 |---|---|---|
 | Complete product | **Multi-Line Production Operations Platform** | The full tablet, web, backend, live-event, analytics, and future mobile direction |
 | Operational proposal | **Multi-Line Team Leader Digital Solution** | The management-facing workflow for one Team Leader coordinating two or three production lines |
-| Current repository | **Multi-Line Production Operations API** | The implemented Django backend, business rules, access control, operational data, and integration endpoints |
+| Current repository | **Multi-Line Production Operations API + Team Leader PWA** | The implemented Django backend, business rules, access control, operational data, integration endpoints, and tablet workflow |
 
 The repository slug remains `production-ops-api` so existing GitHub, clone, CV, and portfolio links stay stable while the wider product develops in phases.
 
@@ -79,6 +79,7 @@ The API addresses five operational control gaps:
 | Operational escalation | Structured category, priority, response owner, deadline, acknowledgement, resolution, and attention queue | Turns a reported blocker into an owned and auditable response |
 | Shift handover | Unresolved escalation carry-over between consecutive assignments with receiver acceptance | Preserves ownership, deadlines, and operational context across shift changes |
 | Break and recovery control | Planned cover, cover acceptance, controlled break start, recovery confirmation, and late-return attention | Keeps temporary line responsibility explicit while a Team Leader is away |
+| Team Leader tablet PWA | My Lines, line updates, escalation, materials, break/recovery, and handover actions in an installable responsive interface | Turns the API workflows into a fast shopfloor control surface |
 
 ## Expected Operational Value
 
@@ -94,7 +95,9 @@ The API addresses five operational control gaps:
 
 ## Product Roadmap
 
-This repository is the backend foundation for the wider **Multi-Line Production Operations Platform** and its **Multi-Line Team Leader Digital Solution** workflow. The sequence below keeps the solution useful and safe: prove the workflow first, build reliable operational data next, then add interfaces, live events, analytics, and only later consider AI.
+This repository is the API and Team Leader tablet foundation for the wider **Multi-Line Production Operations Platform** and its **Multi-Line Team Leader Digital Solution** workflow. The sequence below keeps the solution useful and safe: prove the workflow first, build reliable operational data next, then add broader interfaces, live events, analytics, and only later consider AI.
+
+Roadmap completion is tracked as a ten-checkpoint delivery index: each published phase contributes 10 percentage points when its defined scope is built. It is a transparent feature-state measure, not an engineering-hours estimate. With Phase 5 built, the complete published product roadmap is **50% complete**; the backend and Team Leader tablet scope through Phase 5 is **100% complete**.
 
 | Phase | Scope | Main users/interface | Status |
 |---|---|---|---|
@@ -102,7 +105,7 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 | 2. Multi-line control | Date/shift assignments, `my-lines`, hourly RAG updates, owners, deadlines, follow-up, `latest-status` | Team Leader and management API | **Built** |
 | 3. Product and material readiness | Product sequence, READY/IN PROCESS/SHORT/HELD state, shortage quantity, owner, expected availability, authorised release visibility | Batcher, Team Leader, Operations | **Built** |
 | 4. Handover and recovery workflows | Structured issue categories, acknowledgements, unresolved-item handover, break/recovery controls, overdue/no-owner rules | Team Leader, incoming lead, cover user, Operations | **Built** |
-| 5. Tablet-first frontend | My Lines, Raise Issue, Materials, Break & Recovery, and Handover in a fast responsive PWA | Team Leader tablet | **Planned frontend phase** |
+| 5. Tablet-first frontend | My Lines, Raise Issue, Materials, Break & Recovery, and Handover in a fast responsive PWA | Team Leader tablet | **Built** |
 | 6. Manager web console | Live Floor priority board, all-line status, output position, open actions, late updates, and current material risk | Operations desktop/laptop | **Planned frontend phase** |
 | 7. Real-time event layer | Live status delivery, support notifications, overdue reminders, offline queue, and safe re-sync | Tablet and web interfaces | **Future phase** |
 | 8. Loss and asset analytics | Repeated fault history, downtime impact, material delays, recurring line combinations, repair-versus-replace evidence | Operations and Engineering | **Future phase** |
@@ -114,7 +117,8 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 | Layer | Proposed direction | Why |
 |---|---|---|
 | Backend and API | Continue with Django, DRF, PostgreSQL, and versioned REST endpoints | Reuses the tested foundation and keeps business rules central |
-| Tablet and manager frontend | React + TypeScript responsive Progressive Web App | One tablet-first codebase can also serve desktop and provide limited offline support |
+| Tablet frontend | React + TypeScript responsive Progressive Web App | Provides an installable Team Leader workflow with app-shell caching and clear offline state |
+| Manager frontend | React + TypeScript web console in the next product phase | Separates shopfloor speed from management-wide oversight while reusing shared contracts |
 | Live updates | Django Channels/WebSockets with Redis after the pilot proves the need | Pushes important status changes without constant manual refresh |
 | Background work | Celery with Redis for approved reminders, overdue checks, and scheduled reports | Keeps asynchronous work outside API requests |
 | Optional mobile | PWA first; consider React Native/Expo only if native notifications, scanning, or stronger offline use is justified | Avoids maintaining a second client too early |
@@ -147,6 +151,7 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 | Management staff | All assignments, hourly updates, and product/material readiness | Manage all records and perform the audited release of held material |
 | Incoming Team Leader | Handovers and unresolved escalations carried into own assignment | Review operational context and explicitly accept a pending handover |
 | Nominated break cover | Break records where the authenticated user is nominated as cover | Review line context and explicitly accept temporary coverage |
+| Authenticated tablet user | Safe active-user choices and later same-line assignment options | Select response owners, cover users, and valid handover receivers without exposing email data |
 
 ## Data Integrity and Business Rules
 
@@ -173,6 +178,8 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 - Automated formatting, linting, system checks, tests, Compose validation, and Docker builds
 - Non-root Gunicorn container with application and PostgreSQL health checks
 - Four-stage break workflow with cover acceptance, recovery evidence, cancellation audit, and overdue visibility
+- Tablet-first responsive PWA with session-scoped JWT refresh, accessible controls, offline-state warning, and API-backed workflow actions
+- Frontend type checking, component/API-client tests, production build, service-worker generation, and container build in CI
 
 
 ## Technology Stack
@@ -190,6 +197,8 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 | Testing | pytest and pytest-django |
 | Code quality | Ruff |
 | Continuous integration | GitHub Actions |
+| Tablet frontend | React 19, TypeScript, Vite, Vitest, and Vite PWA |
+| Frontend delivery | Nginx container with same-origin API proxy and SPA fallback |
 
 ## Domain Model Responsibilities
 
@@ -212,6 +221,8 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 |---|---|---|
 | `POST` | `/api/auth/token/` | Obtain JWT access and refresh tokens |
 | `POST` | `/api/auth/token/refresh/` | Refresh an access token |
+| `GET` | `/api/auth/me/` | Return the authenticated user's safe tablet profile |
+| `GET` | `/api/active-users/` | List safe active-user choices without email addresses |
 | `GET` | `/api/schema/` | Download the OpenAPI schema |
 | `GET` | `/api/docs/` | Open Swagger API documentation |
 | `GET, POST` | `/api/production-lines/` | List or create production lines |
@@ -225,6 +236,7 @@ This repository is the backend foundation for the wider **Multi-Line Production 
 | `GET, POST` | `/api/team-leader-assignments/` | List or create line assignments |
 | `GET, PUT, PATCH, DELETE` | `/api/team-leader-assignments/{id}/` | Manage one line assignment |
 | `GET` | `/api/team-leader-assignments/my-lines/` | List the current user’s assigned lines |
+| `GET` | `/api/team-leader-assignments/{id}/handover-options/` | List valid later same-line assignments for handover |
 | `GET, POST` | `/api/hourly-line-updates/` | List or create hourly line updates |
 | `GET, PUT, PATCH, DELETE` | `/api/hourly-line-updates/{id}/` | Manage one accessible hourly update |
 | `GET` | `/api/hourly-line-updates/latest-status/` | Return the latest update for every accessible assignment |
@@ -406,6 +418,7 @@ The application will be available at:
 
 | Service | URL |
 |---|---|
+| Team Leader tablet PWA | http://localhost:3000/ |
 | Swagger documentation | http://localhost:8000/api/docs/ |
 | Django admin | http://localhost:8000/admin/ |
 | OpenAPI schema | http://localhost:8000/api/schema/ |
@@ -420,6 +433,7 @@ View application logs:
 
 ```bash
 docker compose logs --tail=50 web
+docker compose logs --tail=50 frontend
 ```
 
 Stop the containers:
@@ -462,6 +476,16 @@ python manage.py createsuperuser
 python manage.py runserver
 ```
 
+In a second terminal, start the tablet PWA development server:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Open http://localhost:5173/. Vite proxies `/api` to the local Django server. The production Docker path uses the Nginx same-origin proxy at http://localhost:3000/.
+
 ## Authentication Example
 
 Request JWT tokens:
@@ -481,7 +505,7 @@ curl http://localhost:8000/api/production-lines/ \
 
 ## Testing and Code Quality
 
-The current suite contains **141 automated tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, release, escalation, handover, break/recovery auditing, and validation.
+The current suite contains **146 backend tests** and **5 frontend tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, release, escalation, handover, break/recovery auditing, tablet rendering, form contracts, pagination, token refresh, and validation.
 
 Run the complete test suite:
 
@@ -507,6 +531,15 @@ Run lint checks:
 python -m ruff check .
 ```
 
+Run the frontend gates:
+
+```bash
+npm ci --prefix frontend
+npm run --prefix frontend typecheck
+npm run --prefix frontend test
+npm run --prefix frontend build
+```
+
 Check whitespace errors:
 
 ```bash
@@ -524,8 +557,9 @@ GitHub Actions automatically runs the following checks for changes targeting `ma
 5. Missing migration detection
 6. OpenAPI schema validation
 7. PostgreSQL-backed pytest suite with a minimum 80% coverage gate
-8. Docker Compose configuration validation
-9. Docker image build
+8. Frontend dependency installation, type check, Vitest suite, and production PWA build
+9. Docker Compose configuration validation
+10. Django and Nginx frontend image builds
 
 ## Project Structure
 
@@ -547,8 +581,15 @@ production-ops-api/
 │   ├── migrations/             # Versioned database schema
 │   ├── tests.py                # Model tests
 │   └── test_api.py             # API, permission, and workflow tests
+├── frontend/
+│   ├── src/                    # Tablet screens, API client, components, and tests
+│   ├── public/                 # PWA icon and static assets
+│   ├── Dockerfile              # Reproducible Node build and Nginx runtime
+│   ├── nginx.conf              # SPA routing and same-origin API proxy
+│   ├── package.json            # Frontend scripts and dependencies
+│   └── vite.config.ts          # React, test, development proxy, and PWA config
 ├── Dockerfile                  # Non-root Gunicorn image
-├── compose.yml                 # Django and PostgreSQL services
+├── compose.yml                 # Django, PostgreSQL, and tablet frontend services
 ├── requirements.txt            # Pinned Python dependencies
 ├── ruff.toml                   # Formatting and lint rules
 └── README.md                   # Case study and operating guide

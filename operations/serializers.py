@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -12,6 +13,30 @@ from .models import (
     ShiftHandover,
     TeamLeaderAssignment,
 )
+
+User = get_user_model()
+
+
+class UserChoiceSerializer(serializers.ModelSerializer):
+    display_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = (
+            "id",
+            "username",
+            "display_name",
+        )
+        read_only_fields = fields
+
+    def get_display_name(self, obj) -> str:
+        return obj.get_full_name() or obj.username
+
+
+class CurrentUserSerializer(UserChoiceSerializer):
+    class Meta(UserChoiceSerializer.Meta):
+        fields = (*UserChoiceSerializer.Meta.fields, "is_staff")
+        read_only_fields = fields
 
 
 class ProductionLineSerializer(serializers.ModelSerializer):
