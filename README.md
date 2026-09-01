@@ -385,6 +385,46 @@ Representative queries:
 
 `date_from` and `date_to` use `YYYY-MM-DD`. The API returns `400 Bad Request` when `date_from` is later than `date_to`. Invalid typed filters, such as an invalid date or status, are also rejected.
 
+
+## Loss and asset analytics
+
+Management staff can review deterministic loss evidence recorded against
+operational escalations and registered production assets.
+
+### Capabilities
+
+- production asset registry by line and asset type
+- optional asset mapping for equipment escalations
+- confirmed loss-minute and estimated lost-unit capture
+- recurring asset-fault visibility across shifts
+- line and escalation-category loss aggregation
+- configurable recurring-event threshold
+- maximum 366-day analytics query range
+- staff-only analytics access
+- Manager Console loss and asset history view
+
+### API endpoints
+
+- `GET, POST /api/production-assets/`
+- `GET /api/analytics/loss-assets/`
+
+Analytics filters:
+
+- `date_from`
+- `date_to`
+- `production_line`
+- `asset`
+- `recurring_threshold`
+
+### Product boundary
+
+Analytics presents recorded operational evidence only. It does not predict
+equipment failure, approve repair or replacement, calculate financial return,
+or replace approved Engineering, Safety, Quality, Finance, production-control,
+or management decisions. Initial use must remain limited to dummy data and an
+approved controlled pilot.
+
+
 ## Quick Start with Docker
 
 ### Prerequisites
