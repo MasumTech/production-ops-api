@@ -29,12 +29,22 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
 
     env:
       DJANGO_SECRET_KEY: ci-only-secret-key-with-at-least-32-bytes
       DJANGO_DEBUG: "False"
       DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
       DATABASE_URL: postgresql://production_ops_ci:production-ops-ci-password@127.0.0.1:5432/production_ops_ci
+      REDIS_URL: redis://127.0.0.1:6379/0
 
     steps:
       - name: Checkout repository
@@ -102,5 +112,5 @@ jobs:
       - name: Validate Docker Compose configuration
         run: docker compose config --quiet
 
-      - name: Build Docker image
-        run: docker compose build web frontend
+      - name: Build Docker images
+        run: docker compose build web reminders frontend

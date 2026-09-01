@@ -14,7 +14,7 @@ This repository implements the Django REST Framework backend, React + TypeScript
 
 **Current repository scope:** The Multi-Line Production Operations API, Team Leader tablet PWA, and Operations Manager console, focused on production workflows, fast shopfloor capture, management-wide priority visibility, data integrity, access control, automated quality gates, and containerized delivery.
 
-**Product direction:** The wider platform will add live events, operational analytics, explainable risk briefing, and optional mobile access after the tablet and manager workflows are validated.
+**Product direction:** The wider platform will add operational analytics, explainable risk briefing, and optional mobile access after the tablet, manager, and live-event workflows are validated.
 
 [Scope](#product-scope-and-naming) · [Problem](#the-real-world-problem) · [Scenario](#representative-shift-scenario) · [Workflow](#operational-workflow) · [Capabilities](#key-capabilities) · [Roadmap](#product-roadmap) · [Architecture](#system-architecture) · [API](#api-endpoints) · [Run locally](#quick-start-with-docker)
 
@@ -75,7 +75,7 @@ The API addresses five operational control gaps:
 | Quality incident management | Category, severity, lifecycle status, root cause, and corrective action | Supports structured investigation and closure |
 | Management oversight | Dashboard aggregates, latest status, search, filtering, and ordering | Reduces manual status chasing |
 | API usability | JWT authentication, pagination, validation, health checks, OpenAPI schema, and Swagger UI | Provides a predictable integration surface |
-| Delivery and reliability | Automated tests, Ruff, GitHub Actions, Docker Compose, Gunicorn, and health checks | Demonstrates a repeatable production-style delivery process |
+| Delivery and reliability | Automated tests, Ruff, GitHub Actions, Docker Compose, Daphne ASGI, Redis, and health checks | Demonstrates a repeatable production-style delivery process |
 | Operational escalation | Structured category, priority, response owner, deadline, acknowledgement, resolution, and attention queue | Turns a reported blocker into an owned and auditable response |
 | Shift handover | Unresolved escalation carry-over between consecutive assignments with receiver acceptance | Preserves ownership, deadlines, and operational context across shift changes |
 | Break and recovery control | Planned cover, cover acceptance, controlled break start, recovery confirmation, and late-return attention | Keeps temporary line responsibility explicit while a Team Leader is away |
@@ -96,9 +96,9 @@ The API addresses five operational control gaps:
 
 ## Product Roadmap
 
-This repository is the API, Team Leader tablet, and Operations Manager console foundation for the wider **Multi-Line Production Operations Platform** and its **Multi-Line Team Leader Digital Solution** workflow. The sequence below keeps the solution useful and safe: prove the workflow first, build reliable operational data next, then add broader interfaces, live events, analytics, and only later consider AI.
+This repository is the API, Team Leader tablet, Operations Manager console, and live-event foundation for the wider **Multi-Line Production Operations Platform** and its **Multi-Line Team Leader Digital Solution** workflow. The sequence below keeps the solution useful and safe: prove the workflow first, build reliable operational data next, then add broader interfaces, live events, analytics, and only later consider AI.
 
-Roadmap completion is tracked as a ten-checkpoint delivery index: each published phase contributes 10 percentage points when its defined scope is built. It is a transparent feature-state measure, not an engineering-hours estimate. With Phase 6 built, the complete published product roadmap is **60% complete**; the backend, Team Leader tablet, and manager-console scope through Phase 6 is **100% complete**.
+Roadmap completion is tracked as a ten-checkpoint delivery index: each published phase contributes 10 percentage points when its defined scope is built. It is a transparent feature-state measure, not an engineering-hours estimate. With Phase 7 built, the complete published product roadmap is **70% complete**; the backend, tablet, manager-console, and live-event scope through Phase 7 is **100% complete**.
 
 | Phase | Scope | Main users/interface | Status |
 |---|---|---|---|
@@ -108,7 +108,7 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 | 4. Handover and recovery workflows | Structured issue categories, acknowledgements, unresolved-item handover, break/recovery controls, overdue/no-owner rules | Team Leader, incoming lead, cover user, Operations | **Built** |
 | 5. Tablet-first frontend | My Lines, Raise Issue, Materials, Break & Recovery, and Handover in a fast responsive PWA | Team Leader tablet | **Built** |
 | 6. Manager web console | Live Floor priority board, all-line status, output position, open actions, late updates, and current material risk | Operations desktop/laptop | **Built** |
-| 7. Real-time event layer | Live status delivery, support notifications, overdue reminders, offline queue, and safe re-sync | Tablet and web interfaces | **Future phase** |
+| 7. Real-time event layer | Live status delivery, support notifications, overdue reminders, bounded offline outbox, idempotent replay, and cursor-based safe re-sync | Tablet and web interfaces | **Built** |
 | 8. Loss and asset analytics | Repeated fault history, downtime impact, material delays, recurring line combinations, repair-versus-replace evidence | Operations and Engineering | **Future phase** |
 | 9. AI daily risk briefing | Explainable plan-completion, downtime, and material-delay risk with confidence and missing-data warnings | Authorised managers/support roles | **Data-dependent future phase** |
 | 10. Optional mobile companion | Focused alerts, acknowledgements, and quick status access using the same API | Approved support users | **Optional after tablet validation** |
@@ -119,9 +119,9 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 |---|---|---|
 | Backend and API | Continue with Django, DRF, PostgreSQL, and versioned REST endpoints | Reuses the tested foundation and keeps business rules central |
 | Tablet frontend | React + TypeScript responsive Progressive Web App | Provides an installable Team Leader workflow with app-shell caching and clear offline state |
-| Manager frontend | React + TypeScript role-gated web console with a 60-second operational snapshot | Separates shopfloor speed from management-wide oversight while reusing shared contracts |
-| Live updates | Django Channels/WebSockets with Redis after the pilot proves the need | Pushes important status changes without constant manual refresh |
-| Background work | Celery with Redis for approved reminders, overdue checks, and scheduled reports | Keeps asynchronous work outside API requests |
+| Manager frontend | React + TypeScript role-gated web console with live delivery and a polling fallback | Separates shopfloor speed from management-wide oversight while reusing shared contracts |
+| Live updates | Django Channels/WebSockets, Redis fan-out, and a durable PostgreSQL event cursor | Pushes scoped change notifications and safely recovers missed events without duplicating business state |
+| Background work | Dedicated reminder worker now; Celery remains an option for later scheduled analytics/reporting | Keeps overdue scanning outside API requests without expanding Phase 7 into analytics |
 | Optional mobile | PWA first; consider React Native/Expo only if native notifications, scanning, or stronger offline use is justified | Avoids maintaining a second client too early |
 | Delivery | Containerised services, managed PostgreSQL, monitoring, backups, and staged environments | Provides a controlled route from prototype to pilot and production |
 
@@ -177,11 +177,12 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 - Efficient related-object loading and aggregate dashboard queries
 - Versioned migrations, interactive OpenAPI documentation, and JWT authentication
 - Automated formatting, linting, system checks, tests, Compose validation, and Docker builds
-- Non-root Gunicorn container with application and PostgreSQL health checks
+- Non-root Daphne ASGI container with application, PostgreSQL, and Redis health checks
 - Four-stage break workflow with cover acceptance, recovery evidence, cancellation audit, and overdue visibility
 - Tablet-first responsive PWA with session-scoped JWT refresh, accessible controls, offline-state warning, and API-backed workflow actions
 - Frontend type checking, component/API-client tests, production build, service-worker generation, and container build in CI
 - Staff-only Operations Manager console with deterministic priority ordering, all-line filters, output KPIs, late-update control, and open-action/material-risk queues
+- JWT-authenticated WebSocket delivery with staff/participant scoping, PostgreSQL cursor replay, Redis fan-out, deduplicated overdue reminders, and bounded offline action replay
 
 
 ## Technology Stack
@@ -194,7 +195,8 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 | Authentication | Simple JWT |
 | Database | PostgreSQL 16 |
 | API documentation | drf-spectacular / Swagger UI |
-| Application server | Gunicorn |
+| ASGI application server | Daphne |
+| Event fan-out | Django Channels and Redis |
 | Containers | Docker and Docker Compose |
 | Testing | pytest and pytest-django |
 | Code quality | Ruff |
@@ -216,6 +218,8 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 | `OperationalEscalation` | Audited response lifecycle for a line blocker | Source update/incident, category, priority, owner, deadline, acknowledgement, resolution, overdue and attention state |
 | `ShiftHandover` | Controlled transfer between consecutive line assignments | Outgoing/incoming assignments, unresolved escalations, operational summary, creator, receiver, and acceptance audit |
 | `BreakRecovery` | Temporary line-control workflow during a Team Leader break | Assignment, nominated cover, planned timing, acceptance, start, recovery, cancellation, attention state, and audit users |
+| `OperationalEvent` | Durable change cursor for live delivery and safe reconnect | Event type, source resource, line/assignment scope, severity, minimal metadata, recipients, and occurrence time |
+| `IdempotentRequest` | Safe replay receipt for queued POST requests | User-scoped UUID, request fingerprint, stored response, and completion time |
 
 ## API Endpoints
 
@@ -259,6 +263,12 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 | `POST` | `/api/break-recoveries/{id}/start/` | Assigned Team Leader or staff starts an accepted break |
 | `POST` | `/api/break-recoveries/{id}/recover/` | Assigned Team Leader or staff confirms recovery with notes |
 | `POST` | `/api/break-recoveries/{id}/cancel/` | Assigned Team Leader or staff cancels an unstarted plan with a reason |
+| `GET` | `/api/operational-events/?after={cursor}` | List participant-scoped events after a durable cursor |
+| `GET` | `/api/operational-events/cursor/` | Return the latest event cursor visible to the authenticated user |
+
+The frontend opens `/ws/operations/?after={cursor}` with the JWT supplied through the WebSocket subprotocol, not the URL. The server replays up to 100 visible missed events; larger gaps trigger an authoritative REST refresh. WebSocket events are change notifications, not copies of official production records.
+
+Queued offline POST requests include a user-scoped UUID `Idempotency-Key`. Identical retries replay the stored response without repeating the state change; changed payloads or stale workflow actions are held for review rather than silently discarded.
 
 Business operations endpoints, including the dashboard and resource routes, require a JWT access token:
 
@@ -435,6 +445,8 @@ View application logs:
 
 ```bash
 docker compose logs --tail=50 web
+docker compose logs --tail=50 reminders
+docker compose logs --tail=50 redis
 docker compose logs --tail=50 frontend
 ```
 
@@ -507,7 +519,7 @@ curl http://localhost:8000/api/production-lines/ \
 
 ## Testing and Code Quality
 
-The current suite contains **146 backend tests** and **9 frontend tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, release, escalation, handover, break/recovery auditing, tablet rendering, manager role routing, deterministic priority ordering, line-risk filtering, form contracts, pagination, token refresh, and validation.
+The current suite contains **153 backend tests** and **14 frontend tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, release, escalation, handover, break/recovery auditing, scoped event replay, JWT WebSockets, reminder deduplication, idempotent requests, offline outbox behaviour, safe cursor recovery, tablet rendering, manager role routing, priority ordering, pagination, token refresh, and validation.
 
 Run the complete test suite:
 
@@ -552,7 +564,7 @@ git diff --check
 
 GitHub Actions automatically runs the following checks for changes targeting `main`:
 
-1. Dependency installation
+1. PostgreSQL and Redis service initialization plus dependency installation
 2. Ruff formatting check
 3. Ruff lint check
 4. Django system check
@@ -561,7 +573,7 @@ GitHub Actions automatically runs the following checks for changes targeting `ma
 7. PostgreSQL-backed pytest suite with a minimum 80% coverage gate
 8. Frontend dependency installation, type check, Vitest suite, and production PWA build
 9. Docker Compose configuration validation
-10. Django and Nginx frontend image builds
+10. Django/Daphne, reminder-worker, and Nginx frontend image builds
 
 ## Project Structure
 
@@ -578,11 +590,15 @@ production-ops-api/
 │   ├── serializers.py          # API representation and validation
 │   ├── permissions.py          # Staff and assignment-scoped access
 │   ├── views.py                # CRUD, filters, dashboard, and custom actions
+│   ├── events.py               # Durable event creation, scoping, broadcast, and reminders
+│   ├── consumers.py            # Authenticated WebSocket replay and live delivery
+│   ├── middleware.py           # Idempotent authenticated POST replay
 │   ├── urls.py                 # DRF router registrations
 │   ├── admin.py                # Django admin configuration
 │   ├── migrations/             # Versioned database schema
 │   ├── tests.py                # Model tests
-│   └── test_api.py             # API, permission, and workflow tests
+│   ├── test_api.py             # API, permission, and workflow tests
+│   └── test_realtime.py        # Event, WebSocket, reminder, and idempotency tests
 ├── frontend/
 │   ├── src/                    # Tablet and manager screens, API client, components, and tests
 │   ├── public/                 # PWA icon and static assets
@@ -590,8 +606,8 @@ production-ops-api/
 │   ├── nginx.conf              # SPA routing and same-origin API proxy
 │   ├── package.json            # Frontend scripts and dependencies
 │   └── vite.config.ts          # React, test, development proxy, and PWA config
-├── Dockerfile                  # Non-root Gunicorn image
-├── compose.yml                 # Django, PostgreSQL, and tablet frontend services
+├── Dockerfile                  # Non-root Daphne ASGI image
+├── compose.yml                 # Django, PostgreSQL, Redis, reminders, and frontend services
 ├── requirements.txt            # Pinned Python dependencies
 ├── ruff.toml                   # Formatting and lint rules
 └── README.md                   # Case study and operating guide
