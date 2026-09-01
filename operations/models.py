@@ -1015,3 +1015,113 @@ class BreakRecovery(TimeStampedModel):
             f"{self.assignment.get_shift_type_display()} - "
             f"{self.get_status_display()}"
         )
+
+
+class OperationalEvent(models.Model):
+    class Severity(models.TextChoices):
+        INFO = "info", "Information"
+        WARNING = "warning", "Warning"
+        CRITICAL = "critical", "Critical"
+
+    id = models.BigAutoField(primary_key=True)
+    event_type = models.CharField(max_length=80)
+    resource_type = models.CharField(max_length=80)
+    resource_id = models.PositiveBigIntegerField()
+    assignment = models.ForeignKey(
+        TeamLeaderAssignment,
+        on_delete=models.SET_NULL,
+        related_name="operational_events",
+        null=True,
+        blank=True,
+    )
+    production_line = models.ForeignKey(
+        ProductionLine,
+        on_delete=models.SET_NULL,
+        related_name="operational_events",
+        null=True,
+        blank=True,
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="published_operational_events",
+        null=True,
+        blank=True,
+    )
+    severity = models.CharField(
+        max_length=20,
+        choices=Severity.choices,
+        default=Severity.INFO,
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+    dedupe_key = models.CharField(
+        max_length=255,
+        unique=True,
+        null=True,
+        blank=True,
+    )
+    occurred_at = models.DateTimeField(auto_now_add=True)
+    audiences = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        through="OperationalEventAudience",
+        related_name="visible_operational_events",
+    )
+
+    class Meta:
+        ordering = ("id",)
+        indexes = [
+            models.Index(fields=("event_type", "occurred_at")),
+            models.Index(fields=("assignment", "id")),
+            models.Index(fields=("production_line", "id")),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.id} - {self.event_type} - {self.resource_type}:{self.resource_id}"
+        )
+
+
+class OperationalEventAudience(models.Model):
+    event = models.ForeignKey(
+        OperationalEvent,
+        on_delete=models.CASCADE,
+        related_name="audience_links",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="operational_event_audience_links",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("event", "user"),
+                name="unique_operational_event_audience",
+            ),
+        ]
+
+
+class IdempotentRequest(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="idempotent_requests",
+    )
+    key = models.UUIDField()
+    method = models.CharField(max_length=10)
+    path = models.CharField(max_length=500)
+    request_hash = models.CharField(max_length=64)
+    response_status = models.PositiveSmallIntegerField(null=True, blank=True)
+    response_body = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user", "key"),
+                name="unique_user_idempotency_key",
+            ),
+        ]
+        indexes = [models.Index(fields=("created_at",))]

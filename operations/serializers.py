@@ -6,6 +6,7 @@ from .models import (
     BreakRecovery,
     HourlyLineUpdate,
     OperationalEscalation,
+    OperationalEvent,
     ProductionLine,
     ProductMaterialReadiness,
     QualityIncident,
@@ -37,6 +38,32 @@ class CurrentUserSerializer(UserChoiceSerializer):
     class Meta(UserChoiceSerializer.Meta):
         fields = (*UserChoiceSerializer.Meta.fields, "is_staff")
         read_only_fields = fields
+
+
+class OperationalEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OperationalEvent
+        fields = (
+            "id",
+            "event_type",
+            "resource_type",
+            "resource_id",
+            "assignment",
+            "production_line",
+            "actor",
+            "severity",
+            "metadata",
+            "occurred_at",
+        )
+        read_only_fields = fields
+
+
+class OperationalEventFilterSerializer(serializers.Serializer):
+    after = serializers.IntegerField(required=False, min_value=0)
+
+
+class OperationalEventCursorSerializer(serializers.Serializer):
+    cursor = serializers.IntegerField(min_value=0)
 
 
 class ProductionLineSerializer(serializers.ModelSerializer):
