@@ -8,7 +8,10 @@ import type {
   ManagerWorkspaceData,
   UserSummary,
 } from "../types";
-import { buildManagerRows, ManagerConsole } from "./ManagerConsole";
+import {
+  buildManagerRows,
+  ManagerConsole,
+} from "./ManagerConsole";
 
 const profile: UserSummary = {
   id: 1,
@@ -153,12 +156,20 @@ const data: ManagerWorkspaceData = {
 
 describe("manager console", () => {
   it("sorts urgent lines ahead of stable lines", () => {
-    const rows = buildManagerRows(data, new Date("2026-09-01T10:00:00Z").getTime());
+    const rows = buildManagerRows(
+      data,
+      new Date("2026-09-01T10:00:00Z").getTime(),
+    );
 
-    expect(rows.map((row) => row.assignment.production_line_code)).toEqual([
+    expect(
+      rows.map(
+        (row) => row.assignment.production_line_code,
+      ),
+    ).toEqual([
       "LINE-02",
       "LINE-01",
     ]);
+
     expect(rows[0].attentionLevel).toBe("urgent");
     expect(rows[0].isLate).toBe(true);
     expect(rows[1].attentionLevel).toBe("stable");
@@ -181,21 +192,58 @@ describe("manager console", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Live Floor priority board" })).toBeInTheDocument();
-    const summary = screen.getByRole("region", { name: "Operational summary" });
-    expect(within(summary).getByText("3,200 / 5,000")).toBeInTheDocument();
-    expect(within(summary).getByText("1 overdue")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        name: "Live Floor priority board",
+      }),
+    ).toBeInTheDocument();
+
+    const summary = screen.getByRole("region", {
+      name: "Operational summary",
+    });
+
+    expect(
+      within(summary).getByText("3,200 / 5,000"),
+    ).toBeInTheDocument();
+
+    expect(
+      within(summary).getByText("1 overdue"),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Loss and asset history",
+      }),
+    ).toBeInTheDocument();
+
     const table = screen.getByRole("table");
-    expect(within(table).getByText("Lead: lead.two")).toBeInTheDocument();
-    expect(within(table).getAllByText("Filler stopped")).toHaveLength(2);
+
+    expect(
+      within(table).getByText("Lead: lead.two"),
+    ).toBeInTheDocument();
+
+    expect(
+      within(table).getAllByText("Filler stopped"),
+    ).toHaveLength(2);
   });
 
   it("filters the board to late or missing updates", async () => {
     const actor = userEvent.setup();
+
+    const currentUpdate: LineUpdate = {
+      ...updates[0],
+      next_update_due_at: new Date(
+        Date.now() + 60 * 60 * 1000,
+      ).toISOString(),
+    };
+
     render(
       <ManagerConsole
         profile={profile}
-        data={{ ...data, updates: [updates[0]] }}
+        data={{
+          ...data,
+          updates: [currentUpdate],
+        }}
         operationalDate="2026-09-01"
         lastUpdatedAt="2026-09-01T10:00:00Z"
         online
@@ -208,10 +256,30 @@ describe("manager console", () => {
       />,
     );
 
-    await actor.click(screen.getByRole("button", { name: "Late" }));
+    await actor.click(
+      screen.getByRole("button", {
+        name: "Late",
+      }),
+    );
 
-    const table = screen.getByRole("table");
-    expect(within(table).getByText("LINE-02")).toBeInTheDocument();
-    expect(within(table).queryByText("LINE-01")).not.toBeInTheDocument();
+    const priorityBoard = screen
+      .getByRole("heading", {
+        name: "All-line control view",
+      })
+      .closest("section");
+
+    expect(priorityBoard).not.toBeNull();
+
+    const table = within(
+      priorityBoard as HTMLElement,
+    ).getByRole("table");
+
+    expect(
+      within(table).getByText("LINE-02"),
+    ).toBeInTheDocument();
+
+    expect(
+      within(table).queryByText("LINE-01"),
+    ).not.toBeInTheDocument();
   });
 });
