@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { apiRequest, postJson } from "../api";
+import { apiRequest, OfflineQueuedError, postJson } from "../api";
 import {
   AssignmentSelect,
   EmptyState,
@@ -88,7 +88,14 @@ export function HandoversPanel({
       setSummary("");
       setNotes("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not create the handover.");
+      if (caught instanceof OfflineQueuedError) {
+        await onSaved(caught.message);
+        setShowForm(false);
+        setSummary("");
+        setNotes("");
+      } else {
+        setError(caught instanceof Error ? caught.message : "Could not create the handover.");
+      }
     } finally {
       setBusy(null);
     }
@@ -101,7 +108,11 @@ export function HandoversPanel({
       await postJson<ShiftHandover>(`/shift-handovers/${handover.id}/accept/`);
       await onSaved("Handover accepted. Resolved carry-over items were removed automatically.");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not accept the handover.");
+      if (caught instanceof OfflineQueuedError) {
+        await onSaved(caught.message);
+      } else {
+        setError(caught instanceof Error ? caught.message : "Could not accept the handover.");
+      }
     } finally {
       setBusy(null);
     }

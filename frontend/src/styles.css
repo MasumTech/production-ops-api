@@ -643,6 +643,29 @@ small {
   box-shadow: var(--shadow);
 }
 
+.outbox-banner {
+  position: fixed;
+  z-index: 101;
+  right: 1rem;
+  bottom: 5.2rem;
+  display: flex;
+  max-width: 460px;
+  align-items: center;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding: 0.7rem 0.8rem 0.7rem 1rem;
+  border: 1px solid rgb(255 189 89 / 38%);
+  border-radius: 0.75rem;
+  color: #ffe1ad;
+  background: rgb(91 60 19 / 92%);
+  box-shadow: var(--shadow);
+}
+
+.outbox-banner .button {
+  min-height: 38px;
+  white-space: nowrap;
+}
+
 .empty-state {
   padding: 3rem 1.25rem;
   color: var(--muted);
@@ -1159,11 +1182,16 @@ td span {
   }
 
   .toast,
-  .offline-banner {
+  .offline-banner,
+  .outbox-banner {
     right: 0.75rem;
     bottom: 5.2rem;
     left: 0.75rem;
     max-width: none;
+  }
+
+  .outbox-banner {
+    bottom: 9.6rem;
   }
 
   .manager-topbar {

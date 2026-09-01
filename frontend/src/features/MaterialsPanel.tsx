@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { postJson } from "../api";
+import { OfflineQueuedError, postJson } from "../api";
 import {
   AssignmentSelect,
   EmptyState,
@@ -63,7 +63,15 @@ export function MaterialsPanel({
       setNotes("");
       setShowForm(false);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not add the material item.");
+      if (caught instanceof OfflineQueuedError) {
+        await onSaved(caught.message);
+        setProductCode("");
+        setProductName("");
+        setNotes("");
+        setShowForm(false);
+      } else {
+        setError(caught instanceof Error ? caught.message : "Could not add the material item.");
+      }
     } finally {
       setBusy(false);
     }

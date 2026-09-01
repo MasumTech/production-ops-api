@@ -171,4 +171,17 @@ export interface ManagerWorkspaceData {
   summary: DashboardSummary;
 }
 
+export interface OperationalEvent {
+  id: number;
+  event_type: string;
+  resource_type: string;
+  resource_id: number;
+  assignment: number | null;
+  production_line: number | null;
+  actor: number | null;
+  severity: "info" | "warning" | "critical";
+  metadata: Record<string, unknown>;
+  occurred_at: string;
+}
+
 export type WorkspaceTab = "lines" | "issues" | "materials" | "breaks" | "handover";

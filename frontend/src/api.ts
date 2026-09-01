@@ -2,14 +2,33 @@ import type { Paginated } from "./types";
 
 const API_ROOT = (import.meta.env.VITE_API_BASE_URL ?? "/api").replace(/\/$/, "");
 const SESSION_KEY = "production-ops-session";
+const OUTBOX_KEY = "production-ops-offline-outbox";
+const OUTBOX_EVENT = "production-ops:outbox-changed";
 
 interface SessionTokens {
   access: string;
   refresh: string;
+  userId?: number;
 }
 
 interface RequestOptions extends RequestInit {
   retryAfterRefresh?: boolean;
+}
+
+export interface OfflineAction {
+  id: string;
+  userId: number;
+  path: string;
+  body: unknown;
+  createdAt: string;
+  state: "queued" | "needs_review";
+  lastError?: string;
+}
+
+export interface OfflineSyncResult {
+  synced: number;
+  queued: number;
+  needsReview: number;
 }
 
 export class ApiError extends Error {
@@ -23,6 +42,13 @@ export class ApiError extends Error {
   }
 }
 
+export class OfflineQueuedError extends Error {
+  constructor(public readonly queueId: string) {
+    super("Saved in the offline outbox. It will sync after the connection returns.");
+    this.name = "OfflineQueuedError";
+  }
+}
+
 function readSession(): SessionTokens | null {
   const raw = sessionStorage.getItem(SESSION_KEY);
   if (!raw) return null;
@@ -33,6 +59,15 @@ function readSession(): SessionTokens | null {
     sessionStorage.removeItem(SESSION_KEY);
     return null;
   }
+}
+
+export function getAccessToken(): string | null {
+  return readSession()?.access ?? null;
+}
+
+export function bindSessionUser(userId: number): void {
+  const session = readSession();
+  if (session) writeSession({ ...session, userId });
 }
 
 function writeSession(tokens: SessionTokens): void {
@@ -82,6 +117,119 @@ export function hasSession(): boolean {
 
 export function clearSession(): void {
   sessionStorage.removeItem(SESSION_KEY);
+}
+
+function readOutbox(): OfflineAction[] {
+  const raw = localStorage.getItem(OUTBOX_KEY);
+  if (!raw) return [];
+  try {
+    const items = JSON.parse(raw) as OfflineAction[];
+    return Array.isArray(items) ? items : [];
+  } catch {
+    localStorage.removeItem(OUTBOX_KEY);
+    return [];
+  }
+}
+
+function writeOutbox(items: OfflineAction[]): void {
+  localStorage.setItem(OUTBOX_KEY, JSON.stringify(items));
+  window.dispatchEvent(new CustomEvent(OUTBOX_EVENT));
+}
+
+function requestId(): string {
+  return crypto.randomUUID();
+}
+
+function enqueueOfflineAction(path: string, body: unknown, id = requestId()): string {
+  const userId = readSession()?.userId;
+  if (!userId) {
+    throw new ApiError("Refresh your signed-in session before saving offline.", 401, null);
+  }
+  const items = readOutbox();
+  if (items.length >= 50) {
+    throw new ApiError(
+      "The offline outbox is full. Reconnect and sync before recording another action.",
+      507,
+      null,
+    );
+  }
+  items.push({
+    id,
+    userId,
+    path,
+    body,
+    createdAt: new Date().toISOString(),
+    state: "queued",
+  });
+  writeOutbox(items);
+  return id;
+}
+
+export function getOfflineActions(userId?: number): OfflineAction[] {
+  const items = readOutbox();
+  return userId ? items.filter((item) => item.userId === userId) : items;
+}
+
+export function subscribeToOutbox(listener: () => void): () => void {
+  window.addEventListener(OUTBOX_EVENT, listener);
+  return () => window.removeEventListener(OUTBOX_EVENT, listener);
+}
+
+export async function flushOfflineActions(): Promise<OfflineSyncResult> {
+  const items = readOutbox();
+  const userId = readSession()?.userId;
+  if (!userId) {
+    return {
+      synced: 0,
+      queued: 0,
+      needsReview: 0,
+    };
+  }
+  const remaining: OfflineAction[] = [];
+  let synced = 0;
+
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (item.userId !== userId) {
+      remaining.push(item);
+      continue;
+    }
+    if (item.state === "needs_review") {
+      remaining.push(item);
+      continue;
+    }
+
+    try {
+      await apiRequest(item.path, {
+        method: "POST",
+        body: JSON.stringify(item.body),
+        headers: { "Idempotency-Key": item.id },
+      });
+      synced += 1;
+    } catch (caught) {
+      if (caught instanceof ApiError && caught.status >= 400 && caught.status < 500) {
+        remaining.push({
+          ...item,
+          state: "needs_review",
+          lastError: caught.message,
+        });
+        continue;
+      }
+      remaining.push(item, ...items.slice(index + 1));
+      break;
+    }
+  }
+
+  writeOutbox(remaining);
+  return {
+    synced,
+    queued: remaining.filter(
+      (item) => item.userId === userId && item.state === "queued",
+    ).length,
+    needsReview: remaining.filter(
+      (item) => item.userId === userId && item.state === "needs_review",
+    ).length,
+  };
 }
 
 export async function login(username: string, password: string): Promise<void> {
@@ -176,8 +324,19 @@ function relativeApiPath(nextUrl: string): string {
 }
 
 export function postJson<T>(path: string, body?: unknown): Promise<T> {
+  const id = requestId();
+  if (!navigator.onLine) {
+    enqueueOfflineAction(path, body, id);
+    return Promise.reject(new OfflineQueuedError(id));
+  }
+
   return apiRequest<T>(path, {
     method: "POST",
+    headers: { "Idempotency-Key": id },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  }).catch((caught) => {
+    if (caught instanceof ApiError) throw caught;
+    enqueueOfflineAction(path, body, id);
+    throw new OfflineQueuedError(id);
   });
 }
