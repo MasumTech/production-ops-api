@@ -421,7 +421,7 @@ export function ManagerConsole({
             )}
           </section>
         </div>
-
+        <LossAnalyticsPanel assignments={data.assignments} />
         <p className="manager-boundary">
           Live visibility and prioritisation aid only. Confirm urgent conditions through approved
           verbal, safety, quality, engineering, and production-control procedures. Missed event
@@ -430,5 +430,4 @@ export function ManagerConsole({
       </main>
     </div>
   );
-  <LossAnalyticsPanel assignments={data.assignments} />
 }
