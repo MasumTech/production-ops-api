@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     "channels",
     # Local apps
     "operations",
+    "analytics",
 ]
 
 MIDDLEWARE = [

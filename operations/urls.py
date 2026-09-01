@@ -9,6 +9,7 @@ from .views import (
     OperationalEscalationViewSet,
     OperationalEventViewSet,
     OperationsDashboardView,
+    ProductionAssetViewSet,
     ProductionLineViewSet,
     ProductMaterialReadinessViewSet,
     QualityIncidentViewSet,
@@ -18,6 +19,11 @@ from .views import (
 )
 
 router = DefaultRouter()
+router.register(
+    "production-assets",
+    ProductionAssetViewSet,
+    basename="production-asset",
+)
 router.register(
     "production-lines",
     ProductionLineViewSet,

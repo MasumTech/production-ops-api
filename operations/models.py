@@ -36,6 +36,59 @@ class ProductionLine(TimeStampedModel):
         return f"{self.code} - {self.name}"
 
 
+class ProductionAsset(TimeStampedModel):
+    class AssetType(models.TextChoices):
+        PRINTER = "printer", "Printer"
+        FILLER = "filler", "Filler"
+        PACKER = "packer", "Packer"
+        CONVEYOR = "conveyor", "Conveyor"
+        LABELER = "labeler", "Labeler"
+        OTHER = "other", "Other"
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        MAINTENANCE = "maintenance", "Maintenance"
+        RETIRED = "retired", "Retired"
+
+    production_line = models.ForeignKey(
+        ProductionLine,
+        on_delete=models.PROTECT,
+        related_name="assets",
+    )
+    code = models.CharField(max_length=40)
+    name = models.CharField(max_length=120)
+    asset_type = models.CharField(
+        max_length=20,
+        choices=AssetType.choices,
+    )
+    manufacturer = models.CharField(max_length=100, blank=True)
+    model_number = models.CharField(max_length=100, blank=True)
+    serial_number = models.CharField(max_length=100, blank=True)
+    commissioned_on = models.DateField(null=True, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+    )
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ("production_line__code", "code")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("production_line", "code"),
+                name="unique_asset_code_per_line",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=("production_line", "status")),
+            models.Index(fields=("asset_type", "status")),
+        ]
+
+    def __str__(self):
+        return f"{self.production_line.code} - {self.code} - {self.name}"
+
+
 class Shift(TimeStampedModel):
     class ShiftType(models.TextChoices):
         DAY = "day", "Day"
@@ -522,6 +575,15 @@ class OperationalEscalation(TimeStampedModel):
         null=True,
         blank=True,
     )
+    asset = models.ForeignKey(
+        ProductionAsset,
+        on_delete=models.PROTECT,
+        related_name="operational_escalations",
+        null=True,
+        blank=True,
+    )
+    loss_minutes = models.PositiveIntegerField(default=0)
+    estimated_lost_units = models.PositiveIntegerField(default=0)
 
     class Meta:
         ordering = [
@@ -652,6 +714,20 @@ class OperationalEscalation(TimeStampedModel):
             if not self.resolution_notes.strip():
                 errors["resolution_notes"] = (
                     "Resolved escalation must include resolution notes."
+                )
+
+        if self.asset_id:
+            if self.category != self.Category.EQUIPMENT:
+                errors["asset"] = (
+                    "An asset can only be linked to an equipment escalation."
+                )
+
+            if (
+                self.assignment_id
+                and self.asset.production_line_id != self.assignment.production_line_id
+            ):
+                errors["asset"] = (
+                    "The selected asset must belong to the assignment production line."
                 )
 
         if errors:

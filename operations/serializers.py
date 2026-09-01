@@ -7,6 +7,7 @@ from .models import (
     HourlyLineUpdate,
     OperationalEscalation,
     OperationalEvent,
+    ProductionAsset,
     ProductionLine,
     ProductMaterialReadiness,
     QualityIncident,
@@ -80,6 +81,38 @@ class ProductionLineSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = ("id", "created_at", "updated_at")
+
+
+class ProductionAssetSerializer(serializers.ModelSerializer):
+    production_line_code = serializers.CharField(
+        source="production_line.code",
+        read_only=True,
+    )
+
+    class Meta:
+        model = ProductionAsset
+        fields = (
+            "id",
+            "production_line",
+            "production_line_code",
+            "code",
+            "name",
+            "asset_type",
+            "manufacturer",
+            "model_number",
+            "serial_number",
+            "commissioned_on",
+            "status",
+            "notes",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "production_line_code",
+            "created_at",
+            "updated_at",
+        )
 
 
 class ShiftSerializer(serializers.ModelSerializer):
@@ -700,6 +733,14 @@ class OperationalEscalationSerializer(serializers.ModelSerializer):
         source="resolved_by.username",
         read_only=True,
     )
+    asset_code = serializers.CharField(
+        source="asset.code",
+        read_only=True,
+    )
+    asset_name = serializers.CharField(
+        source="asset.name",
+        read_only=True,
+    )
     is_overdue = serializers.BooleanField(read_only=True)
     needs_attention = serializers.BooleanField(read_only=True)
 
@@ -709,12 +750,17 @@ class OperationalEscalationSerializer(serializers.ModelSerializer):
             "id",
             "assignment",
             "assignment_date",
+            "asset",
+            "asset_code",
+            "asset_name",
             "shift_type",
             "production_line",
             "production_line_code",
             "team_leader_username",
             "hourly_update",
             "quality_incident",
+            "loss_minutes",
+            "estimated_lost_units",
             "category",
             "priority",
             "status",
@@ -792,6 +838,19 @@ class OperationalEscalationSerializer(serializers.ModelSerializer):
         owner = attrs.get("owner")
         immediate_action = attrs.get("immediate_action", "")
         response_due_at = attrs.get("response_due_at")
+        instance = self.instance
+        assignment = attrs.get(
+            "assignment",
+            getattr(instance, "assignment", None),
+        )
+        category = attrs.get(
+            "category",
+            getattr(instance, "category", None),
+        )
+        asset = attrs.get(
+            "asset",
+            getattr(instance, "asset", None),
+        )
         errors = {}
 
         if response_due_at and response_due_at <= timezone.now():
@@ -841,6 +900,17 @@ class OperationalEscalationSerializer(serializers.ModelSerializer):
         ):
             errors["immediate_action"] = (
                 "Critical escalation must record an immediate action."
+            )
+        if asset and category != OperationalEscalation.Category.EQUIPMENT:
+            errors["asset"] = "An asset can only be linked to an equipment escalation."
+
+        if (
+            asset
+            and assignment
+            and asset.production_line_id != assignment.production_line_id
+        ):
+            errors["asset"] = (
+                "The selected asset must belong to the assignment production line."
             )
 
         if errors:
@@ -892,6 +962,37 @@ class OperationalEscalationResolveSerializer(serializers.Serializer):
         allow_blank=False,
         trim_whitespace=True,
     )
+    asset = serializers.PrimaryKeyRelatedField(
+        queryset=ProductionAsset.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    loss_minutes = serializers.IntegerField(
+        required=False,
+        min_value=0,
+    )
+    estimated_lost_units = serializers.IntegerField(
+        required=False,
+        min_value=0,
+    )
+
+    def validate_asset(self, value):
+        escalation = self.context["escalation"]
+
+        if value is None:
+            return value
+
+        if escalation.category != OperationalEscalation.Category.EQUIPMENT:
+            raise serializers.ValidationError(
+                "An asset can only be linked to an equipment escalation."
+            )
+
+        if value.production_line_id != escalation.assignment.production_line_id:
+            raise serializers.ValidationError(
+                "The selected asset must belong to the escalation line."
+            )
+
+        return value
 
 
 class ShiftHandoverSerializer(serializers.ModelSerializer):

@@ -39,4 +39,8 @@ urlpatterns = [
         HealthCheckView.as_view(),
         name="health-check",
     ),
+    path(
+        "api/analytics/",
+        include("analytics.urls"),
+    ),
 ]
