@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import { EmptyState, ErrorBanner, StatusPill } from "../components";
 import { formatDateTime, titleCase } from "../format";
+import type { LiveConnectionState } from "../realtime";
 import type {
   Assignment,
   Escalation,
@@ -120,6 +121,7 @@ export function ManagerConsole({
   operationalDate,
   lastUpdatedAt,
   online,
+  liveState,
   busy,
   error,
   onDateChange,
@@ -131,6 +133,7 @@ export function ManagerConsole({
   operationalDate: string;
   lastUpdatedAt: string | null;
   online: boolean;
+  liveState: LiveConnectionState;
   busy: boolean;
   error: string;
   onDateChange: (value: string) => void;
@@ -168,7 +171,9 @@ export function ManagerConsole({
           </div>
           <div>
             <strong>Operations Manager Console</strong>
-            <span>Live Floor · 60-second operational snapshot</span>
+            <span>
+              Live Floor · {liveState === "live" ? "Event stream connected" : "Snapshot fallback"}
+            </span>
           </div>
         </div>
         <div className="topbar__actions">
@@ -418,9 +423,9 @@ export function ManagerConsole({
         </div>
 
         <p className="manager-boundary">
-          Snapshot and prioritisation aid only. Confirm urgent conditions through approved verbal,
-          safety, quality, engineering, and production-control procedures. Phase 7 will add live
-          event delivery; this console currently refreshes every 60 seconds.
+          Live visibility and prioritisation aid only. Confirm urgent conditions through approved
+          verbal, safety, quality, engineering, and production-control procedures. Missed event
+          cursors trigger an authoritative API re-sync; they do not replace official records.
         </p>
       </main>
     </div>

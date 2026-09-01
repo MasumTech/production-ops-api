@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { ApiError, apiList, apiRequest, clearSession, hasSession, login } from "./api";
+import {
+  ApiError,
+  apiList,
+  apiRequest,
+  bindSessionUser,
+  clearSession,
+  flushOfflineActions,
+  getOfflineActions,
+  hasSession,
+  login,
+  subscribeToOutbox,
+} from "./api";
 import { ErrorBanner } from "./components";
 import { BreakRecoveryPanel } from "./features/BreakRecoveryPanel";
 import { HandoversPanel } from "./features/HandoversPanel";
@@ -9,6 +20,7 @@ import { MaterialsPanel } from "./features/MaterialsPanel";
 import { MyLinesPanel } from "./features/MyLinesPanel";
 import { RaiseIssuePanel } from "./features/RaiseIssuePanel";
 import { localDate } from "./format";
+import { connectOperationalEvents, type LiveConnectionState } from "./realtime";
 import type {
   Assignment,
   BreakRecovery,
@@ -16,6 +28,7 @@ import type {
   LineUpdate,
   ManagerWorkspaceData,
   MaterialReadiness,
+  OperationalEvent,
   ShiftRecord,
   ShiftHandover,
   UserChoice,
@@ -23,6 +36,11 @@ import type {
   WorkspaceData,
   WorkspaceTab,
 } from "./types";
+
+function eventMessage(event: OperationalEvent): string {
+  const label = event.event_type.replaceAll("_", " ").replaceAll(".", " · ");
+  return `${event.severity === "critical" ? "Critical live update" : "Live update"}: ${label}`;
+}
 
 const EMPTY_DATA: WorkspaceData = {
   assignments: [],
@@ -189,6 +207,8 @@ export default function App() {
   const [operationalDate, setOperationalDate] = useState(localDate());
   const [toast, setToast] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const [liveState, setLiveState] = useState<LiveConnectionState>("connecting");
+  const [outbox, setOutbox] = useState(getOfflineActions());
   const online = useOnlineStatus();
 
   const load = useCallback(async () => {
@@ -196,6 +216,7 @@ export default function App() {
     setError("");
     try {
       const currentProfile = await apiRequest<UserSummary>("/auth/me/");
+      bindSessionUser(currentProfile.id);
       setProfile(currentProfile);
       if (currentProfile.is_staff) {
         setManagerData(await loadManagerData(operationalDate));
@@ -215,8 +236,8 @@ export default function App() {
     }
   }, [operationalDate]);
 
-  const refresh = useCallback(async () => {
-    if (!profile) return;
+  const refresh = useCallback(async (): Promise<boolean> => {
+    if (!profile) return false;
     setLoading(true);
     setError("");
     try {
@@ -226,6 +247,7 @@ export default function App() {
         setData(await loadWorkspaceData(operationalDate));
       }
       setLastUpdatedAt(new Date().toISOString());
+      return true;
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 401) {
         clearSession();
@@ -233,6 +255,7 @@ export default function App() {
       } else {
         setError(caught instanceof Error ? caught.message : "Could not refresh the workspace.");
       }
+      return false;
     } finally {
       setLoading(false);
     }
@@ -249,10 +272,54 @@ export default function App() {
   }, [toast]);
 
   useEffect(() => {
-    if (!profile?.is_staff || !online) return;
+    const update = () => setOutbox(getOfflineActions(profile?.id));
+    update();
+    return subscribeToOutbox(update);
+  }, [profile?.id]);
+
+  const syncOutbox = useCallback(async () => {
+    if (!online || !profile) return;
+    const result = await flushOfflineActions();
+    if (result.synced) {
+      await refresh();
+      setToast(`${result.synced} queued action${result.synced === 1 ? "" : "s"} synced.`);
+    }
+    if (result.needsReview) {
+      setToast(`${result.needsReview} queued action${result.needsReview === 1 ? "" : "s"} need review.`);
+    }
+  }, [online, profile, refresh]);
+
+  useEffect(() => {
+    if (online && profile) void syncOutbox();
+  }, [online, profile, syncOutbox]);
+
+  useEffect(() => {
+    if (!profile || !online) {
+      setLiveState("offline");
+      return;
+    }
+    let refreshTimer: number | null = null;
+    const disconnect = connectOperationalEvents({
+      userId: profile.id,
+      onState: setLiveState,
+      onEvent: (event) => {
+        setToast(eventMessage(event));
+        if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+        refreshTimer = window.setTimeout(() => void refresh(), 250);
+      },
+      onResync: () => refresh(),
+    });
+    return () => {
+      if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+      disconnect();
+    };
+  }, [online, profile, refresh]);
+
+  useEffect(() => {
+    if (!profile?.is_staff || !online || liveState === "live") return;
     const timer = window.setInterval(() => void refresh(), 60_000);
     return () => window.clearInterval(timer);
-  }, [online, profile?.is_staff, refresh]);
+  }, [liveState, online, profile?.is_staff, refresh]);
 
   const openIssueFor = (assignmentId: number) => {
     setSelectedAssignment(assignmentId);
@@ -285,18 +352,29 @@ export default function App() {
 
   if (profile?.is_staff) {
     return (
-      <ManagerConsole
-        profile={profile}
-        data={managerData}
-        operationalDate={operationalDate}
-        lastUpdatedAt={lastUpdatedAt}
-        online={online}
-        busy={loading}
-        error={error}
-        onDateChange={setOperationalDate}
-        onRefresh={() => void refresh()}
-        onSignOut={signOut}
-      />
+      <>
+        {outbox.length ? (
+          <div className="outbox-banner" role="status">
+            <span>{outbox.length} offline action{outbox.length === 1 ? "" : "s"} waiting.</span>
+            <button className="button button--ghost" onClick={() => void syncOutbox()} disabled={!online}>
+              Sync now
+            </button>
+          </div>
+        ) : null}
+        <ManagerConsole
+          profile={profile}
+          data={managerData}
+          operationalDate={operationalDate}
+          lastUpdatedAt={lastUpdatedAt}
+          online={online}
+          liveState={liveState}
+          busy={loading}
+          error={error}
+          onDateChange={setOperationalDate}
+          onRefresh={() => void refresh()}
+          onSignOut={signOut}
+        />
+      </>
     );
   }
 
@@ -307,6 +385,14 @@ export default function App() {
           Offline: current screen remains visible, but new submissions need a connection.
         </div>
       ) : null}
+      {outbox.length ? (
+        <div className="outbox-banner" role="status">
+          <span>{outbox.length} offline action{outbox.length === 1 ? "" : "s"} waiting.</span>
+          <button className="button button--ghost" onClick={() => void syncOutbox()} disabled={!online}>
+            Sync now
+          </button>
+        </div>
+      ) : null}
       <header className="topbar">
         <div className="topbar__brand">
           <div className="brand-mark brand-mark--small" aria-hidden="true">
@@ -314,7 +400,7 @@ export default function App() {
           </div>
           <div>
             <strong>Multi-Line Control</strong>
-            <span>{operationalDate} · Live workspace</span>
+            <span>{operationalDate} · {liveState === "live" ? "Live connected" : "Snapshot mode"}</span>
           </div>
         </div>
         <div className="topbar__actions">
@@ -373,7 +459,7 @@ export default function App() {
             users={data.users}
             selectedAssignment={selectedAssignment}
             onSaved={async (message) => {
-              await refresh();
+              if (online) await refresh();
               setToast(message);
             }}
           />
@@ -384,7 +470,7 @@ export default function App() {
             materials={data.materials}
             users={data.users}
             onSaved={async (message) => {
-              await refresh();
+              if (online) await refresh();
               setToast(message);
             }}
           />
@@ -396,7 +482,7 @@ export default function App() {
             breaks={data.breaks}
             users={data.users}
             onSaved={async (message) => {
-              await refresh();
+              if (online) await refresh();
               setToast(message);
             }}
           />
@@ -408,7 +494,7 @@ export default function App() {
             handovers={data.handovers}
             escalations={data.escalations}
             onSaved={async (message) => {
-              await refresh();
+              if (online) await refresh();
               setToast(message);
             }}
           />

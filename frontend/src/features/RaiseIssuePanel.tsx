@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { postJson } from "../api";
+import { OfflineQueuedError, postJson } from "../api";
 import {
   AssignmentSelect,
   ErrorBanner,
@@ -78,7 +78,14 @@ export function RaiseIssuePanel({
       setActionTaken("");
       setSupportRequired("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save the line update.");
+      if (caught instanceof OfflineQueuedError) {
+        await onSaved(caught.message);
+        setIssueSummary("");
+        setActionTaken("");
+        setSupportRequired("");
+      } else {
+        setError(caught instanceof Error ? caught.message : "Could not save the line update.");
+      }
     } finally {
       setBusy(false);
     }
@@ -104,7 +111,14 @@ export function RaiseIssuePanel({
       setDetails("");
       setImmediateAction("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not raise the escalation.");
+      if (caught instanceof OfflineQueuedError) {
+        await onSaved(caught.message);
+        setEscalationSummary("");
+        setDetails("");
+        setImmediateAction("");
+      } else {
+        setError(caught instanceof Error ? caught.message : "Could not raise the escalation.");
+      }
     } finally {
       setBusy(false);
     }

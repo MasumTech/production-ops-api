@@ -167,6 +167,7 @@ describe("manager console", () => {
         operationalDate="2026-09-01"
         lastUpdatedAt="2026-09-01T10:00:00Z"
         online
+        liveState="live"
         busy={false}
         error=""
         onDateChange={vi.fn()}
@@ -193,6 +194,7 @@ describe("manager console", () => {
         operationalDate="2026-09-01"
         lastUpdatedAt="2026-09-01T10:00:00Z"
         online
+        liveState="live"
         busy={false}
         error=""
         onDateChange={vi.fn()}

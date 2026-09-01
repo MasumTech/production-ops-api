@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { postJson } from "../api";
+import { OfflineQueuedError, postJson } from "../api";
 import {
   AssignmentSelect,
   EmptyState,
@@ -53,7 +53,13 @@ export function BreakRecoveryPanel({
       setShowForm(false);
       setCoverageNotes("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not create the break plan.");
+      if (caught instanceof OfflineQueuedError) {
+        await onSaved(caught.message);
+        setShowForm(false);
+        setCoverageNotes("");
+      } else {
+        setError(caught instanceof Error ? caught.message : "Could not create the break plan.");
+      }
     } finally {
       setBusyId(null);
     }
@@ -90,7 +96,12 @@ export function BreakRecoveryPanel({
       );
       setActionNotes((current) => ({ ...current, [item.id]: "" }));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not update the break record.");
+      if (caught instanceof OfflineQueuedError) {
+        await onSaved(caught.message);
+        setActionNotes((current) => ({ ...current, [item.id]: "" }));
+      } else {
+        setError(caught instanceof Error ? caught.message : "Could not update the break record.");
+      }
     } finally {
       setBusyId(null);
     }

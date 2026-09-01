@@ -7,6 +7,7 @@ from .views import (
     CurrentUserView,
     HourlyLineUpdateViewSet,
     OperationalEscalationViewSet,
+    OperationalEventViewSet,
     OperationsDashboardView,
     ProductionLineViewSet,
     ProductMaterialReadinessViewSet,
@@ -51,6 +52,11 @@ router.register(
     "operational-escalations",
     OperationalEscalationViewSet,
     basename="operational-escalation",
+)
+router.register(
+    "operational-events",
+    OperationalEventViewSet,
+    basename="operational-event",
 )
 router.register(
     "shift-handovers",

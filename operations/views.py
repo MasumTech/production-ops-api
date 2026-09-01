@@ -24,6 +24,7 @@ from .models import (
     BreakRecovery,
     HourlyLineUpdate,
     OperationalEscalation,
+    OperationalEvent,
     ProductionLine,
     ProductMaterialReadiness,
     QualityIncident,
@@ -49,6 +50,9 @@ from .serializers import (
     OperationalEscalationFilterSerializer,
     OperationalEscalationResolveSerializer,
     OperationalEscalationSerializer,
+    OperationalEventCursorSerializer,
+    OperationalEventFilterSerializer,
+    OperationalEventSerializer,
     OperationsDashboardFilterSerializer,
     OperationsDashboardSummarySerializer,
     ProductionLineSerializer,
@@ -84,6 +88,41 @@ class ActiveUserListView(APIView):
             is_superuser=False,
         ).order_by("username")
         return Response(UserChoiceSerializer(users, many=True).data)
+
+
+class OperationalEventViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = OperationalEvent.objects.all()
+    serializer_class = OperationalEventSerializer
+    permission_classes = (IsAuthenticated,)
+    ordering = ("id",)
+
+    def get_queryset(self):
+        queryset = self.queryset.select_related(
+            "assignment",
+            "production_line",
+            "actor",
+        )
+        if not self.request.user.is_staff:
+            queryset = queryset.filter(audiences=self.request.user)
+
+        filter_serializer = OperationalEventFilterSerializer(
+            data=self.request.query_params,
+        )
+        filter_serializer.is_valid(raise_exception=True)
+        after = filter_serializer.validated_data.get("after")
+        if after is not None:
+            queryset = queryset.filter(id__gt=after)
+        return queryset.distinct().order_by("id")
+
+    @extend_schema(
+        responses=OperationalEventCursorSerializer,
+    )
+    @action(detail=False, methods=("get",), url_path="cursor")
+    def cursor(self, request):
+        cursor = (
+            self.get_queryset().order_by("-id").values_list("id", flat=True).first()
+        )
+        return Response({"cursor": cursor or 0})
 
 
 class OperationsDashboardView(APIView):
