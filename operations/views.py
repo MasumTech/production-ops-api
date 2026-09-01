@@ -25,6 +25,7 @@ from .models import (
     HourlyLineUpdate,
     OperationalEscalation,
     OperationalEvent,
+    ProductionAsset,
     ProductionLine,
     ProductMaterialReadiness,
     QualityIncident,
@@ -55,6 +56,7 @@ from .serializers import (
     OperationalEventSerializer,
     OperationsDashboardFilterSerializer,
     OperationsDashboardSummarySerializer,
+    ProductionAssetSerializer,
     ProductionLineSerializer,
     ProductMaterialReadinessFilterSerializer,
     ProductMaterialReadinessSerializer,
@@ -760,6 +762,7 @@ class OperationalEscalationViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = self.queryset.select_related(
+            "asset",
             "assignment",
             "assignment__production_line",
             "assignment__team_leader",
@@ -910,12 +913,23 @@ class OperationalEscalationViewSet(viewsets.ModelViewSet):
             raise PermissionDenied(
                 "Only the assigned owner or management staff can resolve."
             )
-
         input_serializer = OperationalEscalationResolveSerializer(
             data=request.data,
+            context={"escalation": escalation},
         )
         input_serializer.is_valid(raise_exception=True)
-
+        escalation.asset = input_serializer.validated_data.get(
+            "asset",
+            escalation.asset,
+        )
+        escalation.loss_minutes = input_serializer.validated_data.get(
+            "loss_minutes",
+            escalation.loss_minutes,
+        )
+        escalation.estimated_lost_units = input_serializer.validated_data.get(
+            "estimated_lost_units",
+            escalation.estimated_lost_units,
+        )
         escalation.status = OperationalEscalation.Status.RESOLVED
         escalation.resolution_notes = input_serializer.validated_data[
             "resolution_notes"
@@ -924,6 +938,9 @@ class OperationalEscalationViewSet(viewsets.ModelViewSet):
         escalation.resolved_by = request.user
         escalation.save(
             update_fields=(
+                "asset",
+                "loss_minutes",
+                "estimated_lost_units",
                 "status",
                 "resolution_notes",
                 "resolved_at",
@@ -1465,3 +1482,54 @@ class BreakRecoveryViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(break_recovery)
         return Response(serializer.data)
+
+
+class ProductionAssetViewSet(viewsets.ModelViewSet):
+    queryset = ProductionAsset.objects.select_related(
+        "production_line",
+    )
+    serializer_class = ProductionAssetSerializer
+    permission_classes = (IsStaffOrReadOnly,)
+    filter_backends = (
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    )
+    search_fields = (
+        "code",
+        "name",
+        "manufacturer",
+        "model_number",
+        "serial_number",
+        "production_line__code",
+        "production_line__name",
+    )
+    ordering_fields = (
+        "code",
+        "name",
+        "asset_type",
+        "status",
+        "created_at",
+    )
+    ordering = (
+        "production_line__code",
+        "code",
+    )
+
+    def get_queryset(self):
+        queryset = self.queryset
+        production_line = self.request.query_params.get("production_line")
+        status_value = self.request.query_params.get("status")
+        asset_type = self.request.query_params.get("asset_type")
+
+        if production_line:
+            queryset = queryset.filter(
+                production_line_id=production_line,
+            )
+
+        if status_value:
+            queryset = queryset.filter(status=status_value)
+
+        if asset_type:
+            queryset = queryset.filter(asset_type=asset_type)
+
+        return queryset
