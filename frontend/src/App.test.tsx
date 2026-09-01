@@ -77,9 +77,14 @@ describe("tablet workspace", () => {
       escalations: [
         {
           id: 11,
+          asset: null,
           assignment: assignment.id,
           production_line: assignment.production_line,
           production_line_code: assignment.production_line_code,
+          asset_code: null,
+          asset_name: null,
+          loss_minutes: 0,
+          estimated_lost_units: 0,
           category: "material",
           priority: "high",
           status: "open",

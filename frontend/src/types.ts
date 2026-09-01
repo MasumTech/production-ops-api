@@ -75,6 +75,11 @@ export interface MaterialReadiness {
 
 export interface Escalation {
   id: number;
+  asset: number | null;
+  asset_code: string | null;
+  asset_name: string | null;
+  loss_minutes: number;
+  estimated_lost_units: number;
   assignment: number;
   production_line: number;
   production_line_code: string;
@@ -182,6 +187,54 @@ export interface OperationalEvent {
   severity: "info" | "warning" | "critical";
   metadata: Record<string, unknown>;
   occurred_at: string;
+}
+
+export interface ProductionAsset {
+  id: number;
+  production_line: number;
+  production_line_code: string;
+  code: string;
+  name: string;
+  asset_type: string;
+  status: "active" | "maintenance" | "retired";
+}
+
+export interface AssetLossRow {
+  asset_id: number;
+  asset_code: string;
+  asset_name: string;
+  production_line_code: string;
+  occurrences: number;
+  affected_shifts: number;
+  open_events: number;
+  total_loss_minutes: number;
+  total_estimated_lost_units: number;
+  latest_event_at: string;
+  recurring: boolean;
+}
+
+export interface LineLossRow {
+  production_line_id: number;
+  production_line_code: string;
+  category: string;
+  occurrences: number;
+  affected_shifts: number;
+  total_loss_minutes: number;
+  total_estimated_lost_units: number;
+}
+
+export interface LossAnalyticsReport {
+  summary: {
+    date_from: string;
+    date_to: string;
+    total_events: number;
+    total_loss_minutes: number;
+    total_estimated_lost_units: number;
+    unassigned_asset_events: number;
+    recurring_asset_count: number;
+  };
+  assets: AssetLossRow[];
+  line_losses: LineLossRow[];
 }
 
 export type WorkspaceTab = "lines" | "issues" | "materials" | "breaks" | "handover";

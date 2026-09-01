@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-
+import { LossAnalyticsPanel } from "./LossAnalyticsPanel";
 import { EmptyState, ErrorBanner, StatusPill } from "../components";
 import { formatDateTime, titleCase } from "../format";
 import type { LiveConnectionState } from "../realtime";
@@ -430,4 +430,5 @@ export function ManagerConsole({
       </main>
     </div>
   );
+  <LossAnalyticsPanel assignments={data.assignments} />
 }
