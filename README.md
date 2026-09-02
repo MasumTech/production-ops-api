@@ -81,6 +81,7 @@ The API addresses five operational control gaps:
 | Break and recovery control | Planned cover, cover acceptance, controlled break start, recovery confirmation, and late-return attention | Keeps temporary line responsibility explicit while a Team Leader is away |
 | Team Leader tablet PWA | My Lines, line updates, escalation, materials, break/recovery, and handover actions in an installable responsive interface | Turns the API workflows into a fast shopfloor control surface |
 | Operations Manager console | Priority-sorted all-line status, late and missing updates, output position, open actions, and material risk | Gives management one desktop view of the current operational position without waiting for individual calls |
+| Explainable risk briefing | Deterministic per-line risk scores, ordered evidence, data-completeness confidence, and missing-data warnings | Gives authorised managers a traceable daily briefing foundation without allowing software to control production |
 
 ## Expected Operational Value
 
@@ -98,7 +99,7 @@ The API addresses five operational control gaps:
 
 This repository is the API, Team Leader tablet, Operations Manager console, and live-event foundation for the wider **Multi-Line Production Operations Platform** and its **Multi-Line Team Leader Digital Solution** workflow. The sequence below keeps the solution useful and safe: prove the workflow first, build reliable operational data next, then add broader interfaces, live events, analytics, and only later consider AI.
 
-Roadmap completion is tracked as a ten-checkpoint delivery index: each published phase contributes 10 percentage points when its defined scope is built. It is a transparent feature-state measure, not an engineering-hours estimate. With Phase 7 built, the complete published product roadmap is **70% complete**; the backend, tablet, manager-console, and live-event scope through Phase 7 is **100% complete**.
+Roadmap completion is tracked as a ten-checkpoint delivery index: each published phase contributes 10 percentage points when its defined scope is built. It is a transparent feature-state measure, not an engineering-hours estimate. With Phase 8 built, the complete published product roadmap is **80% complete**; the operational workflow, frontend, live-event, and deterministic analytics scope through Phase 8 is **100% complete**.
 
 | Phase | Scope | Main users/interface | Status |
 |---|---|---|---|
@@ -109,8 +110,8 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 | 5. Tablet-first frontend | My Lines, Raise Issue, Materials, Break & Recovery, and Handover in a fast responsive PWA | Team Leader tablet | **Built** |
 | 6. Manager web console | Live Floor priority board, all-line status, output position, open actions, late updates, and current material risk | Operations desktop/laptop | **Built** |
 | 7. Real-time event layer | Live status delivery, support notifications, overdue reminders, bounded offline outbox, idempotent replay, and cursor-based safe re-sync | Tablet and web interfaces | **Built** |
-| 8. Loss and asset analytics | Repeated fault history, downtime impact, material delays, recurring line combinations, repair-versus-replace evidence | Operations and Engineering | **Future phase** |
-| 9. AI daily risk briefing | Explainable plan-completion, downtime, and material-delay risk with confidence and missing-data warnings | Authorised managers/support roles | **Data-dependent future phase** |
+| 8. Loss and asset analytics | Repeated fault history, downtime impact, material delays, recurring line combinations, repair-versus-replace evidence | Operations and Engineering | **Built** |
+| 9. AI daily risk briefing | Explainable plan-completion, downtime, and material-delay risk with confidence and missing-data warnings | Authorised managers/support roles | **Deterministic evidence foundation built; AI narrative future** |
 | 10. Optional mobile companion | Focused alerts, acknowledgements, and quick status access using the same API | Approved support users | **Optional after tablet validation** |
 
 ### Proposed Product Architecture
@@ -183,6 +184,7 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 - Frontend type checking, component/API-client tests, production build, service-worker generation, and container build in CI
 - Staff-only Operations Manager console with deterministic priority ordering, all-line filters, output KPIs, late-update control, and open-action/material-risk queues
 - JWT-authenticated WebSocket delivery with staff/participant scoping, PostgreSQL cursor replay, Redis fan-out, deduplicated overdue reminders, and bounded offline action replay
+- Staff-only daily risk briefing with versioned deterministic scoring, ordered source evidence, bounded queries, completeness confidence, and explicit missing-data warnings
 
 
 ## Technology Stack
@@ -265,6 +267,8 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 | `POST` | `/api/break-recoveries/{id}/cancel/` | Assigned Team Leader or staff cancels an unstarted plan with a reason |
 | `GET` | `/api/operational-events/?after={cursor}` | List participant-scoped events after a durable cursor |
 | `GET` | `/api/operational-events/cursor/` | Return the latest event cursor visible to the authenticated user |
+| `GET` | `/api/analytics/loss-assets/` | Return staff-only deterministic loss and recurring-asset evidence |
+| `GET` | `/api/analytics/daily-risk-briefing/` | Return the staff-only explainable daily operational risk briefing |
 
 The frontend opens `/ws/operations/?after={cursor}` with the JWT supplied through the WebSocket subprotocol, not the URL. The server replays up to 100 visible missed events; larger gaps trigger an authoritative REST refresh. WebSocket events are change notifications, not copies of official production records.
 
@@ -423,6 +427,43 @@ equipment failure, approve repair or replacement, calculate financial return,
 or replace approved Engineering, Safety, Quality, Finance, production-control,
 or management decisions. Initial use must remain limited to dummy data and an
 approved controlled pilot.
+
+## Explainable Daily Risk Briefing
+
+Management staff can request a read-only daily briefing at
+`GET /api/analytics/daily-risk-briefing/`. The optional `date` filter uses
+`YYYY-MM-DD` and defaults to today. The optional `production_line` filter accepts
+an active line ID.
+
+The endpoint combines existing assignment, shift, hourly-status, material,
+escalation, and asset evidence. Each line returns a score capped at 100, a risk
+level, ordered contributing factors, measurable source evidence, and missing-data
+warnings. The summary reports the highest line risk and average data completeness.
+
+| Evidence rule | Score |
+|---|---:|
+| Missing assignment | 20 |
+| Missing shift / zero plan | 15 / 10 |
+| Output below 70% / 90% of plan | 25 / 15 |
+| Downtime at least 60 / 30 minutes | 20 / 10 |
+| Latest Red / Amber status | 35 / 20 |
+| Missing / late line update | 15 / 15 |
+| Held / Short material | 15–25 / 10–20 |
+| Critical / overdue / unassigned escalation | 20–30 / 10–20 / 5–15 |
+| Recurring asset fault in the 30-day evidence window | 10–20 |
+| At least 60 / any confirmed loss minutes | 15 / 5 |
+
+Risk levels are `low` below 20, `medium` from 20, `high` from 40, and
+`critical` from 70. Data-completeness confidence is the percentage of six
+available source groups: assignment, shift with a positive plan, line status,
+material readiness, escalation evidence, and active asset registry. Confidence
+describes input coverage, not the certainty of a prediction.
+
+The briefing is deterministic, advisory, and evidence-only. It cannot change
+operational records or replace approved safety, food-safety, quality,
+engineering, production-control, traceability, or management procedures. A
+future AI narrative may summarise only this evidence contract and must retain a
+safe deterministic fallback.
 
 
 ## Quick Start with Docker
@@ -593,7 +634,7 @@ curl http://localhost:8000/api/production-lines/ \
 
 ## Testing and Code Quality
 
-The current suite contains **153 backend tests** and **14 frontend tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, release, escalation, handover, break/recovery auditing, scoped event replay, JWT WebSockets, reminder deduplication, idempotent requests, offline outbox behaviour, safe cursor recovery, tablet rendering, manager role routing, priority ordering, pagination, token refresh, and validation.
+The current suite contains **174 backend tests** and **16 frontend tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, demo-data seeding, release, escalation, handover, break/recovery auditing, scoped event replay, JWT WebSockets, reminder deduplication, idempotent requests, deterministic risk evidence, missing-data disclosure, bounded briefing queries, offline outbox behaviour, safe cursor recovery, tablet rendering, manager role routing, priority ordering, pagination, token refresh, and validation.
 
 Run the complete test suite:
 
