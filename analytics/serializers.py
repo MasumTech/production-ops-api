@@ -3,7 +3,11 @@ from datetime import timedelta
 from django.utils import timezone
 from rest_framework import serializers
 
-from operations.models import ProductionAsset, ProductionLine
+from operations.models import (
+    OperationalEscalation,
+    ProductionAsset,
+    ProductionLine,
+)
 
 
 class LossAnalyticsFilterSerializer(serializers.Serializer):
@@ -91,3 +95,91 @@ class LossAnalyticsReportSerializer(serializers.Serializer):
     summary = LossSummarySerializer()
     assets = AssetLossRowSerializer(many=True)
     line_losses = LineLossRowSerializer(many=True)
+
+
+RISK_LEVEL_CHOICES = OperationalEscalation.Priority.choices
+
+
+class DailyRiskBriefingFilterSerializer(serializers.Serializer):
+    date = serializers.DateField(required=False)
+    production_line = serializers.PrimaryKeyRelatedField(
+        queryset=ProductionLine.objects.filter(
+            status=ProductionLine.Status.ACTIVE,
+        ),
+        required=False,
+    )
+
+    def validate(self, attrs):
+        attrs["date"] = attrs.get("date", timezone.localdate())
+        return attrs
+
+
+class RiskFactorSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    source = serializers.CharField()
+    severity = serializers.ChoiceField(choices=RISK_LEVEL_CHOICES)
+    score = serializers.IntegerField(min_value=0, max_value=100)
+    reason = serializers.CharField()
+    evidence = serializers.JSONField()
+
+
+class MissingDataWarningSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    source = serializers.CharField()
+    message = serializers.CharField()
+
+
+class RiskMetricsSerializer(serializers.Serializer):
+    assignment_count = serializers.IntegerField()
+    shift_count = serializers.IntegerField()
+    planned_output = serializers.IntegerField()
+    actual_output = serializers.IntegerField()
+    performance_percentage = serializers.FloatField(allow_null=True)
+    downtime_minutes = serializers.IntegerField()
+    latest_status = serializers.CharField(allow_null=True)
+    latest_update_at = serializers.DateTimeField(allow_null=True)
+    open_escalations = serializers.IntegerField()
+    overdue_escalations = serializers.IntegerField()
+    critical_escalations = serializers.IntegerField()
+    unassigned_escalations = serializers.IntegerField()
+    short_material_items = serializers.IntegerField()
+    held_material_items = serializers.IntegerField()
+    active_assets = serializers.IntegerField()
+    recurring_asset_faults = serializers.IntegerField()
+    confirmed_loss_minutes = serializers.IntegerField()
+    estimated_lost_units = serializers.IntegerField()
+
+
+class LineRiskBriefingSerializer(serializers.Serializer):
+    production_line_id = serializers.IntegerField()
+    production_line_code = serializers.CharField()
+    production_line_name = serializers.CharField()
+    risk_level = serializers.ChoiceField(choices=RISK_LEVEL_CHOICES)
+    risk_score = serializers.IntegerField(min_value=0, max_value=100)
+    confidence_percent = serializers.IntegerField(min_value=0, max_value=100)
+    risk_factors = RiskFactorSerializer(many=True)
+    missing_data_warnings = MissingDataWarningSerializer(many=True)
+    metrics = RiskMetricsSerializer()
+
+
+class RiskCountSerializer(serializers.Serializer):
+    low = serializers.IntegerField()
+    medium = serializers.IntegerField()
+    high = serializers.IntegerField()
+    critical = serializers.IntegerField()
+
+
+class DailyRiskSummarySerializer(serializers.Serializer):
+    date = serializers.DateField()
+    generated_at = serializers.DateTimeField()
+    rules_version = serializers.CharField()
+    overall_risk_level = serializers.ChoiceField(choices=RISK_LEVEL_CHOICES)
+    highest_risk_score = serializers.IntegerField(min_value=0, max_value=100)
+    average_confidence_percent = serializers.IntegerField(min_value=0, max_value=100)
+    lines_assessed = serializers.IntegerField()
+    risk_counts = RiskCountSerializer()
+
+
+class DailyRiskBriefingSerializer(serializers.Serializer):
+    summary = DailyRiskSummarySerializer()
+    lines = LineRiskBriefingSerializer(many=True)

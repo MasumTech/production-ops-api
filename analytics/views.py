@@ -7,7 +7,10 @@ from rest_framework.views import APIView
 
 from operations.models import OperationalEscalation
 
+from .risk_briefing import build_daily_risk_briefing
 from .serializers import (
+    DailyRiskBriefingFilterSerializer,
+    DailyRiskBriefingSerializer,
     LossAnalyticsFilterSerializer,
     LossAnalyticsReportSerializer,
 )
@@ -151,3 +154,25 @@ class LossAnalyticsView(APIView):
         }
 
         return Response(LossAnalyticsReportSerializer(payload).data)
+
+
+class DailyRiskBriefingView(APIView):
+    permission_classes = (IsAdminUser,)
+
+    @extend_schema(
+        parameters=[DailyRiskBriefingFilterSerializer],
+        responses=DailyRiskBriefingSerializer,
+    )
+    def get(self, request):
+        filter_serializer = DailyRiskBriefingFilterSerializer(
+            data=request.query_params,
+        )
+        filter_serializer.is_valid(raise_exception=True)
+        filters = filter_serializer.validated_data
+
+        payload = build_daily_risk_briefing(
+            filters["date"],
+            production_line=filters.get("production_line"),
+        )
+
+        return Response(DailyRiskBriefingSerializer(payload).data)
