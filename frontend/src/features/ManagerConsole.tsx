@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { DailyRiskBriefingPanel } from "./DailyRiskBriefingPanel";
 import { LossAnalyticsPanel } from "./LossAnalyticsPanel";
 import { EmptyState, ErrorBanner, StatusPill } from "../components";
 import { formatDateTime, titleCase } from "../format";
@@ -421,6 +422,7 @@ export function ManagerConsole({
             )}
           </section>
         </div>
+        <DailyRiskBriefingPanel operationalDate={operationalDate} />
         <LossAnalyticsPanel assignments={data.assignments} />
         <p className="manager-boundary">
           Live visibility and prioritisation aid only. Confirm urgent conditions through approved
