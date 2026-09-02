@@ -90,6 +90,7 @@ jobs:
         run: |
           python -m pytest \
             --cov=operations \
+            --cov=analytics \
             --cov=config \
             --cov-report=term-missing \
             --cov-fail-under=80
