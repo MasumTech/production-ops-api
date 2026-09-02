@@ -212,6 +212,12 @@ describe("manager console", () => {
 
     expect(
       screen.getByRole("heading", {
+        name: "Daily risk briefing",
+      }),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByRole("heading", {
         name: "Loss and asset history",
       }),
     ).toBeInTheDocument();
