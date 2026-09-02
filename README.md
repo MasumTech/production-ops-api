@@ -540,6 +540,40 @@ npm run dev
 
 Open http://localhost:5173/. Vite proxies `/api` to the local Django server. The production Docker path uses the Nginx same-origin proxy at http://localhost:3000/.
 
+## Local Demo Dataset
+
+A repeatable management command creates realistic local demonstration data for the Team Leader PWA, Operations Manager console, break/recovery, handover, escalation, material-readiness, and loss-analytics workflows.
+
+Run the command only in a local development environment where `DJANGO_DEBUG=True`:
+
+```bash
+python manage.py seed_demo_data --reset
+```
+
+Use a fixed operational date when preparing screenshots or demonstrations:
+
+```bash
+python manage.py seed_demo_data \
+  --date 2026-09-02 \
+  --password "Choose-A-Local-Demo-Password" \
+  --reset
+```
+
+The default local accounts are:
+
+| Role | Username |
+|---|---|
+| Operations Manager | `demo.manager` |
+| Team Leader | `demo.leader` |
+| Break cover | `demo.cover` |
+| Engineer | `demo.engineer` |
+
+The default password is `DemoPass123!`. Override it with `--password` when required.
+
+Running the command again updates the same demo records rather than creating duplicates. The `--reset` option deletes and recreates only demo users and records identified by the `demo.` username or `DEMO-` data prefix.
+
+The command refuses to run when `DJANGO_DEBUG=False`. These accounts, credentials, and records must never be used in staging or production.
+
 ## Authentication Example
 
 Request JWT tokens:
