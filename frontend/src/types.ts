@@ -237,4 +237,68 @@ export interface LossAnalyticsReport {
   line_losses: LineLossRow[];
 }
 
+export type RiskLevel = "low" | "medium" | "high" | "critical";
+
+export interface RiskFactor {
+  code: string;
+  source: string;
+  severity: RiskLevel;
+  score: number;
+  reason: string;
+  evidence: Record<string, unknown>;
+}
+
+export interface MissingDataWarning {
+  code: string;
+  source: string;
+  message: string;
+}
+
+export interface RiskMetrics {
+  assignment_count: number;
+  shift_count: number;
+  planned_output: number;
+  actual_output: number;
+  performance_percentage: number | null;
+  downtime_minutes: number;
+  latest_status: string | null;
+  latest_update_at: string | null;
+  open_escalations: number;
+  overdue_escalations: number;
+  critical_escalations: number;
+  unassigned_escalations: number;
+  short_material_items: number;
+  held_material_items: number;
+  active_assets: number;
+  recurring_asset_faults: number;
+  confirmed_loss_minutes: number;
+  estimated_lost_units: number;
+}
+
+export interface LineRiskBriefing {
+  production_line_id: number;
+  production_line_code: string;
+  production_line_name: string;
+  risk_level: RiskLevel;
+  risk_score: number;
+  confidence_percent: number;
+  risk_factors: RiskFactor[];
+  missing_data_warnings: MissingDataWarning[];
+  metrics: RiskMetrics;
+}
+
+export interface DailyRiskBriefing {
+  summary: {
+    date: string;
+    generated_at: string;
+    rules_version: string;
+    overall_risk_level: RiskLevel;
+    highest_risk_score: number;
+    average_confidence_percent: number;
+    lines_assessed: number;
+    risk_counts: Record<RiskLevel, number>;
+  };
+  lines: LineRiskBriefing[];
+}
+
 export type WorkspaceTab = "lines" | "issues" | "materials" | "breaks" | "handover";

@@ -80,8 +80,8 @@ The API addresses five operational control gaps:
 | Shift handover | Unresolved escalation carry-over between consecutive assignments with receiver acceptance | Preserves ownership, deadlines, and operational context across shift changes |
 | Break and recovery control | Planned cover, cover acceptance, controlled break start, recovery confirmation, and late-return attention | Keeps temporary line responsibility explicit while a Team Leader is away |
 | Team Leader tablet PWA | My Lines, line updates, escalation, materials, break/recovery, and handover actions in an installable responsive interface | Turns the API workflows into a fast shopfloor control surface |
-| Operations Manager console | Priority-sorted all-line status, late and missing updates, output position, open actions, and material risk | Gives management one desktop view of the current operational position without waiting for individual calls |
-| Explainable risk briefing | Deterministic per-line risk scores, ordered evidence, data-completeness confidence, and missing-data warnings | Gives authorised managers a traceable daily briefing foundation without allowing software to control production |
+| Operations Manager console | Priority-sorted all-line status, late and missing updates, output position, open actions, material risk, and a daily risk briefing | Gives management one desktop view of the current operational position without waiting for individual calls |
+| Explainable risk briefing | Manager-facing deterministic per-line risk scores, ordered evidence, data-completeness confidence, and missing-data warnings | Gives authorised managers a traceable daily briefing without allowing software to control production |
 
 ## Expected Operational Value
 
@@ -111,7 +111,7 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 | 6. Manager web console | Live Floor priority board, all-line status, output position, open actions, late updates, and current material risk | Operations desktop/laptop | **Built** |
 | 7. Real-time event layer | Live status delivery, support notifications, overdue reminders, bounded offline outbox, idempotent replay, and cursor-based safe re-sync | Tablet and web interfaces | **Built** |
 | 8. Loss and asset analytics | Repeated fault history, downtime impact, material delays, recurring line combinations, repair-versus-replace evidence | Operations and Engineering | **Built** |
-| 9. AI daily risk briefing | Explainable plan-completion, downtime, and material-delay risk with confidence and missing-data warnings | Authorised managers/support roles | **Deterministic evidence foundation built; AI narrative future** |
+| 9. AI daily risk briefing | Explainable plan-completion, downtime, and material-delay risk with confidence and missing-data warnings | Authorised managers/support roles | **Deterministic API and Manager Console briefing built; AI narrative future** |
 | 10. Optional mobile companion | Focused alerts, acknowledgements, and quick status access using the same API | Approved support users | **Optional after tablet validation** |
 
 ### Proposed Product Architecture
@@ -184,7 +184,7 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 - Frontend type checking, component/API-client tests, production build, service-worker generation, and container build in CI
 - Staff-only Operations Manager console with deterministic priority ordering, all-line filters, output KPIs, late-update control, and open-action/material-risk queues
 - JWT-authenticated WebSocket delivery with staff/participant scoping, PostgreSQL cursor replay, Redis fan-out, deduplicated overdue reminders, and bounded offline action replay
-- Staff-only daily risk briefing with versioned deterministic scoring, ordered source evidence, bounded queries, completeness confidence, and explicit missing-data warnings
+- Staff-only daily risk briefing API and responsive Manager Console view with versioned deterministic scoring, ordered source evidence, bounded queries, completeness confidence, explicit missing-data warnings, and retry-safe failure handling
 
 
 ## Technology Stack
@@ -634,7 +634,7 @@ curl http://localhost:8000/api/production-lines/ \
 
 ## Testing and Code Quality
 
-The current suite contains **174 backend tests** and **16 frontend tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, demo-data seeding, release, escalation, handover, break/recovery auditing, scoped event replay, JWT WebSockets, reminder deduplication, idempotent requests, deterministic risk evidence, missing-data disclosure, bounded briefing queries, offline outbox behaviour, safe cursor recovery, tablet rendering, manager role routing, priority ordering, pagination, token refresh, and validation.
+The current suite contains **174 backend tests** and **19 frontend tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, demo-data seeding, release, escalation, handover, break/recovery auditing, scoped event replay, JWT WebSockets, reminder deduplication, idempotent requests, deterministic risk evidence, missing-data disclosure, bounded briefing queries, risk-briefing rendering and retry behaviour, offline outbox behaviour, safe cursor recovery, tablet rendering, manager role routing, priority ordering, pagination, token refresh, and validation.
 
 Run the complete test suite:
 
