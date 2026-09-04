@@ -198,6 +198,33 @@ export interface OperationalEvent {
   occurred_at: string;
 }
 
+export interface NotificationInbox {
+  unread_count: number;
+  results: OperationalEvent[];
+}
+
+export interface PilotWorkerStatus {
+  status: "healthy" | "attention" | "not_started";
+  last_started_at: string | null;
+  last_completed_at: string | null;
+  last_error: string;
+  published_count: number;
+}
+
+export interface PilotStatus {
+  status: "ready" | "attention";
+  generated_at: string;
+  active_users: number;
+  support_users: number;
+  events_last_hour: number;
+  latest_event_at: string | null;
+  unread_notifications: number;
+  open_actions: number;
+  overdue_actions: number;
+  unassigned_actions: number;
+  reminder_worker: PilotWorkerStatus;
+}
+
 export interface ProductionAsset {
   id: number;
   production_line: number;

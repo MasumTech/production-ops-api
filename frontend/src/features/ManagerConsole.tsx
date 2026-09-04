@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { DailyRiskBriefingPanel } from "./DailyRiskBriefingPanel";
 import { LossAnalyticsPanel } from "./LossAnalyticsPanel";
+import { PilotAdminPanel } from "./PilotAdminPanel";
 import { EmptyState, ErrorBanner, StatusPill } from "../components";
 import { formatDateTime, titleCase } from "../format";
+import { NotificationCentre } from "../NotificationCentre";
 import type { LiveConnectionState } from "../realtime";
 import {
   WorkspaceBottomNavigation,
@@ -20,7 +22,13 @@ import type {
 
 type AttentionLevel = "urgent" | "warning" | "stable";
 type BoardFilter = "all" | "attention" | "red" | "late" | "materials";
-type ManagerWorkspaceView = "overview" | "lines" | "actions" | "briefing" | "analytics";
+type ManagerWorkspaceView =
+  | "overview"
+  | "lines"
+  | "actions"
+  | "briefing"
+  | "analytics"
+  | "pilot";
 
 const MANAGER_NAV_ITEMS: Array<{
   id: ManagerWorkspaceView;
@@ -32,6 +40,7 @@ const MANAGER_NAV_ITEMS: Array<{
   { id: "actions", label: "Actions & Materials", shortLabel: "Actions" },
   { id: "briefing", label: "Risk Briefing", shortLabel: "Briefing" },
   { id: "analytics", label: "Loss Analytics", shortLabel: "Loss" },
+  { id: "pilot", label: "Pilot Admin", shortLabel: "Pilot" },
 ];
 
 export interface ManagerLineRow {
@@ -224,6 +233,7 @@ export function ManagerConsole({
             />
           </label>
           <span className="user-chip">{profile.display_name}</span>
+          <NotificationCentre refreshToken={lastUpdatedAt} />
           <button className="button button--ghost" onClick={onRefresh} disabled={busy}>
             {busy ? "Refreshing…" : "Refresh now"}
           </button>
@@ -527,6 +537,8 @@ export function ManagerConsole({
               <LossAnalyticsPanel assignments={data.assignments} />
             </>
           ) : null}
+
+          {view === "pilot" ? <PilotAdminPanel /> : null}
         </main>
       </div>
 

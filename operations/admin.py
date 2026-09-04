@@ -4,6 +4,8 @@ from .models import (
     BreakRecovery,
     HourlyLineUpdate,
     OperationalEscalation,
+    OperationalEventReadReceipt,
+    OperationalWorkerHeartbeat,
     ProductionLine,
     ProductMaterialReadiness,
     QualityIncident,
@@ -11,6 +13,34 @@ from .models import (
     ShiftHandover,
     TeamLeaderAssignment,
 )
+
+
+@admin.register(OperationalWorkerHeartbeat)
+class OperationalWorkerHeartbeatAdmin(admin.ModelAdmin):
+    list_display = (
+        "worker_name",
+        "last_started_at",
+        "last_completed_at",
+        "published_count",
+        "last_error",
+    )
+    readonly_fields = (
+        "worker_name",
+        "last_started_at",
+        "last_completed_at",
+        "published_count",
+        "last_error",
+        "created_at",
+        "updated_at",
+    )
+
+
+@admin.register(OperationalEventReadReceipt)
+class OperationalEventReadReceiptAdmin(admin.ModelAdmin):
+    list_display = ("event", "user", "read_at")
+    search_fields = ("user__username", "event__event_type")
+    readonly_fields = ("event", "user", "read_at")
+    list_select_related = ("event", "user")
 
 
 @admin.register(BreakRecovery)

@@ -13,6 +13,7 @@ import {
   subscribeToOutbox,
 } from "./api";
 import { ErrorBanner } from "./components";
+import { NotificationCentre } from "./NotificationCentre";
 import { BreakRecoveryPanel } from "./features/BreakRecoveryPanel";
 import { HandoversPanel } from "./features/HandoversPanel";
 import { ManagerConsole } from "./features/ManagerConsole";
@@ -478,6 +479,7 @@ export default function App() {
             />
           </label>
           <span className="user-chip">{profile?.display_name}</span>
+          <NotificationCentre refreshToken={lastUpdatedAt} />
           <button className="button button--ghost" onClick={() => void refresh()}>
             Refresh
           </button>

@@ -6,9 +6,12 @@ from .views import (
     BreakRecoveryViewSet,
     CurrentUserView,
     HourlyLineUpdateViewSet,
+    NotificationInboxView,
+    NotificationReadView,
     OperationalEscalationViewSet,
     OperationalEventViewSet,
     OperationsDashboardView,
+    PilotStatusView,
     ProductionAssetViewSet,
     ProductionLineViewSet,
     ProductMaterialReadinessViewSet,
@@ -17,6 +20,7 @@ from .views import (
     ShiftViewSet,
     SupportCompanionView,
     TeamLeaderAssignmentViewSet,
+    WorkspaceRoleView,
 )
 
 router = DefaultRouter()
@@ -96,6 +100,26 @@ urlpatterns = [
         "support/companion/",
         SupportCompanionView.as_view(),
         name="support-companion",
+    ),
+    path(
+        "notifications/",
+        NotificationInboxView.as_view(),
+        name="notification-inbox",
+    ),
+    path(
+        "notifications/<int:event_id>/read/",
+        NotificationReadView.as_view(),
+        name="notification-read",
+    ),
+    path(
+        "pilot/status/",
+        PilotStatusView.as_view(),
+        name="pilot-status",
+    ),
+    path(
+        "workspace-roles/",
+        WorkspaceRoleView.as_view(),
+        name="workspace-roles",
     ),
 ]
 
