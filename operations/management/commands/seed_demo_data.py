@@ -2,11 +2,13 @@ from datetime import time, timedelta
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from operations.access import OPERATIONAL_SUPPORT_GROUP
 from operations.models import (
     BreakRecovery,
     HourlyLineUpdate,
@@ -232,6 +234,11 @@ class Command(BaseCommand):
             user.set_password(password)
             user.save(update_fields=("password",))
             users[key] = user
+
+        support_group, _ = Group.objects.get_or_create(
+            name=OPERATIONAL_SUPPORT_GROUP,
+        )
+        users["engineer"].groups.add(support_group)
 
         return users
 

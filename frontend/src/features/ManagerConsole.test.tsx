@@ -19,6 +19,7 @@ const profile: UserSummary = {
   username: "operations.manager",
   display_name: "Operations Manager",
   is_staff: true,
+  workspace: "manager",
 };
 
 const assignments: Assignment[] = [

@@ -19,6 +19,7 @@ import { ManagerConsole } from "./features/ManagerConsole";
 import { MaterialsPanel } from "./features/MaterialsPanel";
 import { MyLinesPanel } from "./features/MyLinesPanel";
 import { RaiseIssuePanel } from "./features/RaiseIssuePanel";
+import { SupportCompanion } from "./features/SupportCompanion";
 import { localDate } from "./format";
 import { connectOperationalEvents, type LiveConnectionState } from "./realtime";
 import {
@@ -35,6 +36,7 @@ import type {
   OperationalEvent,
   ShiftRecord,
   ShiftHandover,
+  SupportCompanionData,
   UserChoice,
   UserSummary,
   WorkspaceData,
@@ -71,6 +73,14 @@ const EMPTY_MANAGER_DATA: ManagerWorkspaceData = {
     open_incidents: 0,
     critical_incidents: 0,
   },
+};
+
+const EMPTY_SUPPORT_DATA: SupportCompanionData = {
+  generated_at: null,
+  assignments: [],
+  updates: [],
+  materials: [],
+  escalations: [],
 };
 
 const NAV_ITEMS: Array<{ id: WorkspaceTab; label: string; shortLabel: string }> = [
@@ -135,6 +145,12 @@ async function loadManagerData(operationalDate: string): Promise<ManagerWorkspac
   ]);
 
   return { assignments, updates, materials, escalations, shifts, summary };
+}
+
+async function loadSupportData(operationalDate: string): Promise<SupportCompanionData> {
+  return apiRequest<SupportCompanionData>(
+    `/support/companion/?date=${operationalDate}`,
+  );
 }
 
 export function LoginScreen({ onAuthenticated }: { onAuthenticated: () => void }) {
@@ -204,6 +220,7 @@ export default function App() {
   const [profile, setProfile] = useState<UserSummary | null>(null);
   const [data, setData] = useState<WorkspaceData>(EMPTY_DATA);
   const [managerData, setManagerData] = useState<ManagerWorkspaceData>(EMPTY_MANAGER_DATA);
+  const [supportData, setSupportData] = useState<SupportCompanionData>(EMPTY_SUPPORT_DATA);
   const [loading, setLoading] = useState(hasSession());
   const [error, setError] = useState("");
   const [tab, setTab] = useState<WorkspaceTab>("lines");
@@ -222,8 +239,10 @@ export default function App() {
       const currentProfile = await apiRequest<UserSummary>("/auth/me/");
       bindSessionUser(currentProfile.id);
       setProfile(currentProfile);
-      if (currentProfile.is_staff) {
+      if (currentProfile.workspace === "manager") {
         setManagerData(await loadManagerData(operationalDate));
+      } else if (currentProfile.workspace === "support") {
+        setSupportData(await loadSupportData(operationalDate));
       } else {
         setData(await loadWorkspaceData(operationalDate));
       }
@@ -245,8 +264,10 @@ export default function App() {
     setLoading(true);
     setError("");
     try {
-      if (profile.is_staff) {
+      if (profile.workspace === "manager") {
         setManagerData(await loadManagerData(operationalDate));
+      } else if (profile.workspace === "support") {
+        setSupportData(await loadSupportData(operationalDate));
       } else {
         setData(await loadWorkspaceData(operationalDate));
       }
@@ -320,10 +341,15 @@ export default function App() {
   }, [online, profile, refresh]);
 
   useEffect(() => {
-    if (!profile?.is_staff || !online || liveState === "live") return;
+    if (
+      !profile ||
+      profile.workspace === "team_leader" ||
+      !online ||
+      liveState === "live"
+    ) return;
     const timer = window.setInterval(() => void refresh(), 60_000);
     return () => window.clearInterval(timer);
-  }, [liveState, online, profile?.is_staff, refresh]);
+  }, [liveState, online, profile, refresh]);
 
   const openIssueFor = (assignmentId: number) => {
     setSelectedAssignment(assignmentId);
@@ -351,10 +377,11 @@ export default function App() {
     setProfile(null);
     setData(EMPTY_DATA);
     setManagerData(EMPTY_MANAGER_DATA);
+    setSupportData(EMPTY_SUPPORT_DATA);
     setLastUpdatedAt(null);
   };
 
-  if (profile?.is_staff) {
+  if (profile?.workspace === "manager") {
     return (
       <>
         {outbox.length ? (
@@ -378,6 +405,39 @@ export default function App() {
           onRefresh={() => void refresh()}
           onSignOut={signOut}
         />
+      </>
+    );
+  }
+
+  if (profile?.workspace === "support") {
+    return (
+      <>
+        {outbox.length ? (
+          <div className="outbox-banner" role="status">
+            <span>{outbox.length} offline action{outbox.length === 1 ? "" : "s"} waiting.</span>
+            <button className="button button--ghost" onClick={() => void syncOutbox()} disabled={!online}>
+              Sync now
+            </button>
+          </div>
+        ) : null}
+        <SupportCompanion
+          profile={profile}
+          data={supportData}
+          operationalDate={operationalDate}
+          lastUpdatedAt={lastUpdatedAt}
+          online={online}
+          liveState={liveState}
+          busy={loading}
+          error={error}
+          onDateChange={setOperationalDate}
+          onRefresh={() => void refresh()}
+          onSignOut={signOut}
+          onSaved={async (message) => {
+            if (online) await refresh();
+            setToast(message);
+          }}
+        />
+        {toast ? <div className="toast" role="status">{toast}</div> : null}
       </>
     );
   }

@@ -2,11 +2,13 @@ from datetime import time, timedelta
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from operations.access import OPERATIONAL_SUPPORT_GROUP
 from operations.models import (
     BreakRecovery,
     HourlyLineUpdate,
@@ -129,8 +131,31 @@ def test_current_user_endpoint_returns_safe_profile(
         "username": api_user.username,
         "display_name": api_user.username,
         "is_staff": False,
+        "workspace": "team_leader",
     }
     assert "email" not in response.data
+
+
+@pytest.mark.django_db
+def test_current_user_endpoint_identifies_operational_support(
+    api_client,
+    other_user,
+):
+    support_group = Group.objects.create(name=OPERATIONAL_SUPPORT_GROUP)
+    other_user.groups.add(support_group)
+    api_client.force_authenticate(user=other_user)
+
+    response = api_client.get(reverse("current-user"))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["workspace"] == "support"
+
+
+@pytest.mark.django_db
+def test_support_companion_requires_support_role(authenticated_client):
+    response = authenticated_client.get(reverse("support-companion"))
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.django_db
@@ -1654,6 +1679,88 @@ def test_assigned_owner_can_see_escalation(
     assert response.status_code == status.HTTP_200_OK
     assert response.data["count"] == 1
     assert response.data["results"][0]["id"] == escalation.id
+
+
+@pytest.mark.django_db
+def test_support_companion_returns_only_assigned_operational_context(
+    api_client,
+    other_user,
+    api_user,
+    api_team_leader_assignment,
+):
+    support_group = Group.objects.create(name=OPERATIONAL_SUPPORT_GROUP)
+    other_user.groups.add(support_group)
+    now = timezone.now()
+    critical = OperationalEscalation.objects.create(
+        assignment=api_team_leader_assignment,
+        category=OperationalEscalation.Category.EQUIPMENT,
+        priority=OperationalEscalation.Priority.CRITICAL,
+        summary="Filler pressure requires engineering support.",
+        owner=other_user,
+        raised_by=api_user,
+        response_due_at=now + timedelta(minutes=10),
+    )
+    overdue = OperationalEscalation.objects.create(
+        assignment=api_team_leader_assignment,
+        category=OperationalEscalation.Category.MATERIAL,
+        priority=OperationalEscalation.Priority.HIGH,
+        summary="Carton delivery response is overdue.",
+        owner=other_user,
+        raised_by=api_user,
+        response_due_at=now - timedelta(minutes=10),
+    )
+    hidden_owner = get_user_model().objects.create_user(
+        username="unrelated.support",
+        password=TEST_PASSWORD,
+    )
+    hidden = OperationalEscalation.objects.create(
+        assignment=api_team_leader_assignment,
+        category=OperationalEscalation.Category.QUALITY,
+        priority=OperationalEscalation.Priority.CRITICAL,
+        summary="Unrelated quality response.",
+        owner=hidden_owner,
+        raised_by=api_user,
+        response_due_at=now - timedelta(minutes=5),
+    )
+    update = HourlyLineUpdate.objects.create(
+        assignment=api_team_leader_assignment,
+        status=HourlyLineUpdate.Status.RED,
+        current_product="Premium Juice 1L",
+        issue_summary="Filler pressure is unstable.",
+        recorded_at=now,
+        next_update_due_at=now + timedelta(minutes=30),
+        recorded_by=api_user,
+    )
+    material = ProductMaterialReadiness.objects.create(
+        assignment=api_team_leader_assignment,
+        sequence_number=1,
+        product_code="CARTON-1L",
+        product_name="Premium Juice Carton",
+        planned_quantity=5000,
+        status=ProductMaterialReadiness.Status.SHORT,
+        shortage_quantity=400,
+        owner=other_user,
+        expected_available_at=now + timedelta(hours=1),
+        created_by=api_user,
+    )
+    api_client.force_authenticate(user=other_user)
+
+    response = api_client.get(
+        reverse("support-companion"),
+        {"date": timezone.localdate().isoformat()},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert [item["id"] for item in response.data["escalations"]] == [
+        critical.id,
+        overdue.id,
+    ]
+    assert hidden.id not in {item["id"] for item in response.data["escalations"]}
+    assert [item["id"] for item in response.data["updates"]] == [update.id]
+    assert [item["id"] for item in response.data["materials"]] == [material.id]
+    assert [item["id"] for item in response.data["assignments"]] == [
+        api_team_leader_assignment.id
+    ]
 
 
 @pytest.mark.django_db

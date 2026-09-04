@@ -1,5 +1,7 @@
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
+from .access import is_operational_support
+
 
 class IsStaffOrReadOnly(BasePermission):
     message = "Only management staff can change line assignments."
@@ -73,3 +75,10 @@ class IsBreakRecoveryParticipantOrStaff(BasePermission):
             obj.assignment.team_leader_id,
             obj.cover_user_id,
         }
+
+
+class IsOperationalSupport(BasePermission):
+    message = "Only approved operational support users can access this workspace."
+
+    def has_permission(self, request, view):
+        return is_operational_support(request.user)

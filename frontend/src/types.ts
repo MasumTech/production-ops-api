@@ -23,6 +23,7 @@ export interface UserChoice {
 
 export interface UserSummary extends UserChoice {
   is_staff: boolean;
+  workspace: "manager" | "team_leader" | "support";
 }
 
 export interface Assignment {
@@ -174,6 +175,14 @@ export interface ManagerWorkspaceData {
   escalations: Escalation[];
   shifts: ShiftRecord[];
   summary: DashboardSummary;
+}
+
+export interface SupportCompanionData {
+  generated_at: string | null;
+  assignments: Assignment[];
+  updates: LineUpdate[];
+  materials: MaterialReadiness[];
+  escalations: Escalation[];
 }
 
 export interface OperationalEvent {

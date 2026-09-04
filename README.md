@@ -99,7 +99,7 @@ The API addresses five operational control gaps:
 
 This repository is the API, Team Leader tablet, Operations Manager console, and live-event foundation for the wider **Multi-Line Production Operations Platform** and its **Multi-Line Team Leader Digital Solution** workflow. The sequence below keeps the solution useful and safe: prove the workflow first, build reliable operational data next, then add broader interfaces, live events, analytics, and only later consider AI.
 
-Roadmap completion is tracked as a ten-checkpoint delivery index: each published phase contributes 10 percentage points when its defined scope is built. It is a transparent feature-state measure, not an engineering-hours estimate. With Phase 8 built, the complete published product roadmap is **80% complete**; the operational workflow, frontend, live-event, and deterministic analytics scope through Phase 8 is **100% complete**.
+Roadmap completion is tracked as a ten-checkpoint delivery index: each published phase contributes 10 percentage points when its defined scope is built. It is a transparent feature-state measure, not an engineering-hours estimate. All ten published phases now have a production-shaped implementation, so the complete published product roadmap is **100% complete**. The Phase 9 briefing remains deterministic and explainable; generative narrative is still a future, separately governed option.
 
 | Phase | Scope | Main users/interface | Status |
 |---|---|---|---|
@@ -112,7 +112,7 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 | 7. Real-time event layer | Live status delivery, support notifications, overdue reminders, bounded offline outbox, idempotent replay, and cursor-based safe re-sync | Tablet and web interfaces | **Built** |
 | 8. Loss and asset analytics | Repeated fault history, downtime impact, material delays, recurring line combinations, repair-versus-replace evidence | Operations and Engineering | **Built** |
 | 9. AI daily risk briefing | Explainable plan-completion, downtime, and material-delay risk with confidence and missing-data warnings | Authorised managers/support roles | **Deterministic API and Manager Console briefing built; AI narrative future** |
-| 10. Optional mobile companion | Focused alerts, acknowledgements, and quick status access using the same API | Approved support users | **Optional after tablet validation** |
+| 10. Mobile support companion | Focused alerts, one-tap acknowledgement, related line/material context, realtime refresh, and offline-safe retry using the same API | Approved support users | **Built** |
 
 ### Proposed Product Architecture
 
@@ -123,7 +123,7 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 | Manager frontend | React + TypeScript role-gated web console with live delivery and a polling fallback | Separates shopfloor speed from management-wide oversight while reusing shared contracts |
 | Live updates | Django Channels/WebSockets, Redis fan-out, and a durable PostgreSQL event cursor | Pushes scoped change notifications and safely recovers missed events without duplicating business state |
 | Background work | Dedicated reminder worker now; Celery remains an option for later scheduled analytics/reporting | Keeps overdue scanning outside API requests without expanding Phase 7 into analytics |
-| Optional mobile | PWA first; consider React Native/Expo only if native notifications, scanning, or stronger offline use is justified | Avoids maintaining a second client too early |
+| Support mobile | Role-gated responsive PWA; consider React Native/Expo only if native notifications, scanning, or stronger offline use is justified | Delivers a focused companion without maintaining a second client |
 | Delivery | Containerised services, managed PostgreSQL, monitoring, backups, and staged environments | Provides a controlled route from prototype to pilot and production |
 
 ## Safety and Product Boundaries
@@ -133,7 +133,7 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 - Tablet or Wi-Fi failure must not stop the process. Approved verbal communication and paper/whiteboard fallback remain available.
 - Start with generic dummy data, then a controlled process pilot, then a limited software pilot only after Operations, QA, Health and Safety, Engineering, HR, and IT approval.
 - Deterministic rules come before prediction. AI remains advisory and cannot start/stop a line, release product, set staffing, move breaks, raise line speed, or order repair/replacement.
-- Tablet is the primary shopfloor interface. Mobile remains optional until the tablet workflow proves fast, safe, and useful.
+- Tablet remains the primary Team Leader interface. The mobile companion is limited to approved support users and assigned response context.
 
 ## System Architecture
 
@@ -183,6 +183,7 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 - Tablet-first responsive PWA with session-scoped JWT refresh, accessible controls, offline-state warning, and API-backed workflow actions
 - Frontend type checking, component/API-client tests, production build, service-worker generation, and container build in CI
 - Staff-only Operations Manager console with matching desktop sidebar and mobile bottom navigation across overview, line control, actions and materials, risk briefing, and loss analytics
+- Role-gated Mobile Support Companion with matching five-section navigation, assigned critical/overdue actions, related line and material context, and one-tap offline-safe acknowledgement
 - JWT-authenticated WebSocket delivery with staff/participant scoping, PostgreSQL cursor replay, Redis fan-out, deduplicated overdue reminders, and bounded offline action replay
 - Staff-only daily risk briefing API and responsive Manager Console view with versioned deterministic scoring, ordered source evidence, bounded queries, completeness confidence, explicit missing-data warnings, and retry-safe failure handling
 
@@ -241,6 +242,7 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 | `GET, PUT, PATCH, DELETE` | `/api/quality-incidents/{id}/` | Manage one quality incident |
 | `GET` | `/api/health/` | Check application and database health |
 | `GET` | `/api/dashboard/summary/` | Return aggregated production and incident KPIs |
+| `GET` | `/api/support/companion/` | Return the approved support user’s assigned unresolved actions and related line/material context |
 | `GET, POST` | `/api/team-leader-assignments/` | List or create line assignments |
 | `GET, PUT, PATCH, DELETE` | `/api/team-leader-assignments/{id}/` | Manage one line assignment |
 | `GET` | `/api/team-leader-assignments/my-lines/` | List the current user’s assigned lines |
@@ -607,7 +609,7 @@ The default local accounts are:
 | Operations Manager | `demo.manager` |
 | Team Leader | `demo.leader` |
 | Break cover | `demo.cover` |
-| Engineer | `demo.engineer` |
+| Operational Support Engineer | `demo.engineer` |
 
 The default password is `DemoPass123!`. Override it with `--password` when required.
 
@@ -634,7 +636,7 @@ curl http://localhost:8000/api/production-lines/ \
 
 ## Testing and Code Quality
 
-The current suite contains **174 backend tests** and **20 frontend tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, demo-data seeding, release, escalation, handover, break/recovery auditing, scoped event replay, JWT WebSockets, reminder deduplication, idempotent requests, deterministic risk evidence, missing-data disclosure, bounded briefing queries, risk-briefing rendering and retry behaviour, desktop/mobile manager navigation, offline outbox behaviour, safe cursor recovery, tablet rendering, manager role routing, priority ordering, pagination, token refresh, and validation.
+The current suite contains **177 backend tests** and **24 frontend tests** covering models, API behaviour, authentication, workspace roles, permissions, filters, dashboard aggregation, health checks, demo-data seeding, release, escalation, handover, break/recovery auditing, support-companion scoping and acknowledgement, scoped event replay, JWT WebSockets, reminder deduplication, idempotent requests, deterministic risk evidence, missing-data disclosure, bounded briefing queries, risk-briefing rendering and retry behaviour, shared desktop/mobile navigation, offline outbox behaviour, safe cursor recovery, tablet rendering, role routing, priority ordering, pagination, token refresh, and validation.
 
 Run the complete test suite:
 

@@ -7,6 +7,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import override_settings
 
+from operations.access import OPERATIONAL_SUPPORT_GROUP
 from operations.models import (
     BreakRecovery,
     HourlyLineUpdate,
@@ -85,8 +86,10 @@ def test_seed_demo_data_creates_complete_dataset():
     }
 
     manager = get_user_model().objects.get(username="demo.manager")
+    engineer = get_user_model().objects.get(username="demo.engineer")
     assert manager.is_staff is True
     assert manager.check_password(DEMO_PASSWORD)
+    assert engineer.groups.filter(name=OPERATIONAL_SUPPORT_GROUP).exists()
 
     assert TeamLeaderAssignment.objects.filter(
         production_line__code="DEMO-LINE-01",
