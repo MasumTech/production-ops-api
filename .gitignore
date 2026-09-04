@@ -9,6 +9,7 @@ __pycache__/
 .env
 .env.*
 !.env.example
+!.env.staging.example
 
 # Tests and coverage
 .pytest_cache/
@@ -28,3 +29,6 @@ Thumbs.db
 .env.docker
 !.env.example
 !.env.docker.example
+
+# Local deployment state and release secrets
+.deploy/
