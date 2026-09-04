@@ -80,7 +80,7 @@ The API addresses five operational control gaps:
 | Shift handover | Unresolved escalation carry-over between consecutive assignments with receiver acceptance | Preserves ownership, deadlines, and operational context across shift changes |
 | Break and recovery control | Planned cover, cover acceptance, controlled break start, recovery confirmation, and late-return attention | Keeps temporary line responsibility explicit while a Team Leader is away |
 | Team Leader tablet PWA | My Lines, line updates, escalation, materials, break/recovery, and handover actions in an installable responsive interface | Turns the API workflows into a fast shopfloor control surface |
-| Operations Manager console | Priority-sorted all-line status, late and missing updates, output position, open actions, material risk, and a daily risk briefing | Gives management one desktop view of the current operational position without waiting for individual calls |
+| Operations Manager console | Five focused desktop/mobile workspaces for overview, priority-sorted line control, actions and materials, daily risk briefing, and loss analytics | Gives management fast access to each operational view without one long scrolling dashboard or repeated status calls |
 | Explainable risk briefing | Manager-facing deterministic per-line risk scores, ordered evidence, data-completeness confidence, and missing-data warnings | Gives authorised managers a traceable daily briefing without allowing software to control production |
 
 ## Expected Operational Value
@@ -182,7 +182,7 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 - Four-stage break workflow with cover acceptance, recovery evidence, cancellation audit, and overdue visibility
 - Tablet-first responsive PWA with session-scoped JWT refresh, accessible controls, offline-state warning, and API-backed workflow actions
 - Frontend type checking, component/API-client tests, production build, service-worker generation, and container build in CI
-- Staff-only Operations Manager console with deterministic priority ordering, all-line filters, output KPIs, late-update control, and open-action/material-risk queues
+- Staff-only Operations Manager console with matching desktop sidebar and mobile bottom navigation across overview, line control, actions and materials, risk briefing, and loss analytics
 - JWT-authenticated WebSocket delivery with staff/participant scoping, PostgreSQL cursor replay, Redis fan-out, deduplicated overdue reminders, and bounded offline action replay
 - Staff-only daily risk briefing API and responsive Manager Console view with versioned deterministic scoring, ordered source evidence, bounded queries, completeness confidence, explicit missing-data warnings, and retry-safe failure handling
 
@@ -634,7 +634,7 @@ curl http://localhost:8000/api/production-lines/ \
 
 ## Testing and Code Quality
 
-The current suite contains **174 backend tests** and **19 frontend tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, demo-data seeding, release, escalation, handover, break/recovery auditing, scoped event replay, JWT WebSockets, reminder deduplication, idempotent requests, deterministic risk evidence, missing-data disclosure, bounded briefing queries, risk-briefing rendering and retry behaviour, offline outbox behaviour, safe cursor recovery, tablet rendering, manager role routing, priority ordering, pagination, token refresh, and validation.
+The current suite contains **174 backend tests** and **20 frontend tests** covering models, API behaviour, authentication, permissions, filters, dashboard aggregation, health checks, demo-data seeding, release, escalation, handover, break/recovery auditing, scoped event replay, JWT WebSockets, reminder deduplication, idempotent requests, deterministic risk evidence, missing-data disclosure, bounded briefing queries, risk-briefing rendering and retry behaviour, desktop/mobile manager navigation, offline outbox behaviour, safe cursor recovery, tablet rendering, manager role routing, priority ordering, pagination, token refresh, and validation.
 
 Run the complete test suite:
 
