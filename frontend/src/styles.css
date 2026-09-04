@@ -810,6 +810,12 @@ td span {
   min-height: 100vh;
 }
 
+.manager-layout {
+  display: grid;
+  min-height: calc(100vh - 72px);
+  grid-template-columns: 268px minmax(0, 1fr);
+}
+
 .manager-topbar {
   position: sticky;
   z-index: 30;
@@ -827,8 +833,29 @@ td span {
 
 .manager-workspace {
   width: min(100%, 1700px);
+  min-width: 0;
   margin: 0 auto;
   padding: clamp(1.25rem, 3vw, 3rem);
+}
+
+.manager-sidebar {
+  top: 72px;
+  grid-area: auto;
+}
+
+.manager-view-intro {
+  max-width: 840px;
+  margin-bottom: 1.75rem;
+}
+
+.manager-view-intro h1 {
+  margin: 0.45rem 0 0.65rem;
+}
+
+.manager-view-intro p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
 }
 
 .manager-hero {
@@ -1448,6 +1475,11 @@ td span {
     padding: 0.65rem 0.85rem;
   }
 
+  .manager-layout {
+    min-height: calc(100vh - 64px);
+    grid-template-columns: 1fr;
+  }
+
   .manager-topbar .topbar__brand > div:last-child,
   .manager-topbar .user-chip,
   .manager-topbar .date-control span {
@@ -1455,7 +1487,7 @@ td span {
   }
 
   .manager-workspace {
-    padding: 1.25rem 1rem;
+    padding: 1.25rem 1rem 6.3rem;
   }
 
   .manager-hero {
