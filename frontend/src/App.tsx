@@ -21,6 +21,10 @@ import { MyLinesPanel } from "./features/MyLinesPanel";
 import { RaiseIssuePanel } from "./features/RaiseIssuePanel";
 import { localDate } from "./format";
 import { connectOperationalEvents, type LiveConnectionState } from "./realtime";
+import {
+  WorkspaceBottomNavigation,
+  WorkspaceSidebar,
+} from "./WorkspaceNavigation";
 import type {
   Assignment,
   BreakRecovery,
@@ -423,30 +427,26 @@ export default function App() {
         </div>
       </header>
 
-      <aside className="sidebar" aria-label="Team Leader workspace">
-        <div className="shift-summary">
+      <WorkspaceSidebar
+        ariaLabel="Team Leader workspace"
+        navigationLabel="Team Leader sections"
+        items={NAV_ITEMS}
+        activeItem={tab}
+        onSelect={setTab}
+        summary={
+          <>
           <span className="eyebrow">Current scope</span>
           <strong>{data.assignments.length} assigned lines</strong>
           <span>{unresolvedCount} unresolved escalations</span>
-        </div>
-        <nav>
-          {NAV_ITEMS.map((item) => (
-            <button
-              key={item.id}
-              className={tab === item.id ? "nav-item nav-item--active" : "nav-item"}
-              onClick={() => setTab(item.id)}
-              aria-current={tab === item.id ? "page" : undefined}
-            >
-              <span className="nav-item__dot" aria-hidden="true" />
-              {item.label}
-            </button>
-          ))}
-        </nav>
-        <p className="sidebar__boundary">
-          Visibility tool only. It does not replace approved verbal communication or official
-          production records.
-        </p>
-      </aside>
+          </>
+        }
+        boundary={
+          <>
+            Visibility tool only. It does not replace approved verbal communication or official
+            production records.
+          </>
+        }
+      />
 
       <main className="workspace">
         {error ? <ErrorBanner message={error} /> : null}
@@ -501,18 +501,12 @@ export default function App() {
         ) : null}
       </main>
 
-      <nav className="bottom-nav" aria-label="Team Leader workspace">
-        {NAV_ITEMS.map((item) => (
-          <button
-            key={item.id}
-            className={tab === item.id ? "bottom-nav__item bottom-nav__item--active" : "bottom-nav__item"}
-            onClick={() => setTab(item.id)}
-            aria-current={tab === item.id ? "page" : undefined}
-          >
-            {item.shortLabel}
-          </button>
-        ))}
-      </nav>
+      <WorkspaceBottomNavigation
+        ariaLabel="Team Leader mobile workspace"
+        items={NAV_ITEMS}
+        activeItem={tab}
+        onSelect={setTab}
+      />
       {toast ? (
         <div className="toast" role="status">
           {toast}

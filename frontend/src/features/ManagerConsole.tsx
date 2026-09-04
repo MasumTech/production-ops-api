@@ -4,6 +4,10 @@ import { LossAnalyticsPanel } from "./LossAnalyticsPanel";
 import { EmptyState, ErrorBanner, StatusPill } from "../components";
 import { formatDateTime, titleCase } from "../format";
 import type { LiveConnectionState } from "../realtime";
+import {
+  WorkspaceBottomNavigation,
+  WorkspaceSidebar,
+} from "../WorkspaceNavigation";
 import type {
   Assignment,
   Escalation,
@@ -16,6 +20,19 @@ import type {
 
 type AttentionLevel = "urgent" | "warning" | "stable";
 type BoardFilter = "all" | "attention" | "red" | "late" | "materials";
+type ManagerWorkspaceView = "overview" | "lines" | "actions" | "briefing" | "analytics";
+
+const MANAGER_NAV_ITEMS: Array<{
+  id: ManagerWorkspaceView;
+  label: string;
+  shortLabel: string;
+}> = [
+  { id: "overview", label: "Overview", shortLabel: "Overview" },
+  { id: "lines", label: "Line Control", shortLabel: "Lines" },
+  { id: "actions", label: "Actions & Materials", shortLabel: "Actions" },
+  { id: "briefing", label: "Risk Briefing", shortLabel: "Briefing" },
+  { id: "analytics", label: "Loss Analytics", shortLabel: "Loss" },
+];
 
 export interface ManagerLineRow {
   assignment: Assignment;
@@ -116,6 +133,24 @@ function performanceCopy(shift: ShiftRecord | null): string {
   return `${shift.performance_percentage.toFixed(1)}%`;
 }
 
+function ManagerViewIntro({
+  eyebrow,
+  title,
+  body,
+}: {
+  eyebrow: string;
+  title: string;
+  body: string;
+}) {
+  return (
+    <header className="manager-view-intro">
+      <span className="eyebrow">{eyebrow}</span>
+      <h1>{title}</h1>
+      <p>{body}</p>
+    </header>
+  );
+}
+
 export function ManagerConsole({
   profile,
   data,
@@ -141,6 +176,7 @@ export function ManagerConsole({
   onRefresh: () => void;
   onSignOut: () => void;
 }) {
+  const [view, setView] = useState<ManagerWorkspaceView>("overview");
   const [filter, setFilter] = useState<BoardFilter>("all");
   const rows = useMemo(() => buildManagerRows(data), [data]);
   const visibleRows = useMemo(
@@ -197,63 +233,99 @@ export function ManagerConsole({
         </div>
       </header>
 
-      <main className="manager-workspace">
-        {error ? <ErrorBanner message={error} /> : null}
-        <section className="manager-hero" aria-labelledby="manager-title">
-          <div>
-            <span className="eyebrow">Management oversight</span>
-            <h1 id="manager-title">Live Floor priority board</h1>
-            <p>
-              Critical lines rise first. Review late updates, open actions, output position, and
-              current material risk before contacting the floor.
-            </p>
-          </div>
-          <div className="snapshot-copy">
-            <span>Last refreshed</span>
-            <strong>{lastUpdatedAt ? formatDateTime(lastUpdatedAt) : "Not refreshed"}</strong>
-          </div>
-        </section>
+      <div className="manager-layout">
+        <WorkspaceSidebar
+          ariaLabel="Operations Manager workspace"
+          navigationLabel="Manager sections"
+          className="manager-sidebar"
+          items={MANAGER_NAV_ITEMS}
+          activeItem={view}
+          onSelect={setView}
+          summary={
+            <>
+            <span className="eyebrow">Current scope</span>
+            <strong>{rows.length} active assignments</strong>
+            <span>{attentionCount} lines need attention</span>
+            </>
+          }
+          boundary={
+            <>
+              Visibility and prioritisation aid only. Confirm urgent conditions through approved
+              safety, quality, engineering, and production-control procedures.
+            </>
+          }
+        />
 
-        <section className="manager-kpis" aria-label="Operational summary">
-          <article className="kpi-card">
-            <span>Active line assignments</span>
-            <strong>{rows.length}</strong>
-            <small>{attentionCount} need attention</small>
-          </article>
-          <article className="kpi-card kpi-card--danger">
-            <span>Open actions</span>
-            <strong>{openActions.length}</strong>
-            <small>{openActions.filter((item) => item.is_overdue).length} overdue</small>
-          </article>
-          <article className="kpi-card kpi-card--warning">
-            <span>Late or missing updates</span>
-            <strong>{lateCount}</strong>
-            <small>Follow up with the line owner</small>
-          </article>
-          <article className="kpi-card kpi-card--warning">
-            <span>Material risks</span>
-            <strong>{materialRisks.length}</strong>
-            <small>Short or held products</small>
-          </article>
-          <article className="kpi-card">
-            <span>Output position</span>
-            <strong>
-              {NUMBER.format(summary.total_actual_output)} / {NUMBER.format(summary.total_planned_output)}
-            </strong>
-            <small>
-              {summary.overall_performance_percentage === null
-                ? "No performance yet"
-                : `${summary.overall_performance_percentage.toFixed(1)}% overall`}
-            </small>
-          </article>
-          <article className="kpi-card">
-            <span>Downtime</span>
-            <strong>{NUMBER.format(summary.total_downtime_minutes)} min</strong>
-            <small>{summary.open_incidents} open quality incidents</small>
-          </article>
-        </section>
+        <main className="manager-workspace">
+          {error ? <ErrorBanner message={error} /> : null}
 
-        <section className="manager-board" aria-labelledby="priority-board-title">
+          {view === "overview" ? (
+            <>
+              <section className="manager-hero" aria-labelledby="manager-title">
+                <div>
+                  <span className="eyebrow">Management oversight</span>
+                  <h1 id="manager-title">Live Floor priority board</h1>
+                  <p>
+                    Critical lines rise first. Review late updates, open actions, output position,
+                    and current material risk before contacting the floor.
+                  </p>
+                </div>
+                <div className="snapshot-copy">
+                  <span>Last refreshed</span>
+                  <strong>{lastUpdatedAt ? formatDateTime(lastUpdatedAt) : "Not refreshed"}</strong>
+                </div>
+              </section>
+
+              <section className="manager-kpis" aria-label="Operational summary">
+                <article className="kpi-card">
+                  <span>Active line assignments</span>
+                  <strong>{rows.length}</strong>
+                  <small>{attentionCount} need attention</small>
+                </article>
+                <article className="kpi-card kpi-card--danger">
+                  <span>Open actions</span>
+                  <strong>{openActions.length}</strong>
+                  <small>{openActions.filter((item) => item.is_overdue).length} overdue</small>
+                </article>
+                <article className="kpi-card kpi-card--warning">
+                  <span>Late or missing updates</span>
+                  <strong>{lateCount}</strong>
+                  <small>Follow up with the line owner</small>
+                </article>
+                <article className="kpi-card kpi-card--warning">
+                  <span>Material risks</span>
+                  <strong>{materialRisks.length}</strong>
+                  <small>Short or held products</small>
+                </article>
+                <article className="kpi-card">
+                  <span>Output position</span>
+                  <strong>
+                    {NUMBER.format(summary.total_actual_output)} /{" "}
+                    {NUMBER.format(summary.total_planned_output)}
+                  </strong>
+                  <small>
+                    {summary.overall_performance_percentage === null
+                      ? "No performance yet"
+                      : `${summary.overall_performance_percentage.toFixed(1)}% overall`}
+                  </small>
+                </article>
+                <article className="kpi-card">
+                  <span>Downtime</span>
+                  <strong>{NUMBER.format(summary.total_downtime_minutes)} min</strong>
+                  <small>{summary.open_incidents} open quality incidents</small>
+                </article>
+              </section>
+            </>
+          ) : null}
+
+          {view === "lines" ? (
+            <>
+              <ManagerViewIntro
+                eyebrow="Live line control"
+                title="Line Control"
+                body="Review every active assignment in priority order and focus the board by operational condition."
+              />
+              <section className="manager-board" aria-labelledby="priority-board-title">
           <div className="manager-section-heading">
             <div>
               <span className="eyebrow">Priority order</span>
@@ -361,10 +433,19 @@ export function ManagerConsole({
               body="Choose another priority filter or confirm assignments exist for this operational date."
             />
           )}
-        </section>
+              </section>
+            </>
+          ) : null}
 
-        <div className="manager-detail-grid">
-          <section className="manager-detail-card" aria-labelledby="actions-title">
+          {view === "actions" ? (
+            <>
+              <ManagerViewIntro
+                eyebrow="Response workspace"
+                title="Actions and materials"
+                body="Track unresolved ownership and supply constraints without losing the current operational context."
+              />
+              <div className="manager-detail-grid">
+                <section className="manager-detail-card" aria-labelledby="actions-title">
             <div className="manager-section-heading manager-section-heading--compact">
               <div>
                 <span className="eyebrow">Response ownership</span>
@@ -390,9 +471,9 @@ export function ManagerConsole({
             ) : (
               <EmptyState title="No open actions" body="No unresolved escalation is visible for this date." />
             )}
-          </section>
+                </section>
 
-          <section className="manager-detail-card" aria-labelledby="materials-title">
+                <section className="manager-detail-card" aria-labelledby="materials-title">
             <div className="manager-section-heading manager-section-heading--compact">
               <div>
                 <span className="eyebrow">Supply position</span>
@@ -420,16 +501,41 @@ export function ManagerConsole({
             ) : (
               <EmptyState title="No material risk" body="No short or held product is visible for this date." />
             )}
-          </section>
-        </div>
-        <DailyRiskBriefingPanel operationalDate={operationalDate} />
-        <LossAnalyticsPanel assignments={data.assignments} />
-        <p className="manager-boundary">
-          Live visibility and prioritisation aid only. Confirm urgent conditions through approved
-          verbal, safety, quality, engineering, and production-control procedures. Missed event
-          cursors trigger an authoritative API re-sync; they do not replace official records.
-        </p>
-      </main>
+                </section>
+              </div>
+            </>
+          ) : null}
+
+          {view === "briefing" ? (
+            <>
+              <ManagerViewIntro
+                eyebrow="Explainable evidence"
+                title="Risk Briefing"
+                body="Review deterministic line risk, confidence, ranked source evidence, and missing-data warnings."
+              />
+              <DailyRiskBriefingPanel operationalDate={operationalDate} />
+            </>
+          ) : null}
+
+          {view === "analytics" ? (
+            <>
+              <ManagerViewIntro
+                eyebrow="Recorded evidence"
+                title="Loss Analytics"
+                body="Review confirmed loss history and recurring mapped-asset evidence for the selected period."
+              />
+              <LossAnalyticsPanel assignments={data.assignments} />
+            </>
+          ) : null}
+        </main>
+      </div>
+
+      <WorkspaceBottomNavigation
+        ariaLabel="Operations Manager mobile workspace"
+        items={MANAGER_NAV_ITEMS}
+        activeItem={view}
+        onSelect={setView}
+      />
     </div>
   );
 }

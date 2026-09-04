@@ -1,7 +1,8 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import * as api from "../api";
 import type {
   Assignment,
   LineUpdate,
@@ -154,6 +155,10 @@ const data: ManagerWorkspaceData = {
   },
 };
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe("manager console", () => {
   it("sorts urgent lines ahead of stable lines", () => {
     const rows = buildManagerRows(
@@ -175,7 +180,7 @@ describe("manager console", () => {
     expect(rows[1].attentionLevel).toBe("stable");
   });
 
-  it("shows management KPIs and line ownership", () => {
+  it("shows the overview and matching desktop and mobile navigation", () => {
     render(
       <ManagerConsole
         profile={profile}
@@ -211,26 +216,63 @@ describe("manager console", () => {
     ).toBeInTheDocument();
 
     expect(
-      screen.getByRole("heading", {
-        name: "Daily risk briefing",
-      }),
+      within(screen.getByRole("navigation", { name: "Manager sections" })).getByRole(
+        "button",
+        { name: "Overview", current: "page" },
+      ),
     ).toBeInTheDocument();
 
     expect(
-      screen.getByRole("heading", {
-        name: "Loss and asset history",
-      }),
-    ).toBeInTheDocument();
+      within(
+        screen.getByRole("navigation", { name: "Operations Manager mobile workspace" }),
+      ).getAllByRole("button"),
+    ).toHaveLength(5);
 
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Daily risk briefing" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Loss and asset history" })).not.toBeInTheDocument();
+  });
+
+  it("switches between focused manager workspaces", async () => {
+    const actor = userEvent.setup();
+    vi.spyOn(api, "apiRequest").mockRejectedValue(new Error("Analytics unavailable."));
+
+    render(
+      <ManagerConsole
+        profile={profile}
+        data={data}
+        operationalDate="2026-09-01"
+        lastUpdatedAt="2026-09-01T10:00:00Z"
+        online
+        liveState="live"
+        busy={false}
+        error=""
+        onDateChange={vi.fn()}
+        onRefresh={vi.fn()}
+        onSignOut={vi.fn()}
+      />,
+    );
+
+    const navigation = screen.getByRole("navigation", { name: "Manager sections" });
+
+    await actor.click(within(navigation).getByRole("button", { name: "Line Control" }));
+    expect(screen.getByRole("heading", { name: "Line Control" })).toBeInTheDocument();
     const table = screen.getByRole("table");
+    expect(within(table).getByText("Lead: lead.two")).toBeInTheDocument();
+    expect(within(table).getAllByText("Filler stopped")).toHaveLength(2);
 
-    expect(
-      within(table).getByText("Lead: lead.two"),
-    ).toBeInTheDocument();
+    await actor.click(within(navigation).getByRole("button", { name: "Actions & Materials" }));
+    expect(screen.getByRole("heading", { name: "Actions and materials" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Open actions" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Material risks" })).toBeInTheDocument();
 
-    expect(
-      within(table).getAllByText("Filler stopped"),
-    ).toHaveLength(2);
+    await actor.click(within(navigation).getByRole("button", { name: "Risk Briefing" }));
+    expect(screen.getByRole("heading", { name: "Risk Briefing" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Daily risk briefing" })).toBeInTheDocument();
+
+    await actor.click(within(navigation).getByRole("button", { name: "Loss Analytics" }));
+    expect(screen.getByRole("heading", { name: "Loss Analytics" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Loss and asset history" })).toBeInTheDocument();
   });
 
   it("filters the board to late or missing updates", async () => {
@@ -260,6 +302,13 @@ describe("manager console", () => {
         onRefresh={vi.fn()}
         onSignOut={vi.fn()}
       />,
+    );
+
+    await actor.click(
+      within(screen.getByRole("navigation", { name: "Manager sections" })).getByRole(
+        "button",
+        { name: "Line Control" },
+      ),
     );
 
     await actor.click(
