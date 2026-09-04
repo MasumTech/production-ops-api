@@ -1178,6 +1178,43 @@ class OperationalEventAudience(models.Model):
         ]
 
 
+class OperationalEventReadReceipt(models.Model):
+    event = models.ForeignKey(
+        OperationalEvent,
+        on_delete=models.CASCADE,
+        related_name="read_receipts",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="operational_event_read_receipts",
+    )
+    read_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("event", "user"),
+                name="unique_operational_event_read_receipt",
+            ),
+        ]
+        indexes = [models.Index(fields=("user", "read_at"))]
+
+
+class OperationalWorkerHeartbeat(TimeStampedModel):
+    worker_name = models.CharField(max_length=80, unique=True)
+    last_started_at = models.DateTimeField()
+    last_completed_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.CharField(max_length=160, blank=True)
+    published_count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ("worker_name",)
+
+    def __str__(self):
+        return f"{self.worker_name} - {self.last_completed_at or self.last_started_at}"
+
+
 class IdempotentRequest(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

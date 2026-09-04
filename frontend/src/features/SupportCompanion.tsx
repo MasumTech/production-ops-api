@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { ApiError, OfflineQueuedError, postJson } from "../api";
 import { ErrorBanner, StatusPill } from "../components";
 import { formatDateTime } from "../format";
+import { NotificationCentre } from "../NotificationCentre";
 import type {
   Escalation,
   SupportCompanionData,
@@ -168,6 +169,7 @@ export function SupportCompanion({
             />
           </label>
           <span className="user-chip">{profile.display_name}</span>
+          <NotificationCentre refreshToken={lastUpdatedAt} />
           <button className="button button--ghost" onClick={onRefresh} disabled={busy}>Refresh</button>
           <button className="button button--ghost" onClick={onSignOut}>Sign out</button>
         </div>

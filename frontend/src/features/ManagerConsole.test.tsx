@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../api";
 import type {
@@ -160,6 +160,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+beforeEach(() => {
+  vi.spyOn(api, "apiRequest").mockResolvedValue({
+    unread_count: 0,
+    results: [],
+  } as never);
+});
+
 describe("manager console", () => {
   it("sorts urgent lines ahead of stable lines", () => {
     const rows = buildManagerRows(
@@ -227,7 +234,7 @@ describe("manager console", () => {
       within(
         screen.getByRole("navigation", { name: "Operations Manager mobile workspace" }),
       ).getAllByRole("button"),
-    ).toHaveLength(5);
+    ).toHaveLength(6);
 
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Daily risk briefing" })).not.toBeInTheDocument();

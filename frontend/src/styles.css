@@ -1385,6 +1385,232 @@ td span {
   display: none;
 }
 
+.notification-centre {
+  position: relative;
+}
+
+.notification-trigger {
+  white-space: nowrap;
+}
+
+.notification-panel {
+  position: absolute;
+  z-index: 100;
+  top: calc(100% + 0.65rem);
+  right: 0;
+  width: min(430px, calc(100vw - 2rem));
+  max-height: min(620px, calc(100vh - 6rem));
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  overflow: auto;
+  background: #0a1926;
+  box-shadow: var(--shadow);
+}
+
+.notification-panel__heading,
+.notification-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.notification-panel__heading h2 {
+  margin: 0;
+  font-size: 1.45rem;
+}
+
+.notification-list {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.notification-item {
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--blue);
+  border-radius: 0.75rem;
+  background: var(--panel);
+}
+
+.notification-item--warning {
+  border-left-color: var(--amber);
+}
+
+.notification-item--critical {
+  border-left-color: var(--red);
+}
+
+.notification-item > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.3rem;
+}
+
+.notification-item span,
+.notification-boundary {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.notification-item .button {
+  min-height: 36px;
+  padding: 0.45rem 0.65rem;
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+}
+
+.notification-error {
+  margin: 0.75rem 0 0;
+  color: var(--red);
+  font-size: 0.78rem;
+}
+
+.notification-boundary {
+  margin: 1rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+  line-height: 1.45;
+}
+
+.pilot-admin {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.pilot-admin .manager-section-heading p,
+.pilot-role-admin > p {
+  max-width: 760px;
+  margin: 0.45rem 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.pilot-status-banner,
+.pilot-worker-card,
+.pilot-role-admin {
+  padding: 1.2rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--panel);
+}
+
+.pilot-status-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.pilot-status-banner div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.pilot-status-banner span:last-child,
+.pilot-role-list article > div span {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.pilot-kpis {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.pilot-kpis article {
+  display: grid;
+  min-height: 108px;
+  align-content: space-between;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: var(--panel);
+}
+
+.pilot-kpis span,
+.pilot-kpis small,
+.pilot-worker-card dt {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.pilot-kpis strong {
+  font-size: 1.8rem;
+}
+
+.pilot-worker-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+}
+
+.pilot-worker-card dl {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+
+.pilot-worker-card dl div {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.85rem 0.85rem 0;
+}
+
+.pilot-worker-card dl div:first-child {
+  padding-left: 0;
+}
+
+.pilot-worker-card dd {
+  margin: 0;
+  font-weight: 750;
+}
+
+.pilot-role-list {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.pilot-role-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(180px, auto);
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: rgb(255 255 255 / 2%);
+}
+
+.pilot-role-list article > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.pilot-role-list .button,
+.pilot-managed-elsewhere {
+  justify-self: end;
+}
+
+.pilot-managed-elsewhere,
+.pilot-boundary {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.pilot-boundary {
+  margin: 1rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
 .support-workspace {
   display: grid;
   align-content: start;
@@ -1557,6 +1783,10 @@ td span {
 }
 
 @media (max-width: 1320px) {
+  .pilot-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .manager-kpis {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -1602,7 +1832,7 @@ td span {
     bottom: 0;
     left: 0;
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(var(--workspace-nav-count, 5), 1fr);
     padding: 0.5rem max(0.5rem, env(safe-area-inset-right)) max(0.5rem, env(safe-area-inset-bottom)) max(0.5rem, env(safe-area-inset-left));
     border-top: 1px solid var(--line);
     background: rgb(7 19 31 / 96%);
@@ -1691,6 +1921,23 @@ td span {
   .support-action-grid,
   .support-context-grid {
     grid-template-columns: 1fr;
+  }
+
+  .notification-panel {
+    position: fixed;
+    top: 4.5rem;
+    right: 0.75rem;
+  }
+
+  .pilot-role-list article {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .pilot-role-list .button,
+  .pilot-managed-elsewhere {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    text-align: center;
   }
 }
 
@@ -1844,6 +2091,36 @@ td span {
 
   .support-action__signals {
     justify-content: flex-start;
+  }
+
+  .notification-trigger {
+    min-width: 44px;
+    padding-inline: 0.65rem;
+  }
+
+  .notification-panel {
+    top: 4.15rem;
+    right: 0.5rem;
+    width: calc(100vw - 1rem);
+    max-height: calc(100vh - 10rem);
+  }
+
+  .notification-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pilot-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pilot-worker-card dl {
+    grid-template-columns: 1fr;
+  }
+
+  .pilot-worker-card dl div,
+  .pilot-worker-card dl div:first-child {
+    padding: 0.75rem 0 0;
   }
 }
 

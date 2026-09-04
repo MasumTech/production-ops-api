@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 export interface WorkspaceNavigationItem<Id extends string> {
   id: Id;
@@ -57,7 +57,11 @@ export function WorkspaceBottomNavigation<Id extends string>({
   onSelect,
 }: NavigationProps<Id> & { ariaLabel: string }) {
   return (
-    <nav className="bottom-nav" aria-label={ariaLabel}>
+    <nav
+      className="bottom-nav"
+      aria-label={ariaLabel}
+      style={{ "--workspace-nav-count": items.length } as CSSProperties}
+    >
       {items.map((item) => (
         <button
           type="button"

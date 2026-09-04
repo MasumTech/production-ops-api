@@ -99,7 +99,7 @@ The API addresses five operational control gaps:
 
 This repository is the API, Team Leader tablet, Operations Manager console, and live-event foundation for the wider **Multi-Line Production Operations Platform** and its **Multi-Line Team Leader Digital Solution** workflow. The sequence below keeps the solution useful and safe: prove the workflow first, build reliable operational data next, then add broader interfaces, live events, analytics, and only later consider AI.
 
-Roadmap completion is tracked as a ten-checkpoint delivery index: each published phase contributes 10 percentage points when its defined scope is built. It is a transparent feature-state measure, not an engineering-hours estimate. All ten published phases now have a production-shaped implementation, so the complete published product roadmap is **100% complete**. The Phase 9 briefing remains deterministic and explainable; generative narrative is still a future, separately governed option.
+Roadmap completion is tracked by the published delivery phases and their defined acceptance scope; it is a feature-state measure, not an engineering-hours estimate. All eleven published phases now have a production-shaped implementation, so the published product roadmap is **100% complete**. The Phase 9 briefing remains deterministic and explainable; generative narrative and third-party notification providers are still future, separately governed options.
 
 | Phase | Scope | Main users/interface | Status |
 |---|---|---|---|
@@ -113,6 +113,7 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 | 8. Loss and asset analytics | Repeated fault history, downtime impact, material delays, recurring line combinations, repair-versus-replace evidence | Operations and Engineering | **Built** |
 | 9. AI daily risk briefing | Explainable plan-completion, downtime, and material-delay risk with confidence and missing-data warnings | Authorised managers/support roles | **Deterministic API and Manager Console briefing built; AI narrative future** |
 | 10. Mobile support companion | Focused alerts, one-tap acknowledgement, related line/material context, realtime refresh, and offline-safe retry using the same API | Approved support users | **Built** |
+| 11. Pilot readiness and administration | In-app notification inbox/read evidence, reminder-worker heartbeat, pilot monitoring, audited workspace-role control, and responsive manager administration | Operations management and all authenticated workspaces | **Built** |
 
 ### Proposed Product Architecture
 
@@ -184,6 +185,8 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 - Frontend type checking, component/API-client tests, production build, service-worker generation, and container build in CI
 - Staff-only Operations Manager console with matching desktop sidebar and mobile bottom navigation across overview, line control, actions and materials, risk briefing, and loss analytics
 - Role-gated Mobile Support Companion with matching five-section navigation, assigned critical/overdue actions, related line and material context, and one-tap offline-safe acknowledgement
+- Shared user-scoped notification centre with durable read receipts, realtime refresh, and offline-safe read replay across Team Leader, Manager, and Support workspaces
+- Staff-only Pilot Admin workspace with reminder-worker freshness, notification/event health, operational backlog, and audited Support/Team Leader role changes
 - JWT-authenticated WebSocket delivery with staff/participant scoping, PostgreSQL cursor replay, Redis fan-out, deduplicated overdue reminders, and bounded offline action replay
 - Staff-only daily risk briefing API and responsive Manager Console view with versioned deterministic scoring, ordered source evidence, bounded queries, completeness confidence, explicit missing-data warnings, and retry-safe failure handling
 
@@ -222,6 +225,8 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 | `ShiftHandover` | Controlled transfer between consecutive line assignments | Outgoing/incoming assignments, unresolved escalations, operational summary, creator, receiver, and acceptance audit |
 | `BreakRecovery` | Temporary line-control workflow during a Team Leader break | Assignment, nominated cover, planned timing, acceptance, start, recovery, cancellation, attention state, and audit users |
 | `OperationalEvent` | Durable change cursor for live delivery and safe reconnect | Event type, source resource, line/assignment scope, severity, minimal metadata, recipients, and occurrence time |
+| `OperationalEventReadReceipt` | User-specific notification visibility evidence | Event, user, and first-read timestamp with a unique event/user constraint |
+| `OperationalWorkerHeartbeat` | Pilot monitoring evidence for the reminder worker | Worker name, latest start/completion, safe error type, and published count |
 | `IdempotentRequest` | Safe replay receipt for queued POST requests | User-scoped UUID, request fingerprint, stored response, and completion time |
 
 ## API Endpoints
@@ -243,6 +248,10 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 | `GET` | `/api/health/` | Check application and database health |
 | `GET` | `/api/dashboard/summary/` | Return aggregated production and incident KPIs |
 | `GET` | `/api/support/companion/` | Return the approved support user’s assigned unresolved actions and related line/material context |
+| `GET` | `/api/notifications/` | Return up to 50 unread events already visible to the authenticated user |
+| `POST` | `/api/notifications/{event_id}/read/` | Record repeatable user-specific notification read evidence |
+| `GET` | `/api/pilot/status/` | Return staff-only pilot health, worker freshness, delivery and backlog evidence |
+| `GET, POST` | `/api/workspace-roles/` | List workspace roles or assign Team Leader/Operational Support access as management staff |
 | `GET, POST` | `/api/team-leader-assignments/` | List or create line assignments |
 | `GET, PUT, PATCH, DELETE` | `/api/team-leader-assignments/{id}/` | Manage one line assignment |
 | `GET` | `/api/team-leader-assignments/my-lines/` | List the current user’s assigned lines |
@@ -272,7 +281,7 @@ Roadmap completion is tracked as a ten-checkpoint delivery index: each published
 | `GET` | `/api/analytics/loss-assets/` | Return staff-only deterministic loss and recurring-asset evidence |
 | `GET` | `/api/analytics/daily-risk-briefing/` | Return the staff-only explainable daily operational risk briefing |
 
-The frontend opens `/ws/operations/?after={cursor}` with the JWT supplied through the WebSocket subprotocol, not the URL. The server replays up to 100 visible missed events; larger gaps trigger an authoritative REST refresh. WebSocket events are change notifications, not copies of official production records.
+The frontend opens `/ws/operations/?after={cursor}` with the JWT supplied through the WebSocket subprotocol, not the URL. The server replays up to 100 visible missed events; larger gaps trigger an authoritative REST refresh. WebSocket events are change notifications, not copies of official production records. Notification read evidence confirms visibility only; it does not acknowledge or resolve the underlying operational action.
 
 Queued offline POST requests include a user-scoped UUID `Idempotency-Key`. Identical retries replay the stored response without repeating the state change; changed payloads or stale workflow actions are held for review rather than silently discarded.
 
@@ -636,7 +645,7 @@ curl http://localhost:8000/api/production-lines/ \
 
 ## Testing and Code Quality
 
-The current suite contains **177 backend tests** and **24 frontend tests** covering models, API behaviour, authentication, workspace roles, permissions, filters, dashboard aggregation, health checks, demo-data seeding, release, escalation, handover, break/recovery auditing, support-companion scoping and acknowledgement, scoped event replay, JWT WebSockets, reminder deduplication, idempotent requests, deterministic risk evidence, missing-data disclosure, bounded briefing queries, risk-briefing rendering and retry behaviour, shared desktop/mobile navigation, offline outbox behaviour, safe cursor recovery, tablet rendering, role routing, priority ordering, pagination, token refresh, and validation.
+The current suite contains **186 backend tests** and **26 frontend tests** covering models, API behaviour, authentication, workspace roles, audited role administration, notification scoping and read evidence, reminder-worker heartbeat and safe error reporting, pilot monitoring, permissions, filters, dashboard aggregation, health checks, demo-data seeding, release, escalation, handover, break/recovery auditing, support-companion scoping and acknowledgement, scoped event replay, JWT WebSockets, reminder deduplication, idempotent requests, deterministic risk evidence, missing-data disclosure, bounded briefing queries, risk-briefing rendering and retry behaviour, shared desktop/mobile navigation, offline outbox behaviour, safe cursor recovery, tablet rendering, role routing, priority ordering, pagination, token refresh, and validation.
 
 Run the complete test suite:
 

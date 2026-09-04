@@ -1,4 +1,7 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.db.models import (
     Case,
     Count,
@@ -15,16 +18,20 @@ from django.utils import timezone
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import filters, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied, ValidationError
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .access import OPERATIONAL_SUPPORT_GROUP, WorkspaceRole
+from .events import create_operational_event, event_queryset_for_user
 from .models import (
     BreakRecovery,
     HourlyLineUpdate,
     OperationalEscalation,
     OperationalEvent,
+    OperationalEventReadReceipt,
+    OperationalWorkerHeartbeat,
     ProductionAsset,
     ProductionLine,
     ProductMaterialReadiness,
@@ -49,14 +56,17 @@ from .serializers import (
     CurrentUserSerializer,
     HourlyLineUpdateFilterSerializer,
     HourlyLineUpdateSerializer,
+    NotificationInboxSerializer,
     OperationalEscalationFilterSerializer,
     OperationalEscalationResolveSerializer,
     OperationalEscalationSerializer,
     OperationalEventCursorSerializer,
     OperationalEventFilterSerializer,
+    OperationalEventReadReceiptSerializer,
     OperationalEventSerializer,
     OperationsDashboardFilterSerializer,
     OperationsDashboardSummarySerializer,
+    PilotStatusSerializer,
     ProductionAssetSerializer,
     ProductionLineSerializer,
     ProductMaterialReadinessFilterSerializer,
@@ -70,6 +80,7 @@ from .serializers import (
     TeamLeaderAssignmentFilterSerializer,
     TeamLeaderAssignmentSerializer,
     UserChoiceSerializer,
+    WorkspaceRoleUpdateSerializer,
 )
 
 User = get_user_model()
@@ -81,6 +92,154 @@ class CurrentUserView(APIView):
     @extend_schema(responses=CurrentUserSerializer)
     def get(self, request):
         return Response(CurrentUserSerializer(request.user).data)
+
+
+class NotificationInboxView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    @extend_schema(responses=NotificationInboxSerializer)
+    def get(self, request):
+        unread_events = event_queryset_for_user(request.user).exclude(
+            read_receipts__user=request.user,
+        )
+        unread_count = unread_events.count()
+        events = unread_events.order_by("-id")[:50]
+        serializer = NotificationInboxSerializer(
+            {
+                "unread_count": unread_count,
+                "results": events,
+            }
+        )
+        return Response(serializer.data)
+
+
+class NotificationReadView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    @extend_schema(
+        request=None,
+        responses=OperationalEventReadReceiptSerializer,
+    )
+    def post(self, request, event_id):
+        event = event_queryset_for_user(request.user).filter(id=event_id).first()
+        if event is None:
+            raise NotFound("Notification was not found.")
+        receipt, _ = OperationalEventReadReceipt.objects.get_or_create(
+            event=event,
+            user=request.user,
+        )
+        return Response(OperationalEventReadReceiptSerializer(receipt).data)
+
+
+class WorkspaceRoleView(APIView):
+    permission_classes = (IsAdminUser,)
+
+    @extend_schema(responses=CurrentUserSerializer(many=True))
+    def get(self, request):
+        users = (
+            User.objects.filter(
+                is_active=True,
+                is_superuser=False,
+            )
+            .prefetch_related("groups")
+            .order_by("username")
+        )
+        return Response(CurrentUserSerializer(users, many=True).data)
+
+    @extend_schema(
+        request=WorkspaceRoleUpdateSerializer,
+        responses=CurrentUserSerializer,
+    )
+    def post(self, request):
+        serializer = WorkspaceRoleUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data["user"]
+        workspace = serializer.validated_data["workspace"]
+        support_group, _ = Group.objects.get_or_create(
+            name=OPERATIONAL_SUPPORT_GROUP,
+        )
+        if workspace == WorkspaceRole.SUPPORT:
+            user.groups.add(support_group)
+        else:
+            user.groups.remove(support_group)
+        create_operational_event(
+            event_type="workspace_role.changed",
+            resource_type="user",
+            resource_id=user.id,
+            actor=request.user,
+            severity=OperationalEvent.Severity.INFO,
+            metadata={"workspace": workspace},
+            recipients=(user,),
+        )
+        return Response(CurrentUserSerializer(user).data)
+
+
+class PilotStatusView(APIView):
+    permission_classes = (IsAdminUser,)
+
+    @extend_schema(responses=PilotStatusSerializer)
+    def get(self, request):
+        now = timezone.now()
+        heartbeat = OperationalWorkerHeartbeat.objects.filter(
+            worker_name="operational-reminders",
+        ).first()
+        worker_status = "not_started"
+        if heartbeat:
+            fresh_after = now - timedelta(minutes=3)
+            worker_status = (
+                "healthy"
+                if heartbeat.last_completed_at
+                and heartbeat.last_completed_at >= fresh_after
+                and not heartbeat.last_error
+                else "attention"
+            )
+        worker = {
+            "status": worker_status,
+            "last_started_at": heartbeat.last_started_at if heartbeat else None,
+            "last_completed_at": heartbeat.last_completed_at if heartbeat else None,
+            "last_error": heartbeat.last_error if heartbeat else "",
+            "published_count": heartbeat.published_count if heartbeat else 0,
+        }
+        unresolved = OperationalEscalation.objects.filter(
+            status__in=(
+                OperationalEscalation.Status.OPEN,
+                OperationalEscalation.Status.ACKNOWLEDGED,
+            )
+        )
+        latest_event_at = (
+            OperationalEvent.objects.order_by("-id")
+            .values_list(
+                "occurred_at",
+                flat=True,
+            )
+            .first()
+        )
+        unread_notifications = (
+            event_queryset_for_user(request.user)
+            .exclude(
+                read_receipts__user=request.user,
+            )
+            .count()
+        )
+        payload = {
+            "status": "ready" if worker_status == "healthy" else "attention",
+            "generated_at": now,
+            "active_users": User.objects.filter(is_active=True).count(),
+            "support_users": User.objects.filter(
+                is_active=True,
+                groups__name=OPERATIONAL_SUPPORT_GROUP,
+            ).count(),
+            "events_last_hour": OperationalEvent.objects.filter(
+                occurred_at__gte=now - timedelta(hours=1),
+            ).count(),
+            "latest_event_at": latest_event_at,
+            "unread_notifications": unread_notifications,
+            "open_actions": unresolved.count(),
+            "overdue_actions": unresolved.filter(response_due_at__lt=now).count(),
+            "unassigned_actions": unresolved.filter(owner__isnull=True).count(),
+            "reminder_worker": worker,
+        }
+        return Response(PilotStatusSerializer(payload).data)
 
 
 class SupportCompanionView(APIView):

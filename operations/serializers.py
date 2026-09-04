@@ -8,6 +8,7 @@ from .models import (
     HourlyLineUpdate,
     OperationalEscalation,
     OperationalEvent,
+    OperationalEventReadReceipt,
     ProductionAsset,
     ProductionLine,
     ProductMaterialReadiness,
@@ -1404,3 +1405,55 @@ class SupportCompanionSerializer(serializers.Serializer):
     updates = HourlyLineUpdateSerializer(many=True)
     materials = ProductMaterialReadinessSerializer(many=True)
     escalations = OperationalEscalationSerializer(many=True)
+
+
+class NotificationInboxSerializer(serializers.Serializer):
+    unread_count = serializers.IntegerField(min_value=0)
+    results = OperationalEventSerializer(many=True)
+
+
+class OperationalEventReadReceiptSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OperationalEventReadReceipt
+        fields = ("event", "read_at")
+        read_only_fields = fields
+
+
+class WorkspaceRoleUpdateSerializer(serializers.Serializer):
+    user = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.filter(is_active=True, is_superuser=False),
+    )
+    workspace = serializers.ChoiceField(
+        choices=(WorkspaceRole.TEAM_LEADER, WorkspaceRole.SUPPORT),
+    )
+
+    def validate_user(self, value):
+        if value.is_staff:
+            raise serializers.ValidationError(
+                "Management staff roles cannot be changed through this endpoint."
+            )
+        return value
+
+
+class PilotWorkerStatusSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(
+        choices=("healthy", "attention", "not_started"),
+    )
+    last_started_at = serializers.DateTimeField(allow_null=True)
+    last_completed_at = serializers.DateTimeField(allow_null=True)
+    last_error = serializers.CharField(allow_blank=True)
+    published_count = serializers.IntegerField(min_value=0)
+
+
+class PilotStatusSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=("ready", "attention"))
+    generated_at = serializers.DateTimeField()
+    active_users = serializers.IntegerField(min_value=0)
+    support_users = serializers.IntegerField(min_value=0)
+    events_last_hour = serializers.IntegerField(min_value=0)
+    latest_event_at = serializers.DateTimeField(allow_null=True)
+    unread_notifications = serializers.IntegerField(min_value=0)
+    open_actions = serializers.IntegerField(min_value=0)
+    overdue_actions = serializers.IntegerField(min_value=0)
+    unassigned_actions = serializers.IntegerField(min_value=0)
+    reminder_worker = PilotWorkerStatusSerializer()
