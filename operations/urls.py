@@ -15,6 +15,7 @@ from .views import (
     QualityIncidentViewSet,
     ShiftHandoverViewSet,
     ShiftViewSet,
+    SupportCompanionView,
     TeamLeaderAssignmentViewSet,
 )
 
@@ -90,6 +91,11 @@ urlpatterns = [
         "dashboard/summary/",
         OperationsDashboardView.as_view(),
         name="operations-dashboard",
+    ),
+    path(
+        "support/companion/",
+        SupportCompanionView.as_view(),
+        name="support-companion",
     ),
 ]
 

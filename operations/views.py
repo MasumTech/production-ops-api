@@ -38,6 +38,7 @@ from .permissions import (
     IsBreakRecoveryParticipantOrStaff,
     IsEscalationParticipantOrStaff,
     IsHandoverParticipantOrStaff,
+    IsOperationalSupport,
     IsStaffOrReadOnly,
 )
 from .serializers import (
@@ -64,6 +65,8 @@ from .serializers import (
     ShiftHandoverFilterSerializer,
     ShiftHandoverSerializer,
     ShiftSerializer,
+    SupportCompanionFilterSerializer,
+    SupportCompanionSerializer,
     TeamLeaderAssignmentFilterSerializer,
     TeamLeaderAssignmentSerializer,
     UserChoiceSerializer,
@@ -78,6 +81,133 @@ class CurrentUserView(APIView):
     @extend_schema(responses=CurrentUserSerializer)
     def get(self, request):
         return Response(CurrentUserSerializer(request.user).data)
+
+
+class SupportCompanionView(APIView):
+    permission_classes = (IsOperationalSupport,)
+
+    @extend_schema(
+        parameters=[SupportCompanionFilterSerializer],
+        responses=SupportCompanionSerializer,
+    )
+    def get(self, request):
+        filter_serializer = SupportCompanionFilterSerializer(
+            data=request.query_params,
+        )
+        filter_serializer.is_valid(raise_exception=True)
+        operational_date = filter_serializer.validated_data.get(
+            "date",
+            timezone.localdate(),
+        )
+        now = timezone.now()
+        unresolved_statuses = (
+            OperationalEscalation.Status.OPEN,
+            OperationalEscalation.Status.ACKNOWLEDGED,
+        )
+        escalations = list(
+            OperationalEscalation.objects.filter(
+                owner=request.user,
+                assignment__date=operational_date,
+                status__in=unresolved_statuses,
+            )
+            .select_related(
+                "asset",
+                "assignment",
+                "assignment__production_line",
+                "assignment__team_leader",
+                "hourly_update",
+                "quality_incident",
+                "owner",
+                "raised_by",
+                "acknowledged_by",
+                "resolved_by",
+            )
+            .annotate(
+                attention_order=Case(
+                    When(
+                        priority=OperationalEscalation.Priority.CRITICAL,
+                        then=0,
+                    ),
+                    When(response_due_at__lt=now, then=1),
+                    default=2,
+                    output_field=IntegerField(),
+                ),
+                priority_order=Case(
+                    When(
+                        priority=OperationalEscalation.Priority.CRITICAL,
+                        then=0,
+                    ),
+                    When(priority=OperationalEscalation.Priority.HIGH, then=1),
+                    When(priority=OperationalEscalation.Priority.MEDIUM, then=2),
+                    default=3,
+                    output_field=IntegerField(),
+                ),
+            )
+            .order_by(
+                "attention_order",
+                "priority_order",
+                "response_due_at",
+                "-raised_at",
+            )
+        )
+        assignment_ids = {item.assignment_id for item in escalations}
+        assignments = TeamLeaderAssignment.objects.filter(
+            id__in=assignment_ids,
+        ).select_related(
+            "production_line",
+            "team_leader",
+            "assigned_by",
+        )
+        latest_update_id = (
+            HourlyLineUpdate.objects.filter(
+                assignment_id=OuterRef("assignment_id"),
+            )
+            .order_by("-recorded_at", "-id")
+            .values("id")[:1]
+        )
+        updates = (
+            HourlyLineUpdate.objects.filter(
+                assignment_id__in=assignment_ids,
+                id=Subquery(latest_update_id),
+            )
+            .select_related(
+                "assignment",
+                "assignment__production_line",
+                "assignment__team_leader",
+                "action_owner",
+                "recorded_by",
+            )
+            .order_by("assignment__production_line__code")
+        )
+        materials = (
+            ProductMaterialReadiness.objects.filter(
+                assignment_id__in=assignment_ids,
+                status__in=(
+                    ProductMaterialReadiness.Status.SHORT,
+                    ProductMaterialReadiness.Status.HELD,
+                ),
+            )
+            .select_related(
+                "assignment",
+                "assignment__production_line",
+                "assignment__team_leader",
+                "owner",
+                "released_by",
+                "created_by",
+            )
+            .order_by("assignment__production_line__code", "sequence_number")
+        )
+        response_serializer = SupportCompanionSerializer(
+            {
+                "generated_at": now,
+                "assignments": assignments,
+                "updates": updates,
+                "materials": materials,
+                "escalations": escalations,
+            },
+            context={"request": request},
+        )
+        return Response(response_serializer.data)
 
 
 class ActiveUserListView(APIView):

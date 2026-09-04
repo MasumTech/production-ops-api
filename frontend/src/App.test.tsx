@@ -25,6 +25,7 @@ const user: UserSummary = {
   username: "team.leader",
   display_name: "Team Leader",
   is_staff: false,
+  workspace: "team_leader",
 };
 
 const manager: UserSummary = {
@@ -32,6 +33,15 @@ const manager: UserSummary = {
   username: "operations.manager",
   display_name: "Operations Manager",
   is_staff: true,
+  workspace: "manager",
+};
+
+const support: UserSummary = {
+  id: 9,
+  username: "support.engineer",
+  display_name: "Support Engineer",
+  is_staff: false,
+  workspace: "support",
 };
 
 afterEach(() => vi.restoreAllMocks());
@@ -166,5 +176,33 @@ describe("tablet workspace", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Operations Manager Console")).toBeInTheDocument();
     expect(screen.queryByText("My Lines")).not.toBeInTheDocument();
+  });
+
+  it("routes approved support users to the mobile companion", async () => {
+    sessionStorage.setItem(
+      "production-ops-session",
+      JSON.stringify({ access: "test-access", refresh: "test-refresh" }),
+    );
+    vi.spyOn(api, "apiRequest").mockImplementation(async (path) => {
+      if (path === "/auth/me/") return support as never;
+      if (path.startsWith("/support/companion/")) {
+        return {
+          generated_at: "2026-09-04T07:00:00Z",
+          assignments: [],
+          updates: [],
+          materials: [],
+          escalations: [],
+        } as never;
+      }
+      return {} as never;
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "My response queue" })).toBeInTheDocument();
+    expect(screen.getByText("Mobile Support Companion")).toBeInTheDocument();
+    expect(api.apiRequest).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/support\/companion\/\?date=/),
+    );
   });
 });

@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import serializers
 
+from .access import WorkspaceRole, workspace_role_for_user
 from .models import (
     BreakRecovery,
     HourlyLineUpdate,
@@ -36,9 +37,14 @@ class UserChoiceSerializer(serializers.ModelSerializer):
 
 
 class CurrentUserSerializer(UserChoiceSerializer):
+    workspace = serializers.SerializerMethodField()
+
     class Meta(UserChoiceSerializer.Meta):
-        fields = (*UserChoiceSerializer.Meta.fields, "is_staff")
+        fields = (*UserChoiceSerializer.Meta.fields, "is_staff", "workspace")
         read_only_fields = fields
+
+    def get_workspace(self, obj) -> WorkspaceRole:
+        return workspace_role_for_user(obj)
 
 
 class OperationalEventSerializer(serializers.ModelSerializer):
@@ -1386,3 +1392,15 @@ class BreakRecoveryCancelSerializer(serializers.Serializer):
         allow_blank=False,
         trim_whitespace=True,
     )
+
+
+class SupportCompanionFilterSerializer(serializers.Serializer):
+    date = serializers.DateField(required=False)
+
+
+class SupportCompanionSerializer(serializers.Serializer):
+    generated_at = serializers.DateTimeField()
+    assignments = TeamLeaderAssignmentSerializer(many=True)
+    updates = HourlyLineUpdateSerializer(many=True)
+    materials = ProductMaterialReadinessSerializer(many=True)
+    escalations = OperationalEscalationSerializer(many=True)
