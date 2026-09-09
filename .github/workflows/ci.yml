@@ -143,3 +143,33 @@ jobs:
 
       - name: Build Docker images
         run: docker compose build web reminders frontend
+
+      - name: Start browser test dependencies
+        run: docker compose up --detach --wait db redis
+
+      - name: Prepare browser test database
+        run: docker compose run --rm web python manage.py migrate
+
+      - name: Start application stack for browser tests
+        run: docker compose up --detach --wait web frontend
+
+      - name: Prepare deterministic browser fixture
+        run: |
+          e2e_password="E2E-${GITHUB_RUN_ID}-${GITHUB_SHA::12}"
+          echo "E2E_PASSWORD=$e2e_password" >> "$GITHUB_ENV"
+          docker compose exec -T web python manage.py seed_demo_data \
+            --date 2026-09-04 \
+            --password "$e2e_password" \
+            --reset
+
+      - name: Install Playwright browser
+        run: npx --prefix frontend playwright install --with-deps chromium
+
+      - name: Run browser acceptance tests
+        env:
+          E2E_BASE_URL: http://127.0.0.1:3000
+        run: npm run --prefix frontend e2e
+
+      - name: Stop application stack
+        if: always()
+        run: docker compose down
