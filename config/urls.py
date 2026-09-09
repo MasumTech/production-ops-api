@@ -9,7 +9,7 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
 )
 
-from .health import HealthCheckView
+from .health import HealthCheckView, LivenessCheckView, ReadinessCheckView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -34,6 +34,16 @@ urlpatterns = [
         name="api-docs",
     ),
     path("api/", include("operations.urls")),
+    path(
+        "api/health/live/",
+        LivenessCheckView.as_view(),
+        name="liveness-check",
+    ),
+    path(
+        "api/health/ready/",
+        ReadinessCheckView.as_view(),
+        name="readiness-check",
+    ),
     path(
         "api/health/",
         HealthCheckView.as_view(),

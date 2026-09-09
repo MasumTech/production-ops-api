@@ -14,7 +14,7 @@ This repository implements the Django REST Framework backend, React + TypeScript
 
 **Current repository scope:** The Multi-Line Production Operations API, Team Leader tablet PWA, and Operations Manager console, focused on production workflows, fast shopfloor capture, management-wide priority visibility, data integrity, access control, automated quality gates, and containerized delivery.
 
-**Product direction:** The wider platform will add operational analytics, explainable risk briefing, and optional mobile access after the tablet, manager, and live-event workflows are validated.
+**Product direction:** The implemented platform includes the operational workflows, analytics, risk briefing, mobile support, pilot administration, and a secure staging-release foundation. Live infrastructure still requires an approved host, DNS, secrets, backups, and organisational sign-off.
 
 [Scope](#product-scope-and-naming) · [Problem](#the-real-world-problem) · [Scenario](#representative-shift-scenario) · [Workflow](#operational-workflow) · [Capabilities](#key-capabilities) · [Roadmap](#product-roadmap) · [Architecture](#system-architecture) · [API](#api-endpoints) · [Run locally](#quick-start-with-docker)
 
@@ -99,7 +99,7 @@ The API addresses five operational control gaps:
 
 This repository is the API, Team Leader tablet, Operations Manager console, and live-event foundation for the wider **Multi-Line Production Operations Platform** and its **Multi-Line Team Leader Digital Solution** workflow. The sequence below keeps the solution useful and safe: prove the workflow first, build reliable operational data next, then add broader interfaces, live events, analytics, and only later consider AI.
 
-Roadmap completion is tracked by the published delivery phases and their defined acceptance scope; it is a feature-state measure, not an engineering-hours estimate. All eleven published phases now have a production-shaped implementation, so the published product roadmap is **100% complete**. The Phase 9 briefing remains deterministic and explainable; generative narrative and third-party notification providers are still future, separately governed options.
+Roadmap completion is tracked by the published delivery phases and their defined acceptance scope; it is a feature-state measure, not an engineering-hours estimate. All twelve published phases now have a production-shaped implementation, so the published engineering roadmap is **100% complete**. The Phase 9 briefing remains deterministic and explainable; generative narrative, third-party notification providers, live infrastructure, and factory approval are still separately governed work.
 
 | Phase | Scope | Main users/interface | Status |
 |---|---|---|---|
@@ -114,6 +114,7 @@ Roadmap completion is tracked by the published delivery phases and their defined
 | 9. AI daily risk briefing | Explainable plan-completion, downtime, and material-delay risk with confidence and missing-data warnings | Authorised managers/support roles | **Deterministic API and Manager Console briefing built; AI narrative future** |
 | 10. Mobile support companion | Focused alerts, one-tap acknowledgement, related line/material context, realtime refresh, and offline-safe retry using the same API | Approved support users | **Built** |
 | 11. Pilot readiness and administration | In-app notification inbox/read evidence, reminder-worker heartbeat, pilot monitoring, audited workspace-role control, and responsive manager administration | Operations management and all authenticated workspaces | **Built** |
+| 12. Secure staging and release hardening | Fail-closed security validation, dependency readiness, private service networking, automatic HTTPS gateway, immutable release images, explicit migrations, and safe application rollback | Engineering, IT, and release approvers | **Deploy-ready foundation built; host and credentials required** |
 
 ### Proposed Product Architecture
 
@@ -125,7 +126,7 @@ Roadmap completion is tracked by the published delivery phases and their defined
 | Live updates | Django Channels/WebSockets, Redis fan-out, and a durable PostgreSQL event cursor | Pushes scoped change notifications and safely recovers missed events without duplicating business state |
 | Background work | Dedicated reminder worker now; Celery remains an option for later scheduled analytics/reporting | Keeps overdue scanning outside API requests without expanding Phase 7 into analytics |
 | Support mobile | Role-gated responsive PWA; consider React Native/Expo only if native notifications, scanning, or stronger offline use is justified | Delivers a focused companion without maintaining a second client |
-| Delivery | Containerised services, managed PostgreSQL, monitoring, backups, and staged environments | Provides a controlled route from prototype to pilot and production |
+| Delivery | Immutable application images, HTTPS staging Compose, explicit migrations, readiness gates, and recorded application rollback | Provides a controlled route from prototype to an approved staging host |
 
 ## Safety and Product Boundaries
 
@@ -187,6 +188,7 @@ Roadmap completion is tracked by the published delivery phases and their defined
 - Role-gated Mobile Support Companion with matching five-section navigation, assigned critical/overdue actions, related line and material context, and one-tap offline-safe acknowledgement
 - Shared user-scoped notification centre with durable read receipts, realtime refresh, and offline-safe read replay across Team Leader, Manager, and Support workspaces
 - Staff-only Pilot Admin workspace with reminder-worker freshness, notification/event health, operational backlog, and audited Support/Team Leader role changes
+- Fail-closed deployment validation, separate liveness/readiness probes, authenticated private Redis, automatic HTTPS edge, immutable GHCR images, and migration-safe deploy/rollback scripts
 - JWT-authenticated WebSocket delivery with staff/participant scoping, PostgreSQL cursor replay, Redis fan-out, deduplicated overdue reminders, and bounded offline action replay
 - Staff-only daily risk briefing API and responsive Manager Console view with versioned deterministic scoring, ordered source evidence, bounded queries, completeness confidence, explicit missing-data warnings, and retry-safe failure handling
 
@@ -245,7 +247,9 @@ Roadmap completion is tracked by the published delivery phases and their defined
 | `GET, PUT, PATCH, DELETE` | `/api/shifts/{id}/` | Manage one shift |
 | `GET, POST` | `/api/quality-incidents/` | List or create quality incidents |
 | `GET, PUT, PATCH, DELETE` | `/api/quality-incidents/{id}/` | Manage one quality incident |
-| `GET` | `/api/health/` | Check application and database health |
+| `GET` | `/api/health/` | Backwards-compatible application and database health check |
+| `GET` | `/api/health/live/` | Confirm that the application process can serve requests without querying dependencies |
+| `GET` | `/api/health/ready/` | Confirm that both PostgreSQL and Redis are available for live traffic |
 | `GET` | `/api/dashboard/summary/` | Return aggregated production and incident KPIs |
 | `GET` | `/api/support/companion/` | Return the approved support user’s assigned unresolved actions and related line/material context |
 | `GET` | `/api/notifications/` | Return up to 50 unread events already visible to the authenticated user |
@@ -550,6 +554,39 @@ docker compose down
 
 The PostgreSQL data remains stored in the named Docker volume after the containers stop.
 
+## Secure Staging Release
+
+Phase 12 adds a provider-neutral staging stack with private PostgreSQL, Redis,
+Django, reminder-worker, and frontend services behind a single Caddy HTTPS
+gateway. The release workflow publishes backend and frontend images tagged with
+the full immutable Git commit SHA; it never publishes or deploys a mutable
+`latest` tag.
+
+The repository does not provision a real server, DNS record, certificate,
+credential, backup service, or GitHub approval policy. Follow
+[the staging deployment runbook](docs/staging-deployment.md) only after those
+resources have been approved.
+
+Validate a production-shaped environment before deployment:
+
+```bash
+python manage.py check --deploy --fail-level WARNING
+python manage.py check_deployment_readiness
+```
+
+Deploy an approved SHA-tagged release on the staging host:
+
+```bash
+scripts/deploy_staging.sh /secure/path/release.env
+```
+
+Restore the previously recorded application images without deleting data or
+reversing migrations:
+
+```bash
+scripts/rollback_staging.sh
+```
+
 ## Local Development
 
 ### 1. Create and activate a virtual environment
@@ -645,7 +682,7 @@ curl http://localhost:8000/api/production-lines/ \
 
 ## Testing and Code Quality
 
-The current suite contains **186 backend tests** and **26 frontend tests** covering models, API behaviour, authentication, workspace roles, audited role administration, notification scoping and read evidence, reminder-worker heartbeat and safe error reporting, pilot monitoring, permissions, filters, dashboard aggregation, health checks, demo-data seeding, release, escalation, handover, break/recovery auditing, support-companion scoping and acknowledgement, scoped event replay, JWT WebSockets, reminder deduplication, idempotent requests, deterministic risk evidence, missing-data disclosure, bounded briefing queries, risk-briefing rendering and retry behaviour, shared desktop/mobile navigation, offline outbox behaviour, safe cursor recovery, tablet rendering, role routing, priority ordering, pagination, token refresh, and validation.
+The current suite contains **194 backend tests** and **26 frontend tests** covering models, API behaviour, authentication, workspace roles, audited role administration, notification scoping and read evidence, reminder-worker heartbeat and safe error reporting, pilot monitoring, deployment boundaries, dependency-aware health checks, permissions, filters, dashboard aggregation, demo-data seeding, release, escalation, handover, break/recovery auditing, support-companion scoping and acknowledgement, scoped event replay, JWT WebSockets, reminder deduplication, idempotent requests, deterministic risk evidence, missing-data disclosure, bounded briefing queries, risk-briefing rendering and retry behaviour, shared desktop/mobile navigation, offline outbox behaviour, safe cursor recovery, tablet rendering, role routing, priority ordering, pagination, token refresh, and validation.
 
 Run the complete test suite:
 
@@ -694,23 +731,28 @@ GitHub Actions automatically runs the following checks for changes targeting `ma
 2. Ruff formatting check
 3. Ruff lint check
 4. Django system check
-5. Missing migration detection
-6. OpenAPI schema validation
-7. PostgreSQL-backed pytest suite with a minimum 80% coverage gate
-8. Frontend dependency installation, type check, Vitest suite, and production PWA build
-9. Docker Compose configuration validation
-10. Django/Daphne, reminder-worker, and Nginx frontend image builds
+5. Django deployment checks and fail-closed staging-settings validation
+6. Missing migration detection
+7. OpenAPI schema validation
+8. PostgreSQL-backed pytest suite with a minimum 80% coverage gate
+9. Frontend dependency installation, type check, Vitest suite, and production PWA build
+10. Local and HTTPS staging Compose configuration plus release-script syntax validation
+11. Django/Daphne, reminder-worker, and Nginx frontend image builds
 
 ## Project Structure
 
 ```text
 production-ops-api/
-├── .github/workflows/ci.yml    # Automated quality and Docker checks
-├── docs/diagrams/              # Stable SVG workflow and architecture visuals
+├── .github/workflows/          # CI gates and manual immutable-image publishing
+├── deploy/Caddyfile            # Automatic HTTPS staging gateway
+├── docs/                       # Architecture visuals and staging runbook
+├── scripts/                    # Explicit staging deployment and application rollback
+├── compose.staging.yml         # Private production-shaped staging services
 ├── config/
 │   ├── settings.py             # Environment-driven Django/DRF settings
 │   ├── urls.py                 # Auth, schema, docs, health, and app routes
-│   └── health.py               # Application and database readiness check
+│   ├── deployment.py           # Fail-closed deployment boundary validation
+│   └── health.py               # Liveness and PostgreSQL/Redis readiness checks
 ├── operations/
 │   ├── models.py               # Production domain and integrity rules
 │   ├── serializers.py          # API representation and validation

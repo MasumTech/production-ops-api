@@ -21,7 +21,7 @@ jobs:
         env:
           POSTGRES_DB: production_ops_ci
           POSTGRES_USER: production_ops_ci
-          POSTGRES_PASSWORD: production-ops-ci-password
+          POSTGRES_PASSWORD: ci-${{ github.run_id }}-ephemeral
         ports:
           - 5432:5432
         options: >-
@@ -40,10 +40,10 @@ jobs:
           --health-retries 10
 
     env:
-      DJANGO_SECRET_KEY: ci-only-secret-key-with-at-least-32-bytes
+      DJANGO_SECRET_KEY: ci-${{ github.run_id }}-${{ github.sha }}-ephemeral-key
       DJANGO_DEBUG: "False"
       DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
-      DATABASE_URL: postgresql://production_ops_ci:production-ops-ci-password@127.0.0.1:5432/production_ops_ci
+      DATABASE_URL: postgresql://production_ops_ci:ci-${{ github.run_id }}-ephemeral@127.0.0.1:5432/production_ops_ci
       REDIS_URL: redis://127.0.0.1:6379/0
 
     steps:
@@ -76,6 +76,23 @@ jobs:
 
       - name: Run Django system checks
         run: python manage.py check
+
+      - name: Validate deployment security settings
+        env:
+          DJANGO_SECRET_KEY: ci-${{ github.run_id }}-${{ github.sha }}-ephemeral-key
+          DJANGO_ALLOWED_HOSTS: ops-staging.example.com
+          DJANGO_CSRF_TRUSTED_ORIGINS: https://ops-staging.example.com
+          DJANGO_SECURE_SSL_REDIRECT: "True"
+          DJANGO_SESSION_COOKIE_SECURE: "True"
+          DJANGO_CSRF_COOKIE_SECURE: "True"
+          DJANGO_SECURE_HSTS_SECONDS: "31536000"
+          DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS: "True"
+          DJANGO_SECURE_HSTS_PRELOAD: "True"
+          DJANGO_TRUST_X_FORWARDED_PROTO: "True"
+          REDIS_URL: redis://:ci-${{ github.run_id }}-ephemeral@127.0.0.1:6379/0
+        run: |
+          python manage.py check --deploy --fail-level WARNING
+          python manage.py check_deployment_readiness
 
       - name: Check for missing migrations
         run: python manage.py makemigrations --check --dry-run
@@ -112,6 +129,17 @@ jobs:
 
       - name: Validate Docker Compose configuration
         run: docker compose config --quiet
+
+      - name: Validate staging release configuration
+        run: |
+          docker compose --env-file .env.staging.example --file compose.staging.yml config --quiet
+          docker run --rm \
+            --env APP_DOMAIN=ops-staging.example.com \
+            --env ACME_EMAIL=operations@example.com \
+            --volume "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
+          sh -n scripts/deploy_staging.sh
+          sh -n scripts/rollback_staging.sh
 
       - name: Build Docker images
         run: docker compose build web reminders frontend

@@ -1,0 +1,55 @@
+name: Publish staging release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: staging-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging-release
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+
+      - name: Authenticate to GitHub Container Registry
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare immutable image names
+        run: |
+          repository=$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')
+          echo "WEB_IMAGE=ghcr.io/$repository-web:$GITHUB_SHA" >> "$GITHUB_ENV"
+          echo "FRONTEND_IMAGE=ghcr.io/$repository-frontend:$GITHUB_SHA" >> "$GITHUB_ENV"
+
+      - name: Build backend release image
+        run: docker build --pull --label "org.opencontainers.image.revision=$GITHUB_SHA" --tag "$WEB_IMAGE" .
+
+      - name: Build frontend release image
+        run: docker build --pull --label "org.opencontainers.image.revision=$GITHUB_SHA" --tag "$FRONTEND_IMAGE" frontend
+
+      - name: Publish immutable images
+        run: |
+          docker push "$WEB_IMAGE"
+          docker push "$FRONTEND_IMAGE"
+
+      - name: Write release summary
+        run: |
+          {
+            echo "## Staging release images"
+            echo ""
+            echo "- Backend: $WEB_IMAGE"
+            echo "- Frontend: $FRONTEND_IMAGE"
+            echo ""
+            echo "Copy these exact SHA-tagged image names into the approved staging release environment."
+          } >> "$GITHUB_STEP_SUMMARY"
