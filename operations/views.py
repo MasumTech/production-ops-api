@@ -15,7 +15,6 @@ from django.db.models import (
 )
 from django.db.models.functions import Coalesce
 from django.utils import timezone
-from config.health import database_is_available, redis_is_available
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import filters, viewsets
 from rest_framework.decorators import action
@@ -23,6 +22,8 @@ from rest_framework.exceptions import NotFound, PermissionDenied, ValidationErro
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from config.health import database_is_available, redis_is_available
 
 from .access import OPERATIONAL_SUPPORT_GROUP, WorkspaceRole
 from .events import create_operational_event, event_queryset_for_user
