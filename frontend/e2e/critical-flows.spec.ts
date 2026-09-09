@@ -21,10 +21,8 @@ test("manager can open Pilot Admin after secure sign-in", async ({ page }) => {
     page.getByRole("heading", { name: "Live Floor priority board" }),
   ).toBeVisible();
 
-  const navigation = page.getByRole("navigation", {
-    name: "Operations Manager workspace",
-  });
-  await navigation.getByRole("button", { name: "Pilot Admin" }).click();
+  const workspace = page.locator('aside[aria-label="Operations Manager workspace"]');
+  await workspace.getByRole("button", { name: "Pilot Admin" }).click();
   await expect(
     page.getByRole("heading", { name: "Pilot readiness" }),
   ).toBeVisible();
@@ -33,12 +31,9 @@ test("manager can open Pilot Admin after secure sign-in", async ({ page }) => {
 test("team leader is routed to the assigned-line workspace", async ({ page }) => {
   await signIn(page, "demo.leader");
 
-  await expect(
-    page.getByRole("navigation", { name: "Team Leader workspace" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("navigation", { name: "Team Leader workspace" }).getByRole("button"),
-  ).toHaveCount(5);
+  const workspace = page.locator('aside[aria-label="Team Leader workspace"]');
+  await expect(workspace).toBeVisible();
+  await expect(workspace.getByRole("button")).toHaveCount(5);
 });
 
 test("support user is routed to the scoped response queue", async ({ page }) => {
@@ -48,6 +43,6 @@ test("support user is routed to the scoped response queue", async ({ page }) => 
     page.getByRole("heading", { name: "My response queue" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("navigation", { name: "Operational Support workspace" }),
+    page.locator('aside[aria-label="Operational Support workspace"]'),
   ).toBeVisible();
 });
