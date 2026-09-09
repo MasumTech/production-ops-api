@@ -1457,3 +1457,16 @@ class PilotStatusSerializer(serializers.Serializer):
     overdue_actions = serializers.IntegerField(min_value=0)
     unassigned_actions = serializers.IntegerField(min_value=0)
     reminder_worker = PilotWorkerStatusSerializer()
+
+
+class ObservabilityDependencySerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=("connected", "unavailable"))
+
+
+class ObservabilitySummarySerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=("ready", "degraded"))
+    generated_at = serializers.DateTimeField()
+    application = serializers.ChoiceField(choices=("healthy",))
+    database = ObservabilityDependencySerializer()
+    redis = ObservabilityDependencySerializer()
+    reminder_worker = PilotWorkerStatusSerializer()
