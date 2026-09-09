@@ -3,7 +3,6 @@ from types import SimpleNamespace
 
 from config.deployment import deployment_readiness_errors
 
-
 FIXTURE_SECRET_KEY = string.ascii_letters + string.digits
 FIXTURE_PASSWORD = string.ascii_letters[:24]
 
