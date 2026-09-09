@@ -15,6 +15,7 @@ from django.db.models import (
 )
 from django.db.models.functions import Coalesce
 from django.utils import timezone
+from config.health import database_is_available, redis_is_available
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import filters, viewsets
 from rest_framework.decorators import action
@@ -57,6 +58,7 @@ from .serializers import (
     HourlyLineUpdateFilterSerializer,
     HourlyLineUpdateSerializer,
     NotificationInboxSerializer,
+    ObservabilitySummarySerializer,
     OperationalEscalationFilterSerializer,
     OperationalEscalationResolveSerializer,
     OperationalEscalationSerializer,
@@ -240,6 +242,45 @@ class PilotStatusView(APIView):
             "reminder_worker": worker,
         }
         return Response(PilotStatusSerializer(payload).data)
+
+
+class ObservabilitySummaryView(APIView):
+    permission_classes = (IsAdminUser,)
+
+    @extend_schema(responses=ObservabilitySummarySerializer)
+    def get(self, request):
+        now = timezone.now()
+        database_ready = database_is_available()
+        redis_ready = redis_is_available()
+        heartbeat = OperationalWorkerHeartbeat.objects.filter(
+            worker_name="operational-reminders",
+        ).first()
+        worker_status = "not_started"
+        if heartbeat:
+            fresh_after = now - timedelta(minutes=3)
+            worker_status = (
+                "healthy"
+                if heartbeat.last_completed_at
+                and heartbeat.last_completed_at >= fresh_after
+                and not heartbeat.last_error
+                else "attention"
+            )
+        worker = {
+            "status": worker_status,
+            "last_started_at": heartbeat.last_started_at if heartbeat else None,
+            "last_completed_at": heartbeat.last_completed_at if heartbeat else None,
+            "last_error": heartbeat.last_error if heartbeat else "",
+            "published_count": heartbeat.published_count if heartbeat else 0,
+        }
+        payload = {
+            "status": "ready" if database_ready and redis_ready else "degraded",
+            "generated_at": now,
+            "application": "healthy",
+            "database": {"status": "connected" if database_ready else "unavailable"},
+            "redis": {"status": "connected" if redis_ready else "unavailable"},
+            "reminder_worker": worker,
+        }
+        return Response(ObservabilitySummarySerializer(payload).data)
 
 
 class SupportCompanionView(APIView):
