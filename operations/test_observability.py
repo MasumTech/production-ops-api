@@ -1,6 +1,7 @@
 import pytest
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -49,8 +50,8 @@ def test_observability_summary_is_staff_only(staff_user, regular_user):
 def test_observability_summary_reports_worker_heartbeat(staff_user):
     heartbeat = OperationalWorkerHeartbeat.objects.create(
         worker_name="operational-reminders",
-        last_started_at="2026-09-09T10:00:00Z",
-        last_completed_at="2026-09-09T10:01:00Z",
+        last_started_at=timezone.now(),
+        last_completed_at=timezone.now(),
         published_count=3,
     )
 
