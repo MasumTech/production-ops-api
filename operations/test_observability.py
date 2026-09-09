@@ -62,8 +62,7 @@ def test_observability_summary_reports_worker_heartbeat(staff_user):
 
     assert response.status_code == status.HTTP_200_OK
     assert (
-        response.data["reminder_worker"]["published_count"]
-        == heartbeat.published_count
+        response.data["reminder_worker"]["published_count"] == heartbeat.published_count
     )
     assert response.data["reminder_worker"]["status"] == "healthy"
 
