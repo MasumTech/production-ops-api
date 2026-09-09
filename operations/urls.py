@@ -7,6 +7,7 @@ from .views import (
     CurrentUserView,
     HourlyLineUpdateViewSet,
     NotificationInboxView,
+    ObservabilitySummaryView,
     NotificationReadView,
     OperationalEscalationViewSet,
     OperationalEventViewSet,
@@ -115,6 +116,11 @@ urlpatterns = [
         "pilot/status/",
         PilotStatusView.as_view(),
         name="pilot-status",
+    ),
+    path(
+        "observability/summary/",
+        ObservabilitySummaryView.as_view(),
+        name="observability-summary",
     ),
     path(
         "workspace-roles/",
