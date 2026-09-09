@@ -43,7 +43,10 @@ def test_observability_summary_is_staff_only(staff_user, regular_user):
     assert response.data["database"]["status"] == "connected"
     assert response.data["redis"]["status"] == "connected"
     assert response.data["reminder_worker"]["status"] == "not_started"
-    assert authenticated_client(regular_user).get(url).status_code == status.HTTP_403_FORBIDDEN
+    assert (
+        authenticated_client(regular_user).get(url).status_code
+        == status.HTTP_403_FORBIDDEN
+    )
 
 
 @pytest.mark.django_db
@@ -58,7 +61,10 @@ def test_observability_summary_reports_worker_heartbeat(staff_user):
     response = authenticated_client(staff_user).get(reverse("observability-summary"))
 
     assert response.status_code == status.HTTP_200_OK
-    assert response.data["reminder_worker"]["published_count"] == heartbeat.published_count
+    assert (
+        response.data["reminder_worker"]["published_count"]
+        == heartbeat.published_count
+    )
     assert response.data["reminder_worker"]["status"] == "healthy"
 
 
