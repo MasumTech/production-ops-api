@@ -6,6 +6,8 @@ from .models import (
     OperationalEscalation,
     OperationalEventReadReceipt,
     OperationalWorkerHeartbeat,
+    PilotApproval,
+    PilotFeedback,
     PilotObservation,
     PilotTrial,
     ProductionLine,
@@ -64,6 +66,39 @@ class PilotObservationAdmin(admin.ModelAdmin):
     autocomplete_fields = ("trial", "production_line", "observed_by")
     readonly_fields = ("created_at", "updated_at")
     list_select_related = ("trial", "production_line", "observed_by")
+
+
+@admin.register(PilotApproval)
+class PilotApprovalAdmin(admin.ModelAdmin):
+    list_display = (
+        "trial",
+        "reviewer_role",
+        "decision",
+        "decided_by",
+        "decided_at",
+    )
+    list_filter = ("reviewer_role", "decision")
+    search_fields = ("trial__name", "note", "decided_by__username")
+    autocomplete_fields = ("trial", "decided_by")
+    readonly_fields = ("created_at", "updated_at")
+    list_select_related = ("trial", "decided_by")
+
+
+@admin.register(PilotFeedback)
+class PilotFeedbackAdmin(admin.ModelAdmin):
+    list_display = (
+        "trial",
+        "reviewer_role",
+        "category",
+        "sentiment",
+        "created_by",
+        "created_at",
+    )
+    list_filter = ("reviewer_role", "category", "sentiment")
+    search_fields = ("trial__name", "notes", "created_by__username")
+    autocomplete_fields = ("trial", "created_by")
+    readonly_fields = ("created_at", "updated_at")
+    list_select_related = ("trial", "created_by")
 
 
 @admin.register(OperationalWorkerHeartbeat)

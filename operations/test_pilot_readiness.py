@@ -15,6 +15,7 @@ from operations.models import (
     OperationalEvent,
     OperationalEventReadReceipt,
     OperationalWorkerHeartbeat,
+    PilotApproval,
     PilotObservation,
     PilotTrial,
     ProductionLine,
@@ -271,12 +272,27 @@ def create_trial(client, line):
     )
 
 
+def approve_trial(client, trial_id):
+    for reviewer_role in PilotApproval.ReviewerRole.values:
+        response = client.post(
+            reverse("pilot-trial-approvals", args=(trial_id,)),
+            {
+                "reviewer_role": reviewer_role,
+                "decision": "approved",
+                "note": f"{reviewer_role} review completed for the dummy-data pilot.",
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+
 @pytest.mark.django_db
 def test_staff_can_start_record_and_decide_pilot_trial(manager, pilot_line):
     client = authenticated_client(manager)
     created = create_trial(client, pilot_line)
     assert created.status_code == status.HTTP_201_CREATED
     trial_id = created.data["id"]
+    approve_trial(client, trial_id)
 
     started = client.post(reverse("pilot-trial-start", args=(trial_id,)))
     observation = client.post(
@@ -321,6 +337,86 @@ def test_staff_can_start_record_and_decide_pilot_trial(manager, pilot_line):
     }
     assert decided.status_code == status.HTTP_200_OK
     assert decided.data["status"] == PilotTrial.Status.COMPLETED
+
+
+@pytest.mark.django_db
+def test_trial_start_requires_all_cross_functional_reviews(manager, pilot_line):
+    client = authenticated_client(manager)
+    created = create_trial(client, pilot_line)
+
+    blocked = client.post(reverse("pilot-trial-start", args=(created.data["id"],)))
+
+    assert blocked.status_code == status.HTTP_400_BAD_REQUEST
+    assert "approvals" in blocked.data
+
+
+@pytest.mark.django_db
+def test_feedback_and_approval_evidence_are_returned_for_staff(manager, pilot_line):
+    client = authenticated_client(manager)
+    created = create_trial(client, pilot_line)
+    trial_id = created.data["id"]
+    approve_trial(client, trial_id)
+    started = client.post(reverse("pilot-trial-start", args=(trial_id,)))
+
+    feedback = client.post(
+        reverse("pilot-feedback-list"),
+        {
+            "trial": trial_id,
+            "reviewer_role": "operations",
+            "category": "usability",
+            "sentiment": "positive",
+            "notes": "The short update flow was easy to follow.",
+        },
+        format="json",
+    )
+    evidence = client.get(reverse("pilot-trial-evidence", args=(trial_id,)))
+
+    assert started.status_code == status.HTTP_200_OK
+    assert feedback.status_code == status.HTTP_201_CREATED
+    assert evidence.data["review"]["approved_approvals"] == 4
+    assert evidence.data["review"]["ready_for_start"] is True
+    assert evidence.data["review"]["feedback_count"] == 1
+    assert len(evidence.data["approvals"]) == 4
+    assert (
+        evidence.data["feedback"][0]["notes"]
+        == "The short update flow was easy to follow."
+    )
+
+
+@pytest.mark.django_db
+def test_pilot_feedback_is_staff_only_and_immutable(manager, support_user, pilot_line):
+    manager_client = authenticated_client(manager)
+    created = create_trial(manager_client, pilot_line)
+    trial_id = created.data["id"]
+    approve_trial(manager_client, trial_id)
+    manager_client.post(reverse("pilot-trial-start", args=(trial_id,)))
+    payload = {
+        "trial": trial_id,
+        "reviewer_role": "engineering_it",
+        "category": "technical",
+        "sentiment": "neutral",
+        "notes": "Network fallback was available during the check.",
+    }
+
+    forbidden = authenticated_client(support_user).post(
+        reverse("pilot-feedback-list"),
+        payload,
+        format="json",
+    )
+    created_feedback = manager_client.post(
+        reverse("pilot-feedback-list"),
+        payload,
+        format="json",
+    )
+    immutable = manager_client.patch(
+        reverse("pilot-feedback-detail", args=(created_feedback.data["id"],)),
+        {"notes": "Changed"},
+        format="json",
+    )
+
+    assert forbidden.status_code == status.HTTP_403_FORBIDDEN
+    assert created_feedback.status_code == status.HTTP_201_CREATED
+    assert immutable.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
 
 
 @pytest.mark.django_db

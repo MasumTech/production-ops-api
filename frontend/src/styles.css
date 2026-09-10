@@ -1618,7 +1618,9 @@ td span {
 
 .pilot-trial-create,
 .pilot-evidence-card,
-.pilot-decision-card {
+.pilot-decision-card,
+.pilot-review-card,
+.pilot-feedback-card {
   border: 1px solid var(--line);
   border-radius: 1rem;
   background: var(--panel);
@@ -1676,6 +1678,56 @@ td span {
 
 .pilot-evidence-card .pilot-kpis {
   padding: 0 1.2rem;
+}
+
+.pilot-review-card,
+.pilot-feedback-card {
+  display: grid;
+  gap: 1rem;
+  margin: 0 1.2rem;
+  padding: 1rem;
+}
+
+.pilot-approval-list,
+.pilot-feedback-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.pilot-approval-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.8fr) minmax(150px, 0.6fr) minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: rgb(255 255 255 / 2%);
+}
+
+.pilot-approval-row > div,
+.pilot-feedback-list article > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.pilot-approval-row small,
+.pilot-feedback-list small {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.pilot-feedback-list article {
+  padding: 0.75rem;
+  border-left: 3px solid var(--blue);
+  border-radius: 0.6rem;
+  background: rgb(255 255 255 / 2%);
+}
+
+.pilot-feedback-list article p {
+  margin: 0.45rem 0 0;
+  color: var(--muted);
+  line-height: 1.45;
 }
 
 .pilot-evidence-card .form-card {
@@ -2209,8 +2261,14 @@ td span {
 
   .pilot-evidence-card .form-card,
   .pilot-decision-card,
+  .pilot-review-card,
+  .pilot-feedback-card,
   .pilot-evidence-card > .responsive-table {
     margin-inline: 0.85rem;
+  }
+
+  .pilot-approval-row {
+    grid-template-columns: 1fr;
   }
 
   .pilot-kpis {

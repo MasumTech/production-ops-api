@@ -1403,3 +1403,122 @@ class PilotObservation(TimeStampedModel):
 
     def __str__(self):
         return f"{self.trial.name} - {self.production_line.code} - {self.observed_on}"
+
+
+class PilotApproval(TimeStampedModel):
+    """A named pre-pilot review decision recorded by management staff."""
+
+    class ReviewerRole(models.TextChoices):
+        OPERATIONS = "operations", "Operations"
+        QUALITY_SAFETY = "quality_safety", "Quality/Safety"
+        ENGINEERING_IT = "engineering_it", "Engineering/IT"
+        PRODUCT_OWNER = "product_owner", "Product Owner"
+
+    class Decision(models.TextChoices):
+        PENDING = "pending", "Pending"
+        APPROVED = "approved", "Approved"
+        CHANGES_REQUESTED = "changes_requested", "Changes requested"
+
+    trial = models.ForeignKey(
+        PilotTrial,
+        on_delete=models.PROTECT,
+        related_name="approvals",
+    )
+    reviewer_role = models.CharField(
+        max_length=30,
+        choices=ReviewerRole.choices,
+    )
+    decision = models.CharField(
+        max_length=30,
+        choices=Decision.choices,
+        default=Decision.PENDING,
+    )
+    note = models.TextField(blank=True)
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="pilot_approval_decisions",
+        null=True,
+        blank=True,
+    )
+    decided_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("reviewer_role",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("trial", "reviewer_role"),
+                name="unique_pilot_trial_reviewer_role",
+            ),
+        ]
+        indexes = [models.Index(fields=("trial", "decision"))]
+
+    def clean(self):
+        errors = {}
+        if self.decision == self.Decision.PENDING:
+            if self.decided_by_id or self.decided_at:
+                errors["decision"] = (
+                    "A pending review cannot contain decision audit data."
+                )
+            if self.note.strip():
+                errors["note"] = "A pending review cannot contain a decision note."
+        else:
+            if not self.decided_by_id or not self.decided_at:
+                errors["decision"] = (
+                    "A recorded review requires an actor and timestamp."
+                )
+            if not self.note.strip():
+                errors["note"] = "A recorded review requires a decision note."
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self):
+        return f"{self.trial.name} - {self.get_reviewer_role_display()} ({self.get_decision_display()})"
+
+
+class PilotFeedback(TimeStampedModel):
+    """An immutable human feedback note from a bounded pilot review."""
+
+    class Category(models.TextChoices):
+        USABILITY = "usability", "Usability"
+        WORKFLOW = "workflow", "Workflow"
+        SAFETY_QUALITY = "safety_quality", "Safety/Quality"
+        TECHNICAL = "technical", "Technical"
+
+    class Sentiment(models.TextChoices):
+        POSITIVE = "positive", "Positive"
+        NEUTRAL = "neutral", "Neutral"
+        CONCERN = "concern", "Concern"
+
+    trial = models.ForeignKey(
+        PilotTrial,
+        on_delete=models.PROTECT,
+        related_name="feedback",
+    )
+    reviewer_role = models.CharField(
+        max_length=30,
+        choices=PilotApproval.ReviewerRole.choices,
+    )
+    category = models.CharField(max_length=30, choices=Category.choices)
+    sentiment = models.CharField(max_length=20, choices=Sentiment.choices)
+    notes = models.TextField()
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="pilot_feedback",
+    )
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = [models.Index(fields=("trial", "created_at"))]
+
+    def clean(self):
+        if self.trial_id and self.trial.status == PilotTrial.Status.PLANNED:
+            raise ValidationError(
+                {"trial": "Feedback can only be recorded after a trial starts."}
+            )
+        if not self.notes.strip():
+            raise ValidationError({"notes": "Feedback notes cannot be blank."})
+
+    def __str__(self):
+        return f"{self.trial.name} - {self.get_category_display()} feedback"

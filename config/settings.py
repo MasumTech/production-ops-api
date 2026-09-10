@@ -201,6 +201,11 @@ SPECTACULAR_SETTINGS = {
     ),
     "VERSION": "1.0.0",
     "ENUM_NAME_OVERRIDES": {
+        "Decision30dEnum": [
+            ("pending", "Pending"),
+            ("approved", "Approved"),
+            ("changes_requested", "Changes requested"),
+        ],
         "LineStatusEnum": [
             ("green", "Green"),
             ("amber", "Amber"),

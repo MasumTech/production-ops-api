@@ -12,6 +12,7 @@ from .views import (
     OperationalEscalationViewSet,
     OperationalEventViewSet,
     OperationsDashboardView,
+    PilotFeedbackViewSet,
     PilotObservationViewSet,
     PilotStatusView,
     PilotTrialViewSet,
@@ -91,6 +92,11 @@ router.register(
     "pilot-observations",
     PilotObservationViewSet,
     basename="pilot-observation",
+)
+router.register(
+    "pilot-feedback",
+    PilotFeedbackViewSet,
+    basename="pilot-feedback",
 )
 
 urlpatterns = [
