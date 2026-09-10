@@ -201,6 +201,11 @@ SPECTACULAR_SETTINGS = {
     ),
     "VERSION": "1.0.0",
     "ENUM_NAME_OVERRIDES": {
+        "LineStatusEnum": [
+            ("green", "Green"),
+            ("amber", "Amber"),
+            ("red", "Red"),
+        ],
         "RiskLevelEnum": [
             ("low", "Low"),
             ("medium", "Medium"),
