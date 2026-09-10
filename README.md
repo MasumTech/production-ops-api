@@ -587,6 +587,28 @@ reversing migrations:
 scripts/rollback_staging.sh
 ```
 
+## Observability, Backup and Recovery
+
+Management staff can inspect the read-only pilot health summary at
+`GET /api/observability/summary/`. It reports application, PostgreSQL, Redis,
+and reminder-worker status without exposing credentials or operational data to
+non-staff users. Use `/api/health/live/` and `/api/health/ready/` for uptime
+and dependency probes.
+
+The guarded PostgreSQL helpers support non-destructive validation and explicit
+restore confirmation:
+
+```bash
+sh scripts/backup_postgres.sh --dry-run backups/pilot.dump
+sh scripts/restore_postgres.sh --dry-run backups/pilot.dump
+CONFIRM_RESTORE=YES sh scripts/restore_postgres.sh backups/pilot.dump
+```
+
+Read [the observability and recovery runbook](docs/observability-recovery.md)
+for backup retention, RPO/RTO assumptions, verification, and external alert
+configuration. Provider credentials and production data remain outside the
+repository.
+
 ## Local Development
 
 ### 1. Create and activate a virtual environment

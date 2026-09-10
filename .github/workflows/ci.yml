@@ -140,6 +140,8 @@ jobs:
             caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
           sh -n scripts/deploy_staging.sh
           sh -n scripts/rollback_staging.sh
+          sh -n scripts/backup_postgres.sh
+          sh -n scripts/restore_postgres.sh
 
       - name: Build Docker images
         run: docker compose build web reminders frontend
