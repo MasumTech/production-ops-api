@@ -6,6 +6,8 @@ from .models import (
     OperationalEscalation,
     OperationalEventReadReceipt,
     OperationalWorkerHeartbeat,
+    PilotObservation,
+    PilotTrial,
     ProductionLine,
     ProductMaterialReadiness,
     QualityIncident,
@@ -13,6 +15,55 @@ from .models import (
     ShiftHandover,
     TeamLeaderAssignment,
 )
+
+
+@admin.register(PilotTrial)
+class PilotTrialAdmin(admin.ModelAdmin):
+    list_display = (
+        "name",
+        "start_date",
+        "end_date",
+        "status",
+        "created_by",
+        "decided_at",
+    )
+    list_filter = ("status", "start_date", "end_date")
+    search_fields = ("name", "objective", "decision_note")
+    filter_horizontal = ("selected_lines",)
+    autocomplete_fields = ("created_by", "started_by", "decided_by")
+    readonly_fields = (
+        "started_at",
+        "started_by",
+        "decided_at",
+        "decided_by",
+        "created_at",
+        "updated_at",
+    )
+
+
+@admin.register(PilotObservation)
+class PilotObservationAdmin(admin.ModelAdmin):
+    list_display = (
+        "observed_on",
+        "trial",
+        "production_line",
+        "shift_type",
+        "line_status",
+        "update_duration_seconds",
+        "missed_actions",
+        "used_paper_fallback",
+    )
+    list_filter = (
+        "line_status",
+        "shift_type",
+        "status_was_accurate",
+        "used_paper_fallback",
+        "observed_on",
+    )
+    search_fields = ("trial__name", "production_line__code", "notes")
+    autocomplete_fields = ("trial", "production_line", "observed_by")
+    readonly_fields = ("created_at", "updated_at")
+    list_select_related = ("trial", "production_line", "observed_by")
 
 
 @admin.register(OperationalWorkerHeartbeat)

@@ -43,6 +43,7 @@ describe("pilot administration", () => {
       if (path === "/workspace-roles/") return [leader] as never;
       throw new Error(`Unexpected path ${path}`);
     });
+    vi.spyOn(api, "apiList").mockResolvedValue([]);
     const postSpy = vi.spyOn(api, "postJson").mockResolvedValue({
       ...leader,
       workspace: "support",

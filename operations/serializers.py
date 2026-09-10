@@ -9,6 +9,8 @@ from .models import (
     OperationalEscalation,
     OperationalEvent,
     OperationalEventReadReceipt,
+    PilotObservation,
+    PilotTrial,
     ProductionAsset,
     ProductionLine,
     ProductMaterialReadiness,
@@ -1457,6 +1459,180 @@ class PilotStatusSerializer(serializers.Serializer):
     overdue_actions = serializers.IntegerField(min_value=0)
     unassigned_actions = serializers.IntegerField(min_value=0)
     reminder_worker = PilotWorkerStatusSerializer()
+
+
+class PilotTrialSerializer(serializers.ModelSerializer):
+    selected_line_ids = serializers.PrimaryKeyRelatedField(
+        source="selected_lines",
+        queryset=ProductionLine.objects.filter(status=ProductionLine.Status.ACTIVE),
+        many=True,
+        write_only=True,
+        required=True,
+        allow_empty=False,
+    )
+    selected_lines = ProductionLineSerializer(many=True, read_only=True)
+    created_by_username = serializers.CharField(
+        source="created_by.username",
+        read_only=True,
+    )
+    started_by_username = serializers.CharField(
+        source="started_by.username",
+        read_only=True,
+    )
+    decided_by_username = serializers.CharField(
+        source="decided_by.username",
+        read_only=True,
+    )
+
+    class Meta:
+        model = PilotTrial
+        fields = (
+            "id",
+            "name",
+            "objective",
+            "start_date",
+            "end_date",
+            "status",
+            "selected_line_ids",
+            "selected_lines",
+            "created_by",
+            "created_by_username",
+            "started_at",
+            "started_by",
+            "started_by_username",
+            "decided_at",
+            "decided_by",
+            "decided_by_username",
+            "decision_note",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "status",
+            "selected_lines",
+            "created_by",
+            "created_by_username",
+            "started_at",
+            "started_by",
+            "started_by_username",
+            "decided_at",
+            "decided_by",
+            "decided_by_username",
+            "decision_note",
+            "created_at",
+            "updated_at",
+        )
+
+    def validate(self, attrs):
+        start_date = attrs.get("start_date", getattr(self.instance, "start_date", None))
+        end_date = attrs.get("end_date", getattr(self.instance, "end_date", None))
+        if start_date and end_date and end_date < start_date:
+            raise serializers.ValidationError(
+                {"end_date": "Trial end date must be on or after its start date."}
+            )
+        if self.instance and self.instance.status != PilotTrial.Status.PLANNED:
+            changed = set(attrs) - {"objective"}
+            if changed:
+                raise serializers.ValidationError(
+                    "Only the objective can be edited after a trial starts."
+                )
+        return attrs
+
+
+class PilotDecisionSerializer(serializers.Serializer):
+    decision = serializers.ChoiceField(
+        choices=(PilotTrial.Status.COMPLETED, PilotTrial.Status.STOPPED),
+    )
+    decision_note = serializers.CharField(
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+
+class PilotObservationSerializer(serializers.ModelSerializer):
+    production_line_code = serializers.CharField(
+        source="production_line.code",
+        read_only=True,
+    )
+    observed_by_username = serializers.CharField(
+        source="observed_by.username",
+        read_only=True,
+    )
+
+    class Meta:
+        model = PilotObservation
+        fields = (
+            "id",
+            "trial",
+            "production_line",
+            "production_line_code",
+            "observed_on",
+            "shift_type",
+            "line_status",
+            "update_duration_seconds",
+            "escalation_ack_seconds",
+            "missed_actions",
+            "status_was_accurate",
+            "used_paper_fallback",
+            "notes",
+            "observed_by",
+            "observed_by_username",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "production_line_code",
+            "observed_by",
+            "observed_by_username",
+            "created_at",
+            "updated_at",
+        )
+
+    def validate(self, attrs):
+        trial = attrs.get("trial", getattr(self.instance, "trial", None))
+        production_line = attrs.get(
+            "production_line",
+            getattr(self.instance, "production_line", None),
+        )
+        observed_on = attrs.get(
+            "observed_on",
+            getattr(self.instance, "observed_on", None),
+        )
+        errors = {}
+        if trial:
+            if trial.status != PilotTrial.Status.ACTIVE:
+                errors["trial"] = (
+                    "Observations can only be recorded while a trial is active."
+                )
+            if observed_on and not (trial.start_date <= observed_on <= trial.end_date):
+                errors["observed_on"] = (
+                    "Observation date must fall within the trial window."
+                )
+            if (
+                production_line
+                and not trial.selected_lines.filter(id=production_line.id).exists()
+            ):
+                errors["production_line"] = "The line must be selected for this trial."
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
+
+
+class PilotEvidenceSummarySerializer(serializers.Serializer):
+    observation_count = serializers.IntegerField(min_value=0)
+    average_update_duration_seconds = serializers.FloatField(allow_null=True)
+    average_escalation_ack_seconds = serializers.FloatField(allow_null=True)
+    missed_actions = serializers.IntegerField(min_value=0)
+    accurate_updates = serializers.IntegerField(min_value=0)
+    paper_fallback_count = serializers.IntegerField(min_value=0)
+
+
+class PilotEvidenceSerializer(serializers.Serializer):
+    trial = PilotTrialSerializer()
+    summary = PilotEvidenceSummarySerializer()
+    observations = PilotObservationSerializer(many=True)
 
 
 class ObservabilityDependencySerializer(serializers.Serializer):
