@@ -15,6 +15,9 @@ from operations.models import (
     OperationalEvent,
     OperationalEventReadReceipt,
     OperationalWorkerHeartbeat,
+    PilotObservation,
+    PilotTrial,
+    ProductionLine,
 )
 
 
@@ -244,3 +247,117 @@ def test_reminder_scan_records_error_type(monkeypatch):
     )
     assert heartbeat.last_completed_at is None
     assert heartbeat.last_error == "RuntimeError"
+
+
+@pytest.fixture
+def pilot_line(db):
+    return ProductionLine.objects.create(
+        code="PILOT-1",
+        name="Pilot line",
+    )
+
+
+def create_trial(client, line):
+    return client.post(
+        reverse("pilot-trial-list"),
+        {
+            "name": "Four-week line control trial",
+            "objective": "Check update speed and handover clarity with dummy data.",
+            "start_date": "2026-09-10",
+            "end_date": "2026-10-07",
+            "selected_line_ids": [line.id],
+        },
+        format="json",
+    )
+
+
+@pytest.mark.django_db
+def test_staff_can_start_record_and_decide_pilot_trial(manager, pilot_line):
+    client = authenticated_client(manager)
+    created = create_trial(client, pilot_line)
+    assert created.status_code == status.HTTP_201_CREATED
+    trial_id = created.data["id"]
+
+    started = client.post(reverse("pilot-trial-start", args=(trial_id,)))
+    observation = client.post(
+        reverse("pilot-observation-list"),
+        {
+            "trial": trial_id,
+            "production_line": pilot_line.id,
+            "observed_on": "2026-09-11",
+            "shift_type": "day",
+            "line_status": "amber",
+            "update_duration_seconds": 24,
+            "escalation_ack_seconds": 48,
+            "missed_actions": 1,
+            "status_was_accurate": True,
+            "used_paper_fallback": False,
+            "notes": "Short update was clear.",
+        },
+        format="json",
+    )
+    evidence = client.get(reverse("pilot-trial-evidence", args=(trial_id,)))
+    decided = client.post(
+        reverse("pilot-trial-decide", args=(trial_id,)),
+        {
+            "decision": "completed",
+            "decision_note": "Continue after the approved review.",
+        },
+        format="json",
+    )
+
+    assert started.status_code == status.HTTP_200_OK
+    assert started.data["status"] == PilotTrial.Status.ACTIVE
+    assert observation.status_code == status.HTTP_201_CREATED
+    assert PilotObservation.objects.filter(trial_id=trial_id).count() == 1
+    assert evidence.status_code == status.HTTP_200_OK
+    assert evidence.data["summary"] == {
+        "observation_count": 1,
+        "average_update_duration_seconds": 24.0,
+        "average_escalation_ack_seconds": 48.0,
+        "missed_actions": 1,
+        "accurate_updates": 1,
+        "paper_fallback_count": 0,
+    }
+    assert decided.status_code == status.HTTP_200_OK
+    assert decided.data["status"] == PilotTrial.Status.COMPLETED
+
+
+@pytest.mark.django_db
+def test_pilot_trial_and_observations_are_staff_only(manager, team_leader, pilot_line):
+    staff_client = authenticated_client(manager)
+    created = create_trial(staff_client, pilot_line)
+    trial_id = created.data["id"]
+
+    response = authenticated_client(team_leader).get(reverse("pilot-trial-list"))
+    observation_response = authenticated_client(team_leader).get(
+        reverse("pilot-observation-list"),
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert observation_response.status_code == status.HTTP_403_FORBIDDEN
+    assert trial_id
+
+
+@pytest.mark.django_db
+def test_observation_must_use_selected_line_and_trial_window(manager, pilot_line):
+    client = authenticated_client(manager)
+    created = create_trial(client, pilot_line)
+    trial_id = created.data["id"]
+    client.post(reverse("pilot-trial-start", args=(trial_id,)))
+    other_line = ProductionLine.objects.create(code="PILOT-2", name="Other line")
+
+    response = client.post(
+        reverse("pilot-observation-list"),
+        {
+            "trial": trial_id,
+            "production_line": other_line.id,
+            "observed_on": "2026-10-08",
+            "shift_type": "night",
+            "line_status": "green",
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "production_line" in response.data or "observed_on" in response.data

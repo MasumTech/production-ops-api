@@ -99,7 +99,7 @@ The API addresses five operational control gaps:
 
 This repository is the API, Team Leader tablet, Operations Manager console, and live-event foundation for the wider **Multi-Line Production Operations Platform** and its **Multi-Line Team Leader Digital Solution** workflow. The sequence below keeps the solution useful and safe: prove the workflow first, build reliable operational data next, then add broader interfaces, live events, analytics, and only later consider AI.
 
-Roadmap completion is tracked by the published delivery phases and their defined acceptance scope; it is a feature-state measure, not an engineering-hours estimate. All twelve published phases now have a production-shaped implementation, so the published engineering roadmap is **100% complete**. The Phase 9 briefing remains deterministic and explainable; generative narrative, third-party notification providers, live infrastructure, and factory approval are still separately governed work.
+Roadmap completion is tracked by the published delivery phases and their defined acceptance scope; it is a feature-state measure, not an engineering-hours estimate. All fifteen published phases now have a production-shaped implementation, so the published engineering roadmap is **100% complete**. The Phase 9 briefing remains deterministic and explainable; generative narrative, third-party notification providers, live infrastructure, and factory approval are still separately governed work.
 
 | Phase | Scope | Main users/interface | Status |
 |---|---|---|---|
@@ -115,6 +115,9 @@ Roadmap completion is tracked by the published delivery phases and their defined
 | 10. Mobile support companion | Focused alerts, one-tap acknowledgement, related line/material context, realtime refresh, and offline-safe retry using the same API | Approved support users | **Built** |
 | 11. Pilot readiness and administration | In-app notification inbox/read evidence, reminder-worker heartbeat, pilot monitoring, audited workspace-role control, and responsive manager administration | Operations management and all authenticated workspaces | **Built** |
 | 12. Secure staging and release hardening | Fail-closed security validation, dependency readiness, private service networking, automatic HTTPS gateway, immutable release images, explicit migrations, and safe application rollback | Engineering, IT, and release approvers | **Deploy-ready foundation built; host and credentials required** |
+| 13. Browser E2E and factory UAT toolkit | Critical login/workspace browser journeys, deterministic CI fixtures, and a controlled non-production UAT checklist | Engineering, Operations, QA, and IT | **Built** |
+| 14. Observability, backup, and recovery | Staff observability summary, PostgreSQL backup/restore rehearsal, recovery runbook, and alert boundaries | Engineering, IT, and release approvers | **Built** |
+| 15. Pilot trial evidence and feedback | Bounded four-week trial records, immutable observations, deterministic evidence aggregates, and human continue/stop review | Operations management and pilot reviewers | **Built; real pilot approval still required** |
 
 ### Proposed Product Architecture
 
@@ -189,6 +192,9 @@ Roadmap completion is tracked by the published delivery phases and their defined
 - Shared user-scoped notification centre with durable read receipts, realtime refresh, and offline-safe read replay across Team Leader, Manager, and Support workspaces
 - Staff-only Pilot Admin workspace with reminder-worker freshness, notification/event health, operational backlog, and audited Support/Team Leader role changes
 - Fail-closed deployment validation, separate liveness/readiness probes, authenticated private Redis, automatic HTTPS edge, immutable GHCR images, and migration-safe deploy/rollback scripts
+- Browser E2E acceptance coverage, deterministic non-production fixtures, factory UAT checklist, and explicit paper/communication fallback boundary
+- Staff observability summary, guarded PostgreSQL backup/restore rehearsal, recovery runbook, and safe operational alert boundaries
+- Staff-only pilot trial workspace for bounded four-week evidence, update/acknowledgement timing, missed actions, status accuracy, fallback use, and human review outcome
 - JWT-authenticated WebSocket delivery with staff/participant scoping, PostgreSQL cursor replay, Redis fan-out, deduplicated overdue reminders, and bounded offline action replay
 - Staff-only daily risk briefing API and responsive Manager Console view with versioned deterministic scoring, ordered source evidence, bounded queries, completeness confidence, explicit missing-data warnings, and retry-safe failure handling
 
@@ -230,6 +236,8 @@ Roadmap completion is tracked by the published delivery phases and their defined
 | `OperationalEventReadReceipt` | User-specific notification visibility evidence | Event, user, and first-read timestamp with a unique event/user constraint |
 | `OperationalWorkerHeartbeat` | Pilot monitoring evidence for the reminder worker | Worker name, latest start/completion, safe error type, and published count |
 | `IdempotentRequest` | Safe replay receipt for queued POST requests | User-scoped UUID, request fingerprint, stored response, and completion time |
+| `PilotTrial` | Bounded dummy-data process/software pilot | Selected lines, four-week date window, lifecycle audit, and continue/stop decision note |
+| `PilotObservation` | Immutable evidence row from a trial session | Line status, update and acknowledgement timing, missed actions, accuracy, fallback use, and observer |
 
 ## API Endpoints
 
@@ -255,6 +263,11 @@ Roadmap completion is tracked by the published delivery phases and their defined
 | `GET` | `/api/notifications/` | Return up to 50 unread events already visible to the authenticated user |
 | `POST` | `/api/notifications/{event_id}/read/` | Record repeatable user-specific notification read evidence |
 | `GET` | `/api/pilot/status/` | Return staff-only pilot health, worker freshness, delivery and backlog evidence |
+| `GET, POST` | `/api/pilot-trials/` | List or create staff-only bounded pilot trials |
+| `POST` | `/api/pilot-trials/{id}/start/` | Start a planned trial with an audit timestamp and actor |
+| `POST` | `/api/pilot-trials/{id}/decide/` | Record a human completed/stopped outcome and decision note |
+| `GET` | `/api/pilot-trials/{id}/evidence/` | Return deterministic trial aggregates and immutable observation rows |
+| `GET, POST` | `/api/pilot-observations/` | List or record staff-only observations while a trial is active |
 | `GET, POST` | `/api/workspace-roles/` | List workspace roles or assign Team Leader/Operational Support access as management staff |
 | `GET, POST` | `/api/team-leader-assignments/` | List or create line assignments |
 | `GET, PUT, PATCH, DELETE` | `/api/team-leader-assignments/{id}/` | Manage one line assignment |
@@ -704,7 +717,7 @@ curl http://localhost:8000/api/production-lines/ \
 
 ## Testing and Code Quality
 
-The current suite contains **194 backend tests** and **26 frontend tests** covering models, API behaviour, authentication, workspace roles, audited role administration, notification scoping and read evidence, reminder-worker heartbeat and safe error reporting, pilot monitoring, deployment boundaries, dependency-aware health checks, permissions, filters, dashboard aggregation, demo-data seeding, release, escalation, handover, break/recovery auditing, support-companion scoping and acknowledgement, scoped event replay, JWT WebSockets, reminder deduplication, idempotent requests, deterministic risk evidence, missing-data disclosure, bounded briefing queries, risk-briefing rendering and retry behaviour, shared desktop/mobile navigation, offline outbox behaviour, safe cursor recovery, tablet rendering, role routing, priority ordering, pagination, token refresh, and validation.
+The current suite contains **200 backend tests** and **26 frontend tests** covering models, API behaviour, authentication, workspace roles, audited role administration, notification scoping and read evidence, reminder-worker heartbeat and safe error reporting, pilot monitoring, bounded trial lifecycle and evidence validation, deployment boundaries, dependency-aware health checks, permissions, filters, dashboard aggregation, demo-data seeding, release, escalation, handover, break/recovery auditing, support-companion scoping and acknowledgement, scoped event replay, JWT WebSockets, reminder deduplication, idempotent requests, deterministic risk evidence, missing-data disclosure, bounded briefing queries, risk-briefing rendering and retry behaviour, shared desktop/mobile navigation, offline outbox behaviour, safe cursor recovery, tablet rendering, role routing, priority ordering, pagination, token refresh, and validation.
 
 Run the complete test suite:
 

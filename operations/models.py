@@ -1238,3 +1238,168 @@ class IdempotentRequest(models.Model):
             ),
         ]
         indexes = [models.Index(fields=("created_at",))]
+
+
+class PilotTrial(TimeStampedModel):
+    """A bounded, dummy-data trial used to validate the operating method."""
+
+    class Status(models.TextChoices):
+        PLANNED = "planned", "Planned"
+        ACTIVE = "active", "Active"
+        COMPLETED = "completed", "Completed"
+        STOPPED = "stopped", "Stopped"
+
+    name = models.CharField(max_length=120)
+    objective = models.TextField()
+    start_date = models.DateField()
+    end_date = models.DateField()
+    selected_lines = models.ManyToManyField(
+        ProductionLine,
+        related_name="pilot_trials",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PLANNED,
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="created_pilot_trials",
+    )
+    started_at = models.DateTimeField(null=True, blank=True)
+    started_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="started_pilot_trials",
+        null=True,
+        blank=True,
+    )
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="decided_pilot_trials",
+        null=True,
+        blank=True,
+    )
+    decision_note = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=("status", "start_date")),
+            models.Index(fields=("start_date", "end_date")),
+        ]
+
+    def clean(self):
+        errors = {}
+        if self.start_date and self.end_date and self.end_date < self.start_date:
+            errors["end_date"] = "Trial end date must be on or after its start date."
+
+        if bool(self.started_at) != bool(self.started_by_id):
+            errors["started_at"] = (
+                "Trial start time and user must be recorded together."
+            )
+        if bool(self.decided_at) != bool(self.decided_by_id):
+            errors["decided_at"] = (
+                "Trial decision time and user must be recorded together."
+            )
+
+        if self.status == self.Status.PLANNED and (
+            self.started_at or self.decided_at or self.decision_note.strip()
+        ):
+            errors["status"] = "Planned trial cannot contain start or decision data."
+        elif self.status == self.Status.ACTIVE:
+            if not self.started_at:
+                errors["status"] = "Active trial requires start audit data."
+            if self.decided_at or self.decision_note.strip():
+                errors["status"] = "Active trial cannot contain decision data."
+        elif self.status in {self.Status.COMPLETED, self.Status.STOPPED}:
+            if not self.started_at:
+                errors["status"] = "A decided trial must have been started first."
+            if not self.decided_at:
+                errors["status"] = "A decided trial requires decision audit data."
+            if not self.decision_note.strip():
+                errors["decision_note"] = "A decided trial requires a decision note."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self):
+        return f"{self.name} ({self.get_status_display()})"
+
+
+class PilotObservation(TimeStampedModel):
+    """An immutable evidence row from a controlled trial session."""
+
+    class LineStatus(models.TextChoices):
+        GREEN = "green", "Green"
+        AMBER = "amber", "Amber"
+        RED = "red", "Red"
+
+    trial = models.ForeignKey(
+        PilotTrial,
+        on_delete=models.PROTECT,
+        related_name="observations",
+    )
+    production_line = models.ForeignKey(
+        ProductionLine,
+        on_delete=models.PROTECT,
+        related_name="pilot_observations",
+    )
+    observed_on = models.DateField()
+    shift_type = models.CharField(
+        max_length=10,
+        choices=Shift.ShiftType.choices,
+    )
+    line_status = models.CharField(
+        max_length=10,
+        choices=LineStatus.choices,
+    )
+    update_duration_seconds = models.PositiveIntegerField(default=0)
+    escalation_ack_seconds = models.PositiveIntegerField(null=True, blank=True)
+    missed_actions = models.PositiveIntegerField(default=0)
+    status_was_accurate = models.BooleanField(default=True)
+    used_paper_fallback = models.BooleanField(default=False)
+    notes = models.TextField(blank=True)
+    observed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="pilot_observations",
+    )
+
+    class Meta:
+        ordering = ("-observed_on", "-created_at")
+        indexes = [
+            models.Index(fields=("trial", "observed_on")),
+            models.Index(fields=("production_line", "observed_on")),
+        ]
+
+    def clean(self):
+        errors = {}
+        if self.trial_id and self.observed_on:
+            if (
+                self.observed_on < self.trial.start_date
+                or self.observed_on > self.trial.end_date
+            ):
+                errors["observed_on"] = (
+                    "Observation date must fall within the trial window."
+                )
+            if self.trial.status != PilotTrial.Status.ACTIVE:
+                errors["trial"] = (
+                    "Observations can only be recorded while a trial is active."
+                )
+            if (
+                self.production_line_id
+                and not self.trial.selected_lines.filter(
+                    id=self.production_line_id,
+                ).exists()
+            ):
+                errors["production_line"] = "The line must be selected for this trial."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self):
+        return f"{self.trial.name} - {self.production_line.code} - {self.observed_on}"

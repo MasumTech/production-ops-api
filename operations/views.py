@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.db.models import (
+    Avg,
     Case,
     Count,
     IntegerField,
@@ -34,6 +35,8 @@ from .models import (
     OperationalEvent,
     OperationalEventReadReceipt,
     OperationalWorkerHeartbeat,
+    PilotObservation,
+    PilotTrial,
     ProductionAsset,
     ProductionLine,
     ProductMaterialReadiness,
@@ -69,7 +72,11 @@ from .serializers import (
     OperationalEventSerializer,
     OperationsDashboardFilterSerializer,
     OperationsDashboardSummarySerializer,
+    PilotDecisionSerializer,
+    PilotEvidenceSerializer,
+    PilotObservationSerializer,
     PilotStatusSerializer,
+    PilotTrialSerializer,
     ProductionAssetSerializer,
     ProductionLineSerializer,
     ProductMaterialReadinessFilterSerializer,
@@ -243,6 +250,132 @@ class PilotStatusView(APIView):
             "reminder_worker": worker,
         }
         return Response(PilotStatusSerializer(payload).data)
+
+
+class PilotTrialViewSet(viewsets.ModelViewSet):
+    queryset = PilotTrial.objects.all()
+    serializer_class = PilotTrialSerializer
+    permission_classes = (IsAdminUser,)
+    http_method_names = ("get", "post", "patch", "head", "options")
+    filter_backends = (filters.OrderingFilter,)
+    ordering_fields = ("created_at", "start_date", "end_date", "status")
+    ordering = ("-created_at",)
+
+    def get_queryset(self):
+        return self.queryset.select_related(
+            "created_by",
+            "started_by",
+            "decided_by",
+        ).prefetch_related("selected_lines")
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    @extend_schema(request=None, responses=PilotTrialSerializer)
+    @action(detail=True, methods=("post",), url_path="start")
+    def start(self, request, pk=None):
+        trial = self.get_object()
+        if trial.status != PilotTrial.Status.PLANNED:
+            raise ValidationError({"status": "Only a planned trial can be started."})
+        if not trial.selected_lines.exists():
+            raise ValidationError(
+                {"selected_lines": "Select at least one line before starting."}
+            )
+        trial.status = PilotTrial.Status.ACTIVE
+        trial.started_at = timezone.now()
+        trial.started_by = request.user
+        trial.save(update_fields=("status", "started_at", "started_by", "updated_at"))
+        create_operational_event(
+            event_type="pilot_trial.started",
+            resource_type="pilot_trial",
+            resource_id=trial.id,
+            actor=request.user,
+            severity=OperationalEvent.Severity.INFO,
+            metadata={"name": trial.name, "line_count": trial.selected_lines.count()},
+        )
+        return Response(self.get_serializer(trial).data)
+
+    @extend_schema(request=PilotDecisionSerializer, responses=PilotTrialSerializer)
+    @action(detail=True, methods=("post",), url_path="decide")
+    def decide(self, request, pk=None):
+        trial = self.get_object()
+        if trial.status != PilotTrial.Status.ACTIVE:
+            raise ValidationError({"status": "Only an active trial can be decided."})
+        decision_serializer = PilotDecisionSerializer(data=request.data)
+        decision_serializer.is_valid(raise_exception=True)
+        trial.status = decision_serializer.validated_data["decision"]
+        trial.decision_note = decision_serializer.validated_data["decision_note"]
+        trial.decided_at = timezone.now()
+        trial.decided_by = request.user
+        trial.save(
+            update_fields=(
+                "status",
+                "decision_note",
+                "decided_at",
+                "decided_by",
+                "updated_at",
+            )
+        )
+        create_operational_event(
+            event_type="pilot_trial.decided",
+            resource_type="pilot_trial",
+            resource_id=trial.id,
+            actor=request.user,
+            severity=OperationalEvent.Severity.INFO,
+            metadata={"name": trial.name, "decision": trial.status},
+        )
+        return Response(self.get_serializer(trial).data)
+
+    @extend_schema(responses=PilotEvidenceSerializer)
+    @action(detail=True, methods=("get",), url_path="evidence")
+    def evidence(self, request, pk=None):
+        trial = self.get_object()
+        observations = list(
+            trial.observations.select_related("production_line", "observed_by")
+        )
+        aggregate = trial.observations.aggregate(
+            observation_count=Count("id"),
+            average_update_duration_seconds=Avg("update_duration_seconds"),
+            average_escalation_ack_seconds=Avg("escalation_ack_seconds"),
+            missed_actions=Coalesce(Sum("missed_actions"), 0),
+            accurate_updates=Count("id", filter=Q(status_was_accurate=True)),
+            paper_fallback_count=Count("id", filter=Q(used_paper_fallback=True)),
+        )
+        payload = {
+            "trial": trial,
+            "summary": aggregate,
+            "observations": observations,
+        }
+        return Response(
+            PilotEvidenceSerializer(payload, context={"request": request}).data
+        )
+
+
+class PilotObservationViewSet(viewsets.ModelViewSet):
+    queryset = PilotObservation.objects.all()
+    serializer_class = PilotObservationSerializer
+    permission_classes = (IsAdminUser,)
+    http_method_names = ("get", "post", "head", "options")
+    filter_backends = (filters.OrderingFilter,)
+    ordering_fields = ("observed_on", "created_at", "line_status")
+    ordering = ("-observed_on", "-created_at")
+
+    def get_queryset(self):
+        queryset = self.queryset.select_related(
+            "trial",
+            "production_line",
+            "observed_by",
+        )
+        trial = self.request.query_params.get("trial")
+        if trial:
+            queryset = queryset.filter(trial_id=trial)
+        observed_on = self.request.query_params.get("observed_on")
+        if observed_on:
+            queryset = queryset.filter(observed_on=observed_on)
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(observed_by=self.request.user)
 
 
 class ObservabilitySummaryView(APIView):

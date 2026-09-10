@@ -21,6 +21,15 @@ export interface UserChoice {
   display_name: string;
 }
 
+export interface ProductionLine {
+  id: number;
+  code: string;
+  name: string;
+  location: string;
+  target_units_per_hour: number;
+  status: "active" | "inactive" | "maintenance";
+}
+
 export interface UserSummary extends UserChoice {
   is_staff: boolean;
   workspace: "manager" | "team_leader" | "support";
@@ -223,6 +232,58 @@ export interface PilotStatus {
   overdue_actions: number;
   unassigned_actions: number;
   reminder_worker: PilotWorkerStatus;
+}
+
+export type PilotTrialStatus = "planned" | "active" | "completed" | "stopped";
+
+export interface PilotTrial {
+  id: number;
+  name: string;
+  objective: string;
+  start_date: string;
+  end_date: string;
+  status: PilotTrialStatus;
+  selected_lines: ProductionLine[];
+  created_by: number;
+  created_by_username: string;
+  started_at: string | null;
+  started_by: number | null;
+  started_by_username: string | null;
+  decided_at: string | null;
+  decided_by: number | null;
+  decided_by_username: string | null;
+  decision_note: string;
+}
+
+export interface PilotObservation {
+  id: number;
+  trial: number;
+  production_line: number;
+  production_line_code: string;
+  observed_on: string;
+  shift_type: "day" | "night";
+  line_status: RagStatus;
+  update_duration_seconds: number;
+  escalation_ack_seconds: number | null;
+  missed_actions: number;
+  status_was_accurate: boolean;
+  used_paper_fallback: boolean;
+  notes: string;
+  observed_by: number;
+  observed_by_username: string;
+}
+
+export interface PilotEvidence {
+  trial: PilotTrial;
+  summary: {
+    observation_count: number;
+    average_update_duration_seconds: number | null;
+    average_escalation_ack_seconds: number | null;
+    missed_actions: number;
+    accurate_updates: number;
+    paper_fallback_count: number;
+  };
+  observations: PilotObservation[];
 }
 
 export interface ProductionAsset {
