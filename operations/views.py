@@ -17,7 +17,7 @@ from django.db.models import (
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from rest_framework import filters, viewsets
+from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
@@ -35,6 +35,8 @@ from .models import (
     OperationalEvent,
     OperationalEventReadReceipt,
     OperationalWorkerHeartbeat,
+    PilotApproval,
+    PilotFeedback,
     PilotObservation,
     PilotTrial,
     ProductionAsset,
@@ -72,8 +74,11 @@ from .serializers import (
     OperationalEventSerializer,
     OperationsDashboardFilterSerializer,
     OperationsDashboardSummarySerializer,
+    PilotApprovalSerializer,
+    PilotApprovalWriteSerializer,
     PilotDecisionSerializer,
     PilotEvidenceSerializer,
+    PilotFeedbackSerializer,
     PilotObservationSerializer,
     PilotStatusSerializer,
     PilotTrialSerializer,
@@ -94,6 +99,7 @@ from .serializers import (
 )
 
 User = get_user_model()
+REQUIRED_PILOT_APPROVAL_ROLES = tuple(PilotApproval.ReviewerRole.values)
 
 
 class CurrentUserView(APIView):
@@ -269,7 +275,13 @@ class PilotTrialViewSet(viewsets.ModelViewSet):
         ).prefetch_related("selected_lines")
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        trial = serializer.save(created_by=self.request.user)
+        PilotApproval.objects.bulk_create(
+            [
+                PilotApproval(trial=trial, reviewer_role=reviewer_role)
+                for reviewer_role in REQUIRED_PILOT_APPROVAL_ROLES
+            ]
+        )
 
     @extend_schema(request=None, responses=PilotTrialSerializer)
     @action(detail=True, methods=("post",), url_path="start")
@@ -280,6 +292,28 @@ class PilotTrialViewSet(viewsets.ModelViewSet):
         if not trial.selected_lines.exists():
             raise ValidationError(
                 {"selected_lines": "Select at least one line before starting."}
+            )
+        approved_roles = set(
+            trial.approvals.filter(
+                decision=PilotApproval.Decision.APPROVED
+            ).values_list(
+                "reviewer_role",
+                flat=True,
+            )
+        )
+        missing_roles = [
+            dict(PilotApproval.ReviewerRole.choices)[role]
+            for role in REQUIRED_PILOT_APPROVAL_ROLES
+            if role not in approved_roles
+        ]
+        if missing_roles:
+            raise ValidationError(
+                {
+                    "approvals": (
+                        "Complete all required pre-pilot reviews before starting: "
+                        + ", ".join(missing_roles)
+                    )
+                }
             )
         trial.status = PilotTrial.Status.ACTIVE
         trial.started_at = timezone.now()
@@ -333,6 +367,16 @@ class PilotTrialViewSet(viewsets.ModelViewSet):
         observations = list(
             trial.observations.select_related("production_line", "observed_by")
         )
+        approvals = list(trial.approvals.select_related("decided_by"))
+        feedback = list(trial.feedback.select_related("created_by"))
+        approved_count = sum(
+            approval.decision == PilotApproval.Decision.APPROVED
+            for approval in approvals
+        )
+        changes_requested = sum(
+            approval.decision == PilotApproval.Decision.CHANGES_REQUESTED
+            for approval in approvals
+        )
         aggregate = trial.observations.aggregate(
             observation_count=Count("id"),
             average_update_duration_seconds=Avg("update_duration_seconds"),
@@ -344,10 +388,96 @@ class PilotTrialViewSet(viewsets.ModelViewSet):
         payload = {
             "trial": trial,
             "summary": aggregate,
+            "review": {
+                "required_approvals": len(REQUIRED_PILOT_APPROVAL_ROLES),
+                "approved_approvals": approved_count,
+                "pending_approvals": len(approvals)
+                - approved_count
+                - changes_requested,
+                "changes_requested": changes_requested,
+                "feedback_count": len(feedback),
+                "ready_for_start": approved_count == len(REQUIRED_PILOT_APPROVAL_ROLES),
+            },
+            "approvals": approvals,
+            "feedback": feedback,
             "observations": observations,
         }
         return Response(
             PilotEvidenceSerializer(payload, context={"request": request}).data
+        )
+
+    @extend_schema(
+        request=PilotApprovalWriteSerializer,
+        responses=PilotApprovalSerializer(many=True),
+    )
+    @action(detail=True, methods=("get", "post"), url_path="approvals")
+    def approvals(self, request, pk=None):
+        trial = self.get_object()
+        if request.method == "GET":
+            approvals = trial.approvals.select_related("decided_by")
+            return Response(PilotApprovalSerializer(approvals, many=True).data)
+        if trial.status != PilotTrial.Status.PLANNED:
+            raise ValidationError(
+                {
+                    "trial": "Pre-pilot reviews can only change while the trial is planned."
+                }
+            )
+
+        approval_input = PilotApprovalWriteSerializer(data=request.data)
+        approval_input.is_valid(raise_exception=True)
+        values = approval_input.validated_data
+        decision = values["decision"]
+        note = values.get("note", "")
+        decided_at = (
+            None if decision == PilotApproval.Decision.PENDING else timezone.now()
+        )
+        decided_by = (
+            None if decision == PilotApproval.Decision.PENDING else request.user
+        )
+        approval, created = PilotApproval.objects.get_or_create(
+            trial=trial,
+            reviewer_role=values["reviewer_role"],
+            defaults={
+                "decision": decision,
+                "note": note,
+                "decided_at": decided_at,
+                "decided_by": decided_by,
+            },
+        )
+        if not created:
+            approval.decision = decision
+            approval.note = note
+            approval.decided_at = decided_at
+            approval.decided_by = decided_by
+            approval.full_clean()
+            approval.save(
+                update_fields=(
+                    "decision",
+                    "note",
+                    "decided_at",
+                    "decided_by",
+                    "updated_at",
+                )
+            )
+        create_operational_event(
+            event_type="pilot_trial.approval.recorded",
+            resource_type="pilot_approval",
+            resource_id=approval.id,
+            actor=request.user,
+            severity=(
+                OperationalEvent.Severity.WARNING
+                if decision == PilotApproval.Decision.CHANGES_REQUESTED
+                else OperationalEvent.Severity.INFO
+            ),
+            metadata={
+                "trial_id": trial.id,
+                "reviewer_role": approval.reviewer_role,
+                "decision": approval.decision,
+            },
+        )
+        return Response(
+            PilotApprovalSerializer(approval).data,
+            status=status.HTTP_200_OK if not created else status.HTTP_201_CREATED,
         )
 
 
@@ -376,6 +506,43 @@ class PilotObservationViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(observed_by=self.request.user)
+
+
+class PilotFeedbackViewSet(viewsets.ModelViewSet):
+    queryset = PilotFeedback.objects.all()
+    serializer_class = PilotFeedbackSerializer
+    permission_classes = (IsAdminUser,)
+    http_method_names = ("get", "post", "head", "options")
+    filter_backends = (filters.OrderingFilter,)
+    ordering_fields = ("created_at", "category", "sentiment")
+    ordering = ("-created_at",)
+
+    def get_queryset(self):
+        queryset = self.queryset.select_related("trial", "created_by")
+        trial = self.request.query_params.get("trial")
+        if trial:
+            queryset = queryset.filter(trial_id=trial)
+        return queryset
+
+    def perform_create(self, serializer):
+        feedback = serializer.save(created_by=self.request.user)
+        create_operational_event(
+            event_type="pilot_trial.feedback.recorded",
+            resource_type="pilot_feedback",
+            resource_id=feedback.id,
+            actor=self.request.user,
+            severity=(
+                OperationalEvent.Severity.WARNING
+                if feedback.sentiment == PilotFeedback.Sentiment.CONCERN
+                else OperationalEvent.Severity.INFO
+            ),
+            metadata={
+                "trial_id": feedback.trial_id,
+                "reviewer_role": feedback.reviewer_role,
+                "category": feedback.category,
+                "sentiment": feedback.sentiment,
+            },
+        )
 
 
 class ObservabilitySummaryView(APIView):

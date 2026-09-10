@@ -3,7 +3,44 @@ import { useEffect, useState } from "react";
 import { ApiError, apiList, apiRequest, postJson } from "../api";
 import { ErrorBanner, StatusPill } from "../components";
 import { formatDateTime, localDate } from "../format";
-import type { PilotEvidence, PilotStatus, PilotTrial, ProductionLine, UserSummary } from "../types";
+import type {
+  PilotApproval,
+  PilotApprovalDecision,
+  PilotEvidence,
+  PilotFeedbackCategory,
+  PilotFeedbackSentiment,
+  PilotReviewerRole,
+  PilotStatus,
+  PilotTrial,
+  ProductionLine,
+  UserSummary,
+} from "../types";
+
+const reviewerRoles: Array<{ value: PilotReviewerRole; label: string }> = [
+  { value: "operations", label: "Operations" },
+  { value: "quality_safety", label: "Quality/Safety" },
+  { value: "engineering_it", label: "Engineering/IT" },
+  { value: "product_owner", label: "Product Owner" },
+];
+
+const approvalDecisions: Array<{ value: PilotApprovalDecision; label: string }> = [
+  { value: "pending", label: "Pending" },
+  { value: "approved", label: "Approved" },
+  { value: "changes_requested", label: "Changes requested" },
+];
+
+const feedbackCategories: Array<{ value: PilotFeedbackCategory; label: string }> = [
+  { value: "usability", label: "Usability" },
+  { value: "workflow", label: "Workflow" },
+  { value: "safety_quality", label: "Safety / Quality" },
+  { value: "technical", label: "Technical" },
+];
+
+const feedbackSentiments: Array<{ value: PilotFeedbackSentiment; label: string }> = [
+  { value: "positive", label: "Positive" },
+  { value: "neutral", label: "Neutral" },
+  { value: "concern", label: "Concern" },
+];
 
 function dateAfter(days: number): string {
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -19,6 +56,7 @@ export function PilotAdminPanel() {
   const [loading, setLoading] = useState(true);
   const [busyUser, setBusyUser] = useState<number | null>(null);
   const [busyTrial, setBusyTrial] = useState<number | null>(null);
+  const [busyApproval, setBusyApproval] = useState<PilotReviewerRole | null>(null);
   const [error, setError] = useState("");
   const [trialDraft, setTrialDraft] = useState({
     name: "Four-week line control pilot",
@@ -40,6 +78,15 @@ export function PilotAdminPanel() {
     notes: "",
   });
   const [decisionNote, setDecisionNote] = useState("");
+  const [approvalDrafts, setApprovalDrafts] = useState<
+    Record<PilotReviewerRole, { decision: PilotApprovalDecision; note: string }>
+  >({} as Record<PilotReviewerRole, { decision: PilotApprovalDecision; note: string }>);
+  const [feedbackDraft, setFeedbackDraft] = useState({
+    reviewer_role: "operations" as PilotReviewerRole,
+    category: "usability" as PilotFeedbackCategory,
+    sentiment: "neutral" as PilotFeedbackSentiment,
+    notes: "",
+  });
 
   const load = async () => {
     setLoading(true);
@@ -82,11 +129,34 @@ export function PilotAdminPanel() {
       production_line: current.production_line || String(selected.selected_lines[0]?.id ?? ""),
     }));
     void apiRequest<PilotEvidence>(`/pilot-trials/${selected.id}/evidence/`)
-      .then(setEvidence)
+      .then((nextEvidence) => {
+        setEvidence(nextEvidence);
+        setApprovalDrafts(
+          Object.fromEntries(
+            nextEvidence.approvals.map((approval) => [
+              approval.reviewer_role,
+              { decision: approval.decision, note: approval.note },
+            ]),
+          ) as Record<PilotReviewerRole, { decision: PilotApprovalDecision; note: string }>,
+        );
+      })
       .catch((caught) => {
         setError(caught instanceof ApiError ? caught.message : "Evidence is unavailable.");
       });
   }, [selectedTrialId, trials]);
+
+  const refreshEvidence = async (trialId: number) => {
+    const nextEvidence = await apiRequest<PilotEvidence>(`/pilot-trials/${trialId}/evidence/`);
+    setEvidence(nextEvidence);
+    setApprovalDrafts(
+      Object.fromEntries(
+        nextEvidence.approvals.map((approval) => [
+          approval.reviewer_role,
+          { decision: approval.decision, note: approval.note },
+        ]),
+      ) as Record<PilotReviewerRole, { decision: PilotApprovalDecision; note: string }>,
+    );
+  };
 
   const changeRole = async (user: UserSummary) => {
     const workspace = user.workspace === "support" ? "team_leader" : "support";
@@ -152,11 +222,55 @@ export function PilotAdminPanel() {
           : null,
         missed_actions: Number(observationDraft.missed_actions),
       });
-      const refreshed = await apiRequest<PilotEvidence>(`/pilot-trials/${selectedTrialId}/evidence/`);
-      setEvidence(refreshed);
+      await refreshEvidence(selectedTrialId);
       setObservationDraft((current) => ({ ...current, notes: "", missed_actions: "0" }));
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Could not save the observation.");
+    } finally {
+      setBusyTrial(null);
+    }
+  };
+
+  const saveApproval = async (approval: PilotApproval) => {
+    if (!selectedTrialId) return;
+    const draft = approvalDrafts[approval.reviewer_role] ?? {
+      decision: approval.decision,
+      note: approval.note,
+    };
+    setBusyApproval(approval.reviewer_role);
+    setError("");
+    try {
+      await postJson(`/pilot-trials/${selectedTrialId}/approvals/`, {
+        reviewer_role: approval.reviewer_role,
+        decision: draft.decision,
+        note: draft.note,
+      });
+      await refreshEvidence(selectedTrialId);
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "Could not save this review.");
+    } finally {
+      setBusyApproval(null);
+    }
+  };
+
+  const saveFeedback = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedTrialId || !feedbackDraft.notes.trim()) {
+      setError("Add feedback notes before saving.");
+      return;
+    }
+    setBusyTrial(selectedTrialId);
+    setError("");
+    try {
+      await postJson("/pilot-feedback/", {
+        trial: selectedTrialId,
+        ...feedbackDraft,
+        notes: feedbackDraft.notes.trim(),
+      });
+      await refreshEvidence(selectedTrialId);
+      setFeedbackDraft((current) => ({ ...current, notes: "" }));
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "Could not save this feedback.");
     } finally {
       setBusyTrial(null);
     }
@@ -321,10 +435,10 @@ export function PilotAdminPanel() {
                     <button
                       type="button"
                       className="button button--primary"
-                      disabled={busyTrial === trial.id}
+                      disabled={busyTrial === trial.id || (selectedTrialId === trial.id && evidence !== null && !evidence.review.ready_for_start)}
                       onClick={() => void startTrial(trial)}
                     >
-                      {busyTrial === trial.id ? "Starting…" : "Start trial"}
+                      {busyTrial === trial.id ? "Starting…" : selectedTrialId === trial.id && evidence && !evidence.review.ready_for_start ? "Awaiting sign-off" : "Start trial"}
                     </button>
                   ) : null}
                 </div>
@@ -350,6 +464,124 @@ export function PilotAdminPanel() {
               <article><span>Accurate updates</span><strong>{evidence.summary.accurate_updates}</strong></article>
               <article><span>Paper fallback</span><strong>{evidence.summary.paper_fallback_count}</strong></article>
             </div>
+
+            <section className="pilot-review-card" aria-labelledby="pilot-review-title">
+              <div className="manager-section-heading manager-section-heading--compact">
+                <div>
+                  <span className="eyebrow">Human review gate</span>
+                  <h4 id="pilot-review-title">Cross-functional sign-off</h4>
+                  <p>
+                    {evidence.review.approved_approvals}/{evidence.review.required_approvals} reviews approved ·
+                    {" "}{evidence.review.feedback_count} feedback notes
+                  </p>
+                </div>
+                <StatusPill value={evidence.review.ready_for_start ? "ready" : "attention"} />
+              </div>
+              <div className="pilot-approval-list">
+                {evidence.approvals.map((approval) => {
+                  const draft = approvalDrafts[approval.reviewer_role] ?? {
+                    decision: approval.decision,
+                    note: approval.note,
+                  };
+                  const roleLabel = reviewerRoles.find((role) => role.value === approval.reviewer_role)?.label ?? approval.reviewer_role;
+                  return (
+                    <form
+                      className="pilot-approval-row"
+                      key={approval.id}
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void saveApproval(approval);
+                      }}
+                    >
+                      <div>
+                        <strong>{roleLabel}</strong>
+                        <small>{approval.decided_by_username ? `Recorded by ${approval.decided_by_username}` : "Awaiting named review"}</small>
+                      </div>
+                      <select
+                        aria-label={`${roleLabel} decision`}
+                        disabled={evidence.trial.status !== "planned"}
+                        value={draft.decision}
+                        onChange={(event) => setApprovalDrafts((current) => ({
+                          ...current,
+                          [approval.reviewer_role]: {
+                            ...draft,
+                            decision: event.target.value as PilotApprovalDecision,
+                          },
+                        }))}
+                      >
+                        {approvalDecisions.map((decision) => <option key={decision.value} value={decision.value}>{decision.label}</option>)}
+                      </select>
+                      <input
+                        aria-label={`${roleLabel} note`}
+                        placeholder="Human review note"
+                        disabled={evidence.trial.status !== "planned"}
+                        value={draft.note}
+                        onChange={(event) => setApprovalDrafts((current) => ({
+                          ...current,
+                          [approval.reviewer_role]: { ...draft, note: event.target.value },
+                        }))}
+                      />
+                      <button className="button button--ghost" disabled={evidence.trial.status !== "planned" || busyApproval === approval.reviewer_role}>
+                        {busyApproval === approval.reviewer_role ? "Saving…" : "Save review"}
+                      </button>
+                    </form>
+                  );
+                })}
+              </div>
+              {!evidence.review.ready_for_start ? (
+                <p className="pilot-boundary">The trial cannot start until all four named reviews are approved.</p>
+              ) : <p className="pilot-boundary">All required reviews are recorded. The human pilot owner still controls the decision.</p>}
+            </section>
+
+            {evidence.trial.status !== "planned" ? (
+              <section className="pilot-feedback-card" aria-labelledby="pilot-feedback-title">
+                <div className="manager-section-heading manager-section-heading--compact">
+                  <div>
+                    <span className="eyebrow">Human feedback</span>
+                    <h4 id="pilot-feedback-title">Record a pilot note</h4>
+                  </div>
+                </div>
+                <form className="form-card" onSubmit={(event) => void saveFeedback(event)}>
+                  <div className="form-grid">
+                    <label>
+                      Reviewer function
+                      <select value={feedbackDraft.reviewer_role} onChange={(event) => setFeedbackDraft({ ...feedbackDraft, reviewer_role: event.target.value as PilotReviewerRole })}>
+                        {reviewerRoles.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      Category
+                      <select value={feedbackDraft.category} onChange={(event) => setFeedbackDraft({ ...feedbackDraft, category: event.target.value as PilotFeedbackCategory })}>
+                        {feedbackCategories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      Sentiment
+                      <select value={feedbackDraft.sentiment} onChange={(event) => setFeedbackDraft({ ...feedbackDraft, sentiment: event.target.value as PilotFeedbackSentiment })}>
+                        {feedbackSentiments.map((sentiment) => <option key={sentiment.value} value={sentiment.value}>{sentiment.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="span-2">
+                      Notes
+                      <textarea value={feedbackDraft.notes} onChange={(event) => setFeedbackDraft({ ...feedbackDraft, notes: event.target.value })} placeholder="Record what the reviewer observed or recommends." required />
+                    </label>
+                    <div className="form-actions span-2">
+                      <button className="button button--primary" disabled={busyTrial === selectedTrialId}>Save feedback</button>
+                    </div>
+                  </div>
+                </form>
+                {evidence.feedback.length ? (
+                  <div className="pilot-feedback-list">
+                    {evidence.feedback.map((item) => (
+                      <article key={item.id}>
+                        <div><strong>{reviewerRoles.find((role) => role.value === item.reviewer_role)?.label ?? item.reviewer_role}</strong><small>{item.category} · {item.sentiment}</small></div>
+                        <p>{item.notes}</p>
+                      </article>
+                    ))}
+                  </div>
+                ) : <p className="pilot-boundary">No feedback notes recorded yet.</p>}
+              </section>
+            ) : null}
 
             {evidence.trial.status === "active" ? (
               <>

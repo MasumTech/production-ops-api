@@ -283,7 +283,55 @@ export interface PilotEvidence {
     accurate_updates: number;
     paper_fallback_count: number;
   };
+  review: PilotReviewSummary;
+  approvals: PilotApproval[];
+  feedback: PilotFeedback[];
   observations: PilotObservation[];
+}
+
+export type PilotReviewerRole =
+  | "operations"
+  | "quality_safety"
+  | "engineering_it"
+  | "product_owner";
+export type PilotApprovalDecision = "pending" | "approved" | "changes_requested";
+
+export interface PilotApproval {
+  id: number;
+  trial: number;
+  reviewer_role: PilotReviewerRole;
+  decision: PilotApprovalDecision;
+  note: string;
+  decided_by: number | null;
+  decided_by_username: string | null;
+  decided_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type PilotFeedbackCategory = "usability" | "workflow" | "safety_quality" | "technical";
+export type PilotFeedbackSentiment = "positive" | "neutral" | "concern";
+
+export interface PilotFeedback {
+  id: number;
+  trial: number;
+  reviewer_role: PilotReviewerRole;
+  category: PilotFeedbackCategory;
+  sentiment: PilotFeedbackSentiment;
+  notes: string;
+  created_by: number;
+  created_by_username: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PilotReviewSummary {
+  required_approvals: number;
+  approved_approvals: number;
+  pending_approvals: number;
+  changes_requested: number;
+  feedback_count: number;
+  ready_for_start: boolean;
 }
 
 export interface ProductionAsset {

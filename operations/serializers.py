@@ -9,6 +9,8 @@ from .models import (
     OperationalEscalation,
     OperationalEvent,
     OperationalEventReadReceipt,
+    PilotApproval,
+    PilotFeedback,
     PilotObservation,
     PilotTrial,
     ProductionAsset,
@@ -1629,9 +1631,114 @@ class PilotEvidenceSummarySerializer(serializers.Serializer):
     paper_fallback_count = serializers.IntegerField(min_value=0)
 
 
+class PilotApprovalSerializer(serializers.ModelSerializer):
+    decided_by_username = serializers.CharField(
+        source="decided_by.username",
+        read_only=True,
+    )
+
+    class Meta:
+        model = PilotApproval
+        fields = (
+            "id",
+            "trial",
+            "reviewer_role",
+            "decision",
+            "note",
+            "decided_by",
+            "decided_by_username",
+            "decided_at",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "trial",
+            "decided_by",
+            "decided_by_username",
+            "decided_at",
+            "created_at",
+            "updated_at",
+        )
+
+
+class PilotApprovalWriteSerializer(serializers.Serializer):
+    reviewer_role = serializers.ChoiceField(choices=PilotApproval.ReviewerRole.choices)
+    decision = serializers.ChoiceField(choices=PilotApproval.Decision.choices)
+    note = serializers.CharField(required=False, allow_blank=True, trim_whitespace=True)
+
+    def validate(self, attrs):
+        if attrs["decision"] != PilotApproval.Decision.PENDING and not attrs.get(
+            "note", ""
+        ):
+            raise serializers.ValidationError(
+                {"note": "A recorded review requires a decision note."}
+            )
+        if attrs["decision"] == PilotApproval.Decision.PENDING and attrs.get(
+            "note", ""
+        ):
+            raise serializers.ValidationError(
+                {"note": "A pending review cannot contain a decision note."}
+            )
+        return attrs
+
+
+class PilotFeedbackSerializer(serializers.ModelSerializer):
+    created_by_username = serializers.CharField(
+        source="created_by.username",
+        read_only=True,
+    )
+
+    class Meta:
+        model = PilotFeedback
+        fields = (
+            "id",
+            "trial",
+            "reviewer_role",
+            "category",
+            "sentiment",
+            "notes",
+            "created_by",
+            "created_by_username",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "created_by",
+            "created_by_username",
+            "created_at",
+            "updated_at",
+        )
+
+    def validate_notes(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Feedback notes cannot be blank.")
+        return value.strip()
+
+    def validate_trial(self, value):
+        if value.status == PilotTrial.Status.PLANNED:
+            raise serializers.ValidationError(
+                "Feedback can only be recorded after a trial starts."
+            )
+        return value
+
+
+class PilotReviewSummarySerializer(serializers.Serializer):
+    required_approvals = serializers.IntegerField(min_value=0)
+    approved_approvals = serializers.IntegerField(min_value=0)
+    pending_approvals = serializers.IntegerField(min_value=0)
+    changes_requested = serializers.IntegerField(min_value=0)
+    feedback_count = serializers.IntegerField(min_value=0)
+    ready_for_start = serializers.BooleanField()
+
+
 class PilotEvidenceSerializer(serializers.Serializer):
     trial = PilotTrialSerializer()
     summary = PilotEvidenceSummarySerializer()
+    review = PilotReviewSummarySerializer()
+    approvals = PilotApprovalSerializer(many=True)
+    feedback = PilotFeedbackSerializer(many=True)
     observations = PilotObservationSerializer(many=True)
 
 
