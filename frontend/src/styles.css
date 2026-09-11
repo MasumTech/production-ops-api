@@ -957,6 +957,35 @@ td span {
   gap: 0.75rem;
 }
 
+.manager-overview-board,
+.manager-overview-risk {
+  margin-bottom: 2rem;
+  padding: 1.2rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 6px 20px rgb(23 36 58 / 5%);
+}
+
+.manager-leader-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.8rem; }
+.leader-card { overflow: hidden; border: 1px solid #d9e7f5; border-radius: 0.8rem; }
+.leader-card__header { display: flex; align-items: center; justify-content: space-between; padding: 0.9rem; }
+.leader-card__header > div { display: flex; align-items: center; gap: 0.6rem; }
+.leader-card__header strong, .leader-card__header span { display: block; }
+.leader-card__header > div > div span { color: var(--muted); font-size: 0.75rem; }
+.leader-card__icon { color: #2281c5; font-size: 1.3rem; }
+.leader-card__columns, .leader-line { display: grid; grid-template-columns: 0.75fr 1.8fr 0.55fr 0.55fr; gap: 0.35rem; align-items: center; padding: 0.6rem 0.8rem; }
+.leader-card__columns { background: #f1f6fb; color: var(--muted); font-size: 0.68rem; font-weight: 750; }
+.leader-line { border-top: 1px solid #edf1f5; font-size: 0.78rem; }
+.leader-line > span:nth-child(2) { color: var(--muted); }
+.status-dot { width: 0.72rem; height: 0.72rem; border-radius: 50%; background: #aeb9c5; }
+.status-dot--green { background: #29a86b; }.status-dot--amber { background: #eca513; }.status-dot--red { background: #df3c45; }
+.manager-overview-risk { background: linear-gradient(135deg, #f8fbff, #eef7ff); }
+.manager-overview-risk p { margin: -0.45rem 0 1rem; color: var(--muted); }
+.overview-risk-items { display: flex; flex-wrap: wrap; gap: 0.7rem; }
+.overview-risk-items span { padding: 0.65rem 0.8rem; border-radius: 0.6rem; background: #fff; color: var(--muted); font-size: 0.8rem; }
+.overview-risk-items strong { color: var(--ink); margin-right: 0.25rem; }
+
 .hierarchy-node {
   padding: 0.85rem;
   border: 1px solid #d9e7f5;
@@ -2673,6 +2702,11 @@ td span {
   .workspace {
     padding-inline: 1.5rem;
   }
+}
+
+@media (max-width: 900px) {
+  .manager-leader-grid { grid-template-columns: 1fr; }
+  .leader-card__columns, .leader-line { grid-template-columns: 0.8fr 1.7fr 0.5fr 0.6fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
