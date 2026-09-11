@@ -3,8 +3,10 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     ActiveUserListView,
+    BreakOpportunityViewSet,
     BreakRecoveryViewSet,
     CurrentUserView,
+    DailyPlanBlockViewSet,
     HourlyLineUpdateViewSet,
     NotificationInboxView,
     NotificationReadView,
@@ -77,6 +79,16 @@ router.register(
     "shift-handovers",
     ShiftHandoverViewSet,
     basename="shift-handover",
+)
+router.register(
+    "daily-plan-blocks",
+    DailyPlanBlockViewSet,
+    basename="daily-plan-block",
+)
+router.register(
+    "break-opportunities",
+    BreakOpportunityViewSet,
+    basename="break-opportunity",
 )
 router.register(
     "break-recoveries",

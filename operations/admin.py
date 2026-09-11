@@ -1,7 +1,9 @@
 from django.contrib import admin
 
 from .models import (
+    BreakOpportunity,
     BreakRecovery,
+    DailyPlanBlock,
     HourlyLineUpdate,
     OperationalEscalation,
     OperationalEventReadReceipt,
@@ -17,6 +19,68 @@ from .models import (
     ShiftHandover,
     TeamLeaderAssignment,
 )
+
+
+@admin.register(DailyPlanBlock)
+class DailyPlanBlockAdmin(admin.ModelAdmin):
+    list_display = (
+        "planned_start_at",
+        "production_line",
+        "block_type",
+        "product_name",
+        "target_units_per_hour",
+        "break_number",
+    )
+    list_filter = ("block_type", "assignment__date", "assignment__production_line")
+    search_fields = (
+        "assignment__production_line__code",
+        "product_code",
+        "product_name",
+    )
+    autocomplete_fields = ("assignment", "created_by")
+    readonly_fields = ("created_at", "updated_at")
+
+    @admin.display(ordering="assignment__production_line__code", description="Line")
+    def production_line(self, obj):
+        return obj.assignment.production_line
+
+
+@admin.register(BreakOpportunity)
+class BreakOpportunityAdmin(admin.ModelAdmin):
+    list_display = (
+        "fault_at",
+        "production_line",
+        "break_block",
+        "status",
+        "run_resumed_at",
+    )
+    list_filter = ("status", "assignment__date", "assignment__production_line")
+    search_fields = (
+        "assignment__production_line__code",
+        "source_update__issue_summary",
+    )
+    autocomplete_fields = (
+        "assignment",
+        "break_block",
+        "source_update",
+        "confirmed_by",
+        "declined_by",
+    )
+    readonly_fields = (
+        "confirmed_at",
+        "confirmed_by",
+        "returned_at",
+        "checks_completed_at",
+        "run_resumed_at",
+        "declined_at",
+        "declined_by",
+        "created_at",
+        "updated_at",
+    )
+
+    @admin.display(ordering="assignment__production_line__code", description="Line")
+    def production_line(self, obj):
+        return obj.assignment.production_line
 
 
 @admin.register(PilotTrial)

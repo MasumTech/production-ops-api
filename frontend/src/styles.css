@@ -1937,6 +1937,202 @@ td span {
   gap: 0.75rem;
 }
 
+.daily-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.daily-plan-card {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--panel);
+  box-shadow: 0 8px 24px rgb(23 36 58 / 7%);
+}
+
+.daily-plan-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.2rem;
+  border-bottom: 1px solid var(--line);
+  background: #f8fbff;
+}
+
+.daily-plan-card__summary {
+  min-width: 92px;
+  text-align: right;
+}
+
+.daily-plan-card__summary strong,
+.daily-plan-card__summary span {
+  display: block;
+}
+
+.daily-plan-card__summary strong {
+  color: var(--accent);
+  font-size: 1.65rem;
+  letter-spacing: -0.04em;
+}
+
+.daily-plan-card__summary span,
+.daily-plan-card__footer {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.daily-plan-timeline {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.daily-plan-block {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.9rem;
+  min-height: 76px;
+  padding: 0.85rem 1.2rem;
+  border-bottom: 1px solid #e7edf4;
+}
+
+.daily-plan-block time {
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 850;
+}
+
+.daily-plan-block strong,
+.daily-plan-block span {
+  display: block;
+}
+
+.daily-plan-block div > span,
+.daily-plan-block__duration {
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.daily-plan-block--break {
+  border-block-color: #cfe0f3;
+  background: #eaf3fe;
+}
+
+.daily-plan-block--break strong {
+  color: #174f90;
+}
+
+.daily-plan-card__footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem 1.2rem;
+  background: #f8fbff;
+}
+
+.workflow-boundary {
+  margin: 1rem 0 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
+  color: var(--muted);
+  background: #ffffff;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.break-policy-banner {
+  display: grid;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid #cfe0f3;
+  border-radius: 0.9rem;
+  color: #174f90;
+  background: #eaf3fe;
+}
+
+.break-policy-banner span,
+.break-suggestion-copy,
+.recovery-note {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.break-suggestion-copy {
+  margin: 0.45rem 0 0;
+}
+
+.recovery-timeline {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 1.35rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recovery-timeline li {
+  position: relative;
+  display: grid;
+  gap: 0.3rem;
+  padding-right: 0.75rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.recovery-timeline li::before {
+  position: absolute;
+  top: 7px;
+  right: 0;
+  left: 13px;
+  height: 2px;
+  background: var(--line);
+  content: "";
+}
+
+.recovery-timeline li:last-child::before {
+  display: none;
+}
+
+.recovery-timeline__marker {
+  z-index: 1;
+  width: 15px;
+  height: 15px;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  background: #a9b7c7;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.recovery-timeline li.is-complete .recovery-timeline__marker {
+  background: var(--green);
+}
+
+.recovery-timeline li.is-complete::before {
+  background: #a9dcc9;
+}
+
+.recovery-timeline strong {
+  color: var(--ink);
+  font-size: 0.76rem;
+}
+
+.recovery-note {
+  padding: 0.75rem 0.85rem;
+  border-radius: 0.7rem;
+  background: #f5f8fc;
+}
+
+.break-action-note {
+  display: block;
+  max-width: 620px;
+}
+
 @media (max-width: 1320px) {
   .pilot-kpis {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1948,6 +2144,10 @@ td span {
 }
 
 @media (max-width: 900px) {
+  .daily-plan-grid {
+    grid-template-columns: 1fr;
+  }
+
   .app-shell {
     grid-template-areas:
       "topbar"
@@ -2223,6 +2423,40 @@ td span {
   .workflow-card__header {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .daily-plan-block {
+    grid-template-columns: 62px minmax(0, 1fr);
+    padding-inline: 0.9rem;
+  }
+
+  .daily-plan-block__duration {
+    display: none;
+  }
+
+  .daily-plan-card__footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .recovery-timeline {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .recovery-timeline li {
+    grid-template-columns: 22px 72px minmax(0, 1fr);
+    align-items: center;
+    min-height: 50px;
+    padding: 0;
+  }
+
+  .recovery-timeline li::before {
+    top: 25px;
+    bottom: -25px;
+    left: 7px;
+    width: 2px;
+    height: auto;
   }
 
   .manager-topbar .button:first-of-type {

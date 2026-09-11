@@ -1,4 +1,4 @@
-from datetime import time, timedelta
+from datetime import datetime, time, timedelta
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -10,7 +10,9 @@ from rest_framework.test import APIClient
 
 from operations.access import OPERATIONAL_SUPPORT_GROUP
 from operations.models import (
+    BreakOpportunity,
     BreakRecovery,
+    DailyPlanBlock,
     HourlyLineUpdate,
     OperationalEscalation,
     ProductionLine,
@@ -22,6 +24,10 @@ from operations.models import (
 )
 
 TEST_PASSWORD = "secure-test-password"
+
+
+def at_assignment_time(assignment, hour, minute=0):
+    return timezone.make_aware(datetime.combine(assignment.date, time(hour, minute)))
 
 
 @pytest.fixture
@@ -2283,6 +2289,189 @@ def test_handover_records_cannot_be_directly_patched(
     )
 
     assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+
+
+@pytest.fixture
+def api_daily_break_block(api_team_leader_assignment, api_user):
+    return DailyPlanBlock.objects.create(
+        assignment=api_team_leader_assignment,
+        sequence_number=2,
+        block_type=DailyPlanBlock.BlockType.BREAK,
+        break_number=1,
+        planned_start_at=at_assignment_time(api_team_leader_assignment, 9),
+        planned_end_at=at_assignment_time(api_team_leader_assignment, 9, 40),
+        created_by=api_user,
+    )
+
+
+@pytest.fixture
+def api_break_opportunity(
+    api_team_leader_assignment,
+    api_daily_break_block,
+    api_user,
+):
+    fault_at = timezone.now() - timedelta(hours=1)
+    update = HourlyLineUpdate.objects.create(
+        assignment=api_team_leader_assignment,
+        status=HourlyLineUpdate.Status.RED,
+        issue_summary="Filler stopped",
+        requires_follow_up=True,
+        recorded_at=fault_at,
+        next_update_due_at=fault_at + timedelta(hours=1),
+        recorded_by=api_user,
+    )
+    return BreakOpportunity.objects.create(
+        assignment=api_team_leader_assignment,
+        break_block=api_daily_break_block,
+        source_update=update,
+        fault_at=fault_at,
+        suggested_start_at=fault_at,
+        expected_return_at=fault_at + timedelta(minutes=40),
+    )
+
+
+@pytest.mark.django_db
+def test_team_leader_can_read_only_own_daily_plan(
+    authenticated_client,
+    api_daily_break_block,
+    other_team_leader_assignment,
+    other_user,
+):
+    DailyPlanBlock.objects.create(
+        assignment=other_team_leader_assignment,
+        sequence_number=1,
+        block_type=DailyPlanBlock.BlockType.PRODUCTION,
+        planned_start_at=at_assignment_time(other_team_leader_assignment, 7),
+        planned_end_at=at_assignment_time(other_team_leader_assignment, 9),
+        product_code="OTHER-01",
+        product_name="Other product",
+        target_units_per_hour=20,
+        created_by=other_user,
+    )
+
+    response = authenticated_client.get(reverse("daily-plan-block-list"))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["count"] == 1
+    assert response.data["results"][0]["id"] == api_daily_break_block.id
+
+
+@pytest.mark.django_db
+def test_only_management_staff_can_create_daily_plan(
+    authenticated_client,
+    api_team_leader_assignment,
+):
+    response = authenticated_client.post(
+        reverse("daily-plan-block-list"),
+        {
+            "assignment": api_team_leader_assignment.id,
+            "sequence_number": 1,
+            "block_type": DailyPlanBlock.BlockType.PRODUCTION,
+            "planned_start_at": at_assignment_time(
+                api_team_leader_assignment, 7
+            ).isoformat(),
+            "planned_end_at": at_assignment_time(
+                api_team_leader_assignment, 9
+            ).isoformat(),
+            "product_code": "SPC-01",
+            "product_name": "Salt & Pepper Chicken",
+            "target_units_per_hour": 24,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_staff_can_create_approved_daily_plan_block(
+    staff_client,
+    staff_user,
+    api_team_leader_assignment,
+):
+    response = staff_client.post(
+        reverse("daily-plan-block-list"),
+        {
+            "assignment": api_team_leader_assignment.id,
+            "sequence_number": 1,
+            "block_type": DailyPlanBlock.BlockType.PRODUCTION,
+            "planned_start_at": at_assignment_time(
+                api_team_leader_assignment, 7
+            ).isoformat(),
+            "planned_end_at": at_assignment_time(
+                api_team_leader_assignment, 9
+            ).isoformat(),
+            "product_code": "SPC-01",
+            "product_name": "Salt & Pepper Chicken",
+            "target_units_per_hour": 24,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["planned_units"] == 48
+    assert response.data["created_by"] == staff_user.id
+
+
+@pytest.mark.django_db
+def test_break_opportunity_confirmation_preserves_full_break(
+    authenticated_client,
+    api_break_opportunity,
+):
+    response = authenticated_client.post(
+        reverse("break-opportunity-confirm", args=(api_break_opportunity.id,))
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["status"] == BreakOpportunity.Status.CONFIRMED
+    confirmed_at = datetime.fromisoformat(response.data["confirmed_at"])
+    expected_return_at = datetime.fromisoformat(response.data["expected_return_at"])
+    assert expected_return_at - confirmed_at == timedelta(minutes=40)
+
+    early_return = authenticated_client.post(
+        reverse("break-opportunity-record-return", args=(api_break_opportunity.id,))
+    )
+    assert early_return.status_code == status.HTTP_400_BAD_REQUEST
+    assert "40-minute break" in early_return.data["status"]
+
+
+@pytest.mark.django_db
+def test_team_leader_can_complete_break_recovery_timeline(
+    authenticated_client,
+    api_break_opportunity,
+    api_user,
+):
+    confirmed_at = timezone.now() - timedelta(minutes=41)
+    api_break_opportunity.status = BreakOpportunity.Status.CONFIRMED
+    api_break_opportunity.confirmed_at = confirmed_at
+    api_break_opportunity.confirmed_by = api_user
+    api_break_opportunity.expected_return_at = confirmed_at + timedelta(minutes=40)
+    api_break_opportunity.save(
+        update_fields=(
+            "status",
+            "confirmed_at",
+            "confirmed_by",
+            "expected_return_at",
+        )
+    )
+
+    returned = authenticated_client.post(
+        reverse("break-opportunity-record-return", args=(api_break_opportunity.id,))
+    )
+    checks = authenticated_client.post(
+        reverse("break-opportunity-complete-checks", args=(api_break_opportunity.id,))
+    )
+    resumed = authenticated_client.post(
+        reverse("break-opportunity-resume", args=(api_break_opportunity.id,)),
+        {"recovery_notes": "Safety, quality and technical checks passed."},
+        format="json",
+    )
+
+    assert returned.status_code == status.HTTP_200_OK
+    assert checks.status_code == status.HTTP_200_OK
+    assert resumed.status_code == status.HTTP_200_OK
+    assert resumed.data["status"] == BreakOpportunity.Status.RECOVERED
+    assert resumed.data["run_resumed_at"] is not None
 
 
 @pytest.fixture

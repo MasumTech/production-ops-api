@@ -9,7 +9,9 @@ from django.test import override_settings
 
 from operations.access import OPERATIONAL_SUPPORT_GROUP
 from operations.models import (
+    BreakOpportunity,
     BreakRecovery,
+    DailyPlanBlock,
     HourlyLineUpdate,
     OperationalEscalation,
     ProductionAsset,
@@ -45,6 +47,7 @@ def demo_counts():
         "assets": ProductionAsset.objects.filter(**line_filter).count(),
         "assignments": TeamLeaderAssignment.objects.filter(**line_filter).count(),
         "shifts": Shift.objects.filter(**line_filter).count(),
+        "plan_blocks": DailyPlanBlock.objects.filter(**assignment_filter).count(),
         "updates": HourlyLineUpdate.objects.filter(**assignment_filter).count(),
         "materials": ProductMaterialReadiness.objects.filter(
             **assignment_filter
@@ -53,6 +56,9 @@ def demo_counts():
             **assignment_filter
         ).count(),
         "breaks": BreakRecovery.objects.filter(**assignment_filter).count(),
+        "break_opportunities": BreakOpportunity.objects.filter(
+            **assignment_filter
+        ).count(),
         "handovers": ShiftHandover.objects.filter(
             outgoing_assignment__production_line__code__startswith="DEMO-"
         ).count(),
@@ -77,10 +83,12 @@ def test_seed_demo_data_creates_complete_dataset():
         "assets": 3,
         "assignments": 6,
         "shifts": 3,
-        "updates": 2,
+        "plan_blocks": 10,
+        "updates": 3,
         "materials": 3,
         "escalations": 5,
         "breaks": 2,
+        "break_opportunities": 2,
         "handovers": 1,
         "incidents": 1,
     }
@@ -95,6 +103,19 @@ def test_seed_demo_data_creates_complete_dataset():
         production_line__code="DEMO-LINE-01",
         date=date(2026, 9, 2),
         shift_type=Shift.ShiftType.DAY,
+    ).exists()
+    assert (
+        DailyPlanBlock.objects.filter(
+            assignment__production_line__code="DEMO-LINE-01",
+            block_type=DailyPlanBlock.BlockType.BREAK,
+        ).count()
+        == 2
+    )
+    assert BreakOpportunity.objects.filter(
+        status=BreakOpportunity.Status.RECOVERED
+    ).exists()
+    assert BreakOpportunity.objects.filter(
+        status=BreakOpportunity.Status.SUGGESTED
     ).exists()
 
     assert "Demo dataset is ready." in output

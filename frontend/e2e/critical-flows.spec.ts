@@ -34,7 +34,11 @@ test("team leader is routed to the assigned-line workspace", async ({ page }) =>
 
   const workspace = page.locator('aside[aria-label="Team Leader workspace"]');
   await expect(workspace).toBeVisible();
-  await expect(workspace.getByRole("button")).toHaveCount(4);
+  await expect(workspace.getByRole("button")).toHaveCount(5);
+  await workspace.getByRole("button", { name: "Daily Plan" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Daily production plan" }),
+  ).toBeVisible();
 });
 
 test("support user is routed to the scoped response queue", async ({ page }) => {

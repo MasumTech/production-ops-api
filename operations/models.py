@@ -1,3 +1,5 @@
+from datetime import time, timedelta
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
@@ -374,6 +376,303 @@ class HourlyLineUpdate(TimeStampedModel):
             f"{self.get_status_display()} - "
             f"{self.recorded_at:%Y-%m-%d %H:%M}"
         )
+
+
+class DailyPlanBlock(TimeStampedModel):
+    class BlockType(models.TextChoices):
+        PRODUCTION = "production", "Production"
+        BREAK = "break", "Break"
+
+    assignment = models.ForeignKey(
+        TeamLeaderAssignment,
+        on_delete=models.PROTECT,
+        related_name="daily_plan_blocks",
+    )
+    sequence_number = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    block_type = models.CharField(max_length=12, choices=BlockType.choices)
+    planned_start_at = models.DateTimeField()
+    planned_end_at = models.DateTimeField()
+    product_code = models.CharField(max_length=50, blank=True)
+    product_name = models.CharField(max_length=150, blank=True)
+    target_units_per_hour = models.PositiveIntegerField(null=True, blank=True)
+    break_number = models.PositiveSmallIntegerField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="created_daily_plan_blocks",
+    )
+
+    class Meta:
+        ordering = ("assignment__date", "planned_start_at", "sequence_number")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("assignment", "sequence_number"),
+                name="unique_assignment_daily_plan_sequence",
+            ),
+            models.UniqueConstraint(
+                fields=("assignment", "break_number"),
+                condition=models.Q(block_type="break"),
+                name="unique_assignment_break_number",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=("assignment", "planned_start_at")),
+            models.Index(fields=("block_type", "planned_start_at")),
+        ]
+
+    @property
+    def planned_units(self):
+        if self.block_type != self.BlockType.PRODUCTION:
+            return 0
+        duration_minutes = (
+            self.planned_end_at - self.planned_start_at
+        ).total_seconds() / 60
+        return round(duration_minutes * (self.target_units_per_hour or 0) / 60)
+
+    def clean(self):
+        errors = {}
+
+        if self.planned_start_at and self.planned_end_at:
+            if self.planned_end_at <= self.planned_start_at:
+                errors["planned_end_at"] = "Plan end must be later than plan start."
+            elif self.assignment_id:
+                start = timezone.localtime(self.planned_start_at)
+                end = timezone.localtime(self.planned_end_at)
+                if (
+                    start.date() != self.assignment.date
+                    or end.date() != self.assignment.date
+                ):
+                    errors["planned_start_at"] = (
+                        "Plan blocks must stay on the assignment date."
+                    )
+                if self.assignment.shift_type == Shift.ShiftType.DAY and not (
+                    start.time().replace(tzinfo=None) >= time(7)
+                    and end.time().replace(tzinfo=None) <= time(18)
+                ):
+                    errors["planned_start_at"] = (
+                        "Day plan blocks must stay between 07:00 and 18:00."
+                    )
+
+        if self.block_type == self.BlockType.PRODUCTION:
+            if not self.product_code.strip():
+                errors["product_code"] = "Production blocks require a product code."
+            if not self.product_name.strip():
+                errors["product_name"] = "Production blocks require a product name."
+            if not self.target_units_per_hour:
+                errors["target_units_per_hour"] = (
+                    "Production blocks require an hourly target."
+                )
+            if self.break_number is not None:
+                errors["break_number"] = "Production blocks cannot have a break number."
+        elif self.block_type == self.BlockType.BREAK:
+            if self.break_number not in {1, 2}:
+                errors["break_number"] = "Break blocks must be break 1 or break 2."
+            if self.product_code or self.product_name or self.target_units_per_hour:
+                errors["block_type"] = "Break blocks cannot contain product targets."
+            if self.planned_start_at and self.planned_end_at:
+                duration = self.planned_end_at - self.planned_start_at
+                if duration != timedelta(minutes=40):
+                    errors["planned_end_at"] = (
+                        "Approved break blocks must be exactly 40 minutes."
+                    )
+
+        if self.assignment_id and self.planned_start_at and self.planned_end_at:
+            overlap = DailyPlanBlock.objects.filter(
+                assignment_id=self.assignment_id,
+                planned_start_at__lt=self.planned_end_at,
+                planned_end_at__gt=self.planned_start_at,
+            )
+            if self.pk:
+                overlap = overlap.exclude(pk=self.pk)
+            if overlap.exists():
+                errors["planned_start_at"] = "Plan blocks cannot overlap."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self):
+        label = (
+            self.product_name
+            if self.block_type == self.BlockType.PRODUCTION
+            else f"Break {self.break_number}"
+        )
+        return f"{self.assignment.production_line.code} - {label} - {self.planned_start_at:%H:%M}"
+
+
+class BreakOpportunity(TimeStampedModel):
+    class Status(models.TextChoices):
+        SUGGESTED = "suggested", "Suggested"
+        CONFIRMED = "confirmed", "Confirmed"
+        RETURNED = "returned", "Returned"
+        CHECKS_COMPLETE = "checks_complete", "Checks Complete"
+        RECOVERED = "recovered", "Recovered"
+        DECLINED = "declined", "Declined"
+
+    assignment = models.ForeignKey(
+        TeamLeaderAssignment,
+        on_delete=models.PROTECT,
+        related_name="break_opportunities",
+    )
+    break_block = models.ForeignKey(
+        DailyPlanBlock,
+        on_delete=models.PROTECT,
+        related_name="break_opportunities",
+    )
+    source_update = models.OneToOneField(
+        HourlyLineUpdate,
+        on_delete=models.PROTECT,
+        related_name="break_opportunity",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.SUGGESTED,
+    )
+    fault_at = models.DateTimeField()
+    suggested_start_at = models.DateTimeField()
+    expected_return_at = models.DateTimeField()
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="confirmed_break_opportunities",
+        null=True,
+        blank=True,
+    )
+    returned_at = models.DateTimeField(null=True, blank=True)
+    checks_completed_at = models.DateTimeField(null=True, blank=True)
+    run_resumed_at = models.DateTimeField(null=True, blank=True)
+    recovery_notes = models.TextField(blank=True)
+    declined_at = models.DateTimeField(null=True, blank=True)
+    declined_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="declined_break_opportunities",
+        null=True,
+        blank=True,
+    )
+    decline_reason = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ("status", "-fault_at")
+        indexes = [
+            models.Index(fields=("assignment", "status")),
+            models.Index(fields=("break_block", "status")),
+        ]
+
+    def clean(self):
+        errors = {}
+
+        if self.break_block_id:
+            if self.break_block.block_type != DailyPlanBlock.BlockType.BREAK:
+                errors["break_block"] = (
+                    "A break opportunity must use an approved break block."
+                )
+            if (
+                self.assignment_id
+                and self.break_block.assignment_id != self.assignment_id
+            ):
+                errors["break_block"] = (
+                    "Break block and opportunity must use the same assignment."
+                )
+        if (
+            self.source_update_id
+            and self.assignment_id
+            and self.source_update.assignment_id != self.assignment_id
+        ):
+            errors["source_update"] = (
+                "Source update and opportunity must use the same assignment."
+            )
+        if (
+            self.source_update_id
+            and self.source_update.status != HourlyLineUpdate.Status.RED
+        ):
+            errors["source_update"] = (
+                "Only a Red line stop can create a break opportunity."
+            )
+        break_start_at = self.confirmed_at or self.suggested_start_at
+        if (
+            self.expected_return_at
+            and break_start_at
+            and self.expected_return_at - break_start_at != timedelta(minutes=40)
+        ):
+            errors["expected_return_at"] = (
+                "The suggested break must preserve all 40 minutes."
+            )
+
+        if bool(self.confirmed_at) != bool(self.confirmed_by_id):
+            errors["confirmed_at"] = (
+                "Confirmation time and confirming user must be recorded together."
+            )
+        if bool(self.declined_at) != bool(self.declined_by_id):
+            errors["declined_at"] = (
+                "Decline time and declining user must be recorded together."
+            )
+        if (
+            self.returned_at
+            and self.expected_return_at
+            and self.returned_at < self.expected_return_at
+        ):
+            errors["returned_at"] = (
+                "The approved 40-minute break must finish before return is recorded."
+            )
+
+        ordered_times = [
+            self.fault_at,
+            self.confirmed_at,
+            self.returned_at,
+            self.checks_completed_at,
+            self.run_resumed_at,
+        ]
+        present_times = [value for value in ordered_times if value is not None]
+        if present_times != sorted(present_times):
+            errors["status"] = (
+                "Recovery timestamps must follow the operational sequence."
+            )
+
+        if self.status == self.Status.SUGGESTED and any(
+            (
+                self.confirmed_at,
+                self.returned_at,
+                self.checks_completed_at,
+                self.run_resumed_at,
+            )
+        ):
+            errors["status"] = (
+                "A suggested opportunity cannot contain recovery timestamps."
+            )
+        if self.status == self.Status.CONFIRMED and not self.confirmed_at:
+            errors["status"] = "A confirmed opportunity requires confirmation evidence."
+        if self.status == self.Status.RETURNED and not (
+            self.confirmed_at and self.returned_at
+        ):
+            errors["status"] = "Return requires confirmation and return evidence."
+        if self.status == self.Status.CHECKS_COMPLETE and not (
+            self.confirmed_at and self.returned_at and self.checks_completed_at
+        ):
+            errors["status"] = (
+                "Completed checks require confirmation and return evidence."
+            )
+        if self.status == self.Status.RECOVERED and not (
+            self.confirmed_at
+            and self.returned_at
+            and self.checks_completed_at
+            and self.run_resumed_at
+            and self.recovery_notes.strip()
+        ):
+            errors["status"] = "Recovery requires the full timeline and recovery notes."
+        if self.status == self.Status.DECLINED and not (
+            self.declined_at and self.declined_by_id and self.decline_reason.strip()
+        ):
+            errors["status"] = (
+                "Declined opportunities require a reason and audit evidence."
+            )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self):
+        return f"{self.assignment.production_line.code} - break opportunity - {self.get_status_display()}"
 
 
 class ProductMaterialReadiness(TimeStampedModel):
