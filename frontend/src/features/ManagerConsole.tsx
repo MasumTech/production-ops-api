@@ -140,6 +140,11 @@ function performanceCopy(shift: ShiftRecord | null): string {
   return `${shift.performance_percentage.toFixed(1)}%`;
 }
 
+function planPercent(shift: ShiftRecord | null): number | null {
+  if (!shift || !shift.planned_output) return null;
+  return Math.round((shift.actual_output / shift.planned_output) * 100);
+}
+
 function buildHierarchyGroups(assignments: Assignment[]) {
   const groups = new Map<number, Assignment[]>();
   assignments.forEach((assignment) => {
@@ -358,6 +363,53 @@ export function ManagerConsole({
                       </div>
                     </article>
                   ))}
+                </div>
+              </section>
+
+              <section className="manager-overview-board" aria-labelledby="coverage-board-title">
+                <div className="manager-section-heading">
+                  <div>
+                    <span className="eyebrow">Live status and plan</span>
+                    <h2 id="coverage-board-title">Team Leaders and production lines</h2>
+                  </div>
+                  <button className="text-button" onClick={() => setView("lines")}>Open line control →</button>
+                </div>
+                <div className="manager-leader-grid">
+                  {hierarchyGroups.map(({ teamLeaderId, lines }) => (
+                    <article className="leader-card" key={teamLeaderId}>
+                      <header className="leader-card__header">
+                        <div>
+                          <span className="leader-card__icon" aria-hidden="true">●</span>
+                          <div><strong>Team Leader</strong><span>{lines.length} assigned lines</span></div>
+                        </div>
+                        <span className="hierarchy-badge">Operations</span>
+                      </header>
+                      <div className="leader-card__columns"><span>Line</span><span>Product</span><span>Status</span><span>Plan</span></div>
+                      {lines.map((line) => {
+                        const row = rows.find((item) => item.assignment.id === line.id);
+                        const percent = planPercent(row?.shift ?? null);
+                        return <div className="leader-line" key={line.id}>
+                          <strong>{line.production_line_code.replace("DEMO-", "")}</strong>
+                          <span>{row?.update?.current_product || "Planned production"}</span>
+                          <span className={`status-dot status-dot--${row?.update?.status || "missing"}`} aria-label={row?.update?.status || "missing"} />
+                          <span>{percent === null ? "—" : `${percent}%`}</span>
+                        </div>;
+                      })}
+                    </article>
+                  ))}
+                </div>
+              </section>
+
+              <section className="manager-overview-risk" aria-labelledby="overview-risk-title">
+                <div className="manager-section-heading">
+                  <div><span className="eyebrow">Decision support</span><h2 id="overview-risk-title">AI daily risk briefing</h2></div>
+                  <button className="text-button" onClick={() => setView("briefing")}>Full briefing →</button>
+                </div>
+                <p>Recorded evidence only. Suggestions are advisory; approved safety, quality and engineering procedures remain authoritative.</p>
+                <div className="overview-risk-items">
+                  <span><strong>{attentionCount}</strong> lines needing attention</span>
+                  <span><strong>{materialRisks.length}</strong> material risks</span>
+                  <span><strong>{summary.total_downtime_minutes} min</strong> downtime recorded</span>
                 </div>
               </section>
             </>
