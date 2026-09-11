@@ -140,6 +140,18 @@ function performanceCopy(shift: ShiftRecord | null): string {
   return `${shift.performance_percentage.toFixed(1)}%`;
 }
 
+function buildHierarchyGroups(assignments: Assignment[]) {
+  const groups = new Map<number, Assignment[]>();
+  assignments.forEach((assignment) => {
+    const current = groups.get(assignment.team_leader) ?? [];
+    current.push(assignment);
+    groups.set(assignment.team_leader, current);
+  });
+  return [...groups.entries()]
+    .sort((left, right) => left[0] - right[0])
+    .map(([teamLeaderId, lines]) => ({ teamLeaderId, lines }));
+}
+
 function ManagerViewIntro({
   eyebrow,
   title,
@@ -199,6 +211,7 @@ export function ManagerConsole({
   const lateCount = rows.filter((row) => row.isLate || !row.update).length;
   const attentionCount = rows.filter((row) => row.attentionLevel !== "stable").length;
   const summary = data.summary ?? EMPTY_SUMMARY;
+  const hierarchyGroups = useMemo(() => buildHierarchyGroups(data.assignments), [data.assignments]);
 
   return (
     <div className="manager-shell">
@@ -322,6 +335,30 @@ export function ManagerConsole({
                   <strong>{NUMBER.format(summary.total_downtime_minutes)} min</strong>
                   <small>{summary.open_incidents} open quality incidents</small>
                 </article>
+              </section>
+
+              <section className="manager-hierarchy" aria-labelledby="manager-hierarchy-title">
+                <div className="manager-section-heading">
+                  <div>
+                    <span className="eyebrow">Operating structure</span>
+                    <h2 id="manager-hierarchy-title">Operations Manager coverage</h2>
+                  </div>
+                  <span className="hierarchy-badge">{hierarchyGroups.length} Team Leader lanes</span>
+                </div>
+                <p className="manager-hierarchy__note">
+                  Functional coverage for today&apos;s plan. Use the line board for status and the risk briefing for recorded priorities.
+                </p>
+                <div className="manager-hierarchy__grid">
+                  {hierarchyGroups.map(({ teamLeaderId, lines }) => (
+                    <article className="hierarchy-node" key={teamLeaderId}>
+                      <span className="hierarchy-node__role">Team Leader</span>
+                      <strong>{lines.length} assigned {lines.length === 1 ? "line" : "lines"}</strong>
+                      <div className="hierarchy-node__lines">
+                        {lines.map((line) => <span key={line.id}>{line.production_line_code}</span>)}
+                      </div>
+                    </article>
+                  ))}
+                </div>
               </section>
             </>
           ) : null}
