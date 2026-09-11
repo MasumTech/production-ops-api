@@ -223,6 +223,13 @@ describe("manager console", () => {
       within(summary).getByText("1 overdue"),
     ).toBeInTheDocument();
 
+    const hierarchy = screen.getByRole("region", { name: "Operations Manager coverage" });
+    expect(within(hierarchy).getByText("2 Team Leader lanes")).toBeInTheDocument();
+    expect(within(hierarchy).getAllByText("Team Leader")).toHaveLength(2);
+    expect(within(hierarchy).getByText("LINE-01")).toBeInTheDocument();
+    expect(within(hierarchy).getByText("LINE-02")).toBeInTheDocument();
+    expect(within(hierarchy).queryByText("lead.one")).not.toBeInTheDocument();
+
     expect(
       within(screen.getByRole("navigation", { name: "Manager sections" })).getByRole(
         "button",

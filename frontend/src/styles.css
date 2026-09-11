@@ -927,6 +927,74 @@ td span {
   margin-bottom: 2rem;
 }
 
+.manager-hierarchy {
+  margin-bottom: 2rem;
+  padding: 1.2rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: linear-gradient(135deg, #f7fbff, #ffffff);
+  box-shadow: 0 6px 20px rgb(23 36 58 / 5%);
+}
+
+.manager-hierarchy__note {
+  margin: -0.45rem 0 1rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.hierarchy-badge {
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: #e7f1ff;
+  color: #195a9b;
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.manager-hierarchy__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+  gap: 0.75rem;
+}
+
+.hierarchy-node {
+  padding: 0.85rem;
+  border: 1px solid #d9e7f5;
+  border-radius: 0.8rem;
+  background: #fff;
+}
+
+.hierarchy-node__role,
+.hierarchy-node > strong {
+  display: block;
+}
+
+.hierarchy-node__role {
+  color: #195a9b;
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.hierarchy-node > strong { margin-top: 0.25rem; }
+
+.hierarchy-node__lines {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.65rem;
+}
+
+.hierarchy-node__lines span {
+  padding: 0.25rem 0.45rem;
+  border-radius: 0.35rem;
+  background: #eef4fa;
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
 .kpi-card {
   min-height: 138px;
   padding: 1rem;
