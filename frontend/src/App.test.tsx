@@ -119,6 +119,35 @@ describe("tablet workspace", () => {
     expect(screen.getByText("Amber")).toBeInTheDocument();
     expect(screen.getByText("Chicken Curry")).toBeInTheDocument();
     expect(screen.getByText("1 open actions")).toBeInTheDocument();
+    expect(screen.getByText("Materials")).toBeInTheDocument();
+  });
+
+  it("keeps the Team Leader view to two lines and flags invalid extra scope", () => {
+    const assignments = [
+      assignment,
+      { ...assignment, id: 8, production_line_code: "LINE-04" },
+      { ...assignment, id: 9, production_line_code: "LINE-05" },
+    ];
+
+    render(
+      <MyLinesPanel
+        data={{
+          assignments,
+          updates: [],
+          materials: [],
+          escalations: [],
+          breaks: [],
+          handovers: [],
+          users: [],
+        }}
+        onRaiseIssue={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("LINE-03")).toBeInTheDocument();
+    expect(screen.getByText("LINE-04")).toBeInTheDocument();
+    expect(screen.queryByText("LINE-05")).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Only the first two are shown");
   });
 
   it("posts a line update through the real API contract", async () => {
@@ -172,7 +201,7 @@ describe("tablet workspace", () => {
     render(<App />);
 
     expect(
-      await screen.findByRole("heading", { name: "Live Floor priority board" }),
+      await screen.findByRole("heading", { name: "Today's production overview" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Operations Manager Console")).toBeInTheDocument();
     expect(screen.queryByText("My Lines")).not.toBeInTheDocument();

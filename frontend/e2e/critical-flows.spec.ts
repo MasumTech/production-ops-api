@@ -14,17 +14,18 @@ async function signIn(page: Page, username: string) {
   await page.getByRole("button", { name: "Sign in securely" }).click();
 }
 
-test("manager can open Pilot Admin after secure sign-in", async ({ page }) => {
+test("manager can open the daily risk briefing after secure sign-in", async ({ page }) => {
   await signIn(page, "demo.manager");
 
   await expect(
-    page.getByRole("heading", { name: "Live Floor priority board" }),
+    page.getByRole("heading", { name: "Today's production overview" }),
   ).toBeVisible();
 
   const workspace = page.locator('aside[aria-label="Operations Manager workspace"]');
-  await workspace.getByRole("button", { name: "Pilot Admin" }).click();
+  await expect(workspace.getByRole("button")).toHaveCount(5);
+  await workspace.getByRole("button", { name: "AI Risk Briefing" }).click();
   await expect(
-    page.getByRole("heading", { name: "Pilot readiness" }),
+    page.getByRole("heading", { name: "AI Daily Risk Briefing" }),
   ).toBeVisible();
 });
 
@@ -33,7 +34,7 @@ test("team leader is routed to the assigned-line workspace", async ({ page }) =>
 
   const workspace = page.locator('aside[aria-label="Team Leader workspace"]');
   await expect(workspace).toBeVisible();
-  await expect(workspace.getByRole("button")).toHaveCount(5);
+  await expect(workspace.getByRole("button")).toHaveCount(4);
 });
 
 test("support user is routed to the scoped response queue", async ({ page }) => {

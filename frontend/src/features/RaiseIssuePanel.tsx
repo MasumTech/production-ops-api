@@ -129,7 +129,7 @@ export function RaiseIssuePanel({
       <PageIntro
         eyebrow="Fast capture"
         title="Update line or raise issue"
-        body="Record the RAG position first. Use escalation when a blocker needs a named response owner and deadline."
+        body="Record the RAG position first. Use escalation when a blocker needs a responsible function and deadline."
       />
       <div className="segmented-control" aria-label="Issue workflow">
         <button

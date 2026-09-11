@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { DailyRiskBriefingPanel } from "./DailyRiskBriefingPanel";
 import { LossAnalyticsPanel } from "./LossAnalyticsPanel";
-import { PilotAdminPanel } from "./PilotAdminPanel";
 import { EmptyState, ErrorBanner, StatusPill } from "../components";
 import { formatDateTime, titleCase } from "../format";
+import { escalationRole } from "../operationalRoles";
 import { NotificationCentre } from "../NotificationCentre";
 import type { LiveConnectionState } from "../realtime";
 import {
@@ -27,8 +27,7 @@ type ManagerWorkspaceView =
   | "lines"
   | "actions"
   | "briefing"
-  | "analytics"
-  | "pilot";
+  | "analytics";
 
 const MANAGER_NAV_ITEMS: Array<{
   id: ManagerWorkspaceView;
@@ -36,11 +35,10 @@ const MANAGER_NAV_ITEMS: Array<{
   shortLabel: string;
 }> = [
   { id: "overview", label: "Overview", shortLabel: "Overview" },
-  { id: "lines", label: "Line Control", shortLabel: "Lines" },
+  { id: "lines", label: "Live Floor", shortLabel: "Floor" },
   { id: "actions", label: "Actions & Materials", shortLabel: "Actions" },
-  { id: "briefing", label: "Risk Briefing", shortLabel: "Briefing" },
-  { id: "analytics", label: "Loss Analytics", shortLabel: "Loss" },
-  { id: "pilot", label: "Pilot Admin", shortLabel: "Pilot" },
+  { id: "briefing", label: "AI Risk Briefing", shortLabel: "Briefing" },
+  { id: "analytics", label: "Loss History", shortLabel: "Loss" },
 ];
 
 export interface ManagerLineRow {
@@ -274,10 +272,10 @@ export function ManagerConsole({
               <section className="manager-hero" aria-labelledby="manager-title">
                 <div>
                   <span className="eyebrow">Management oversight</span>
-                  <h1 id="manager-title">Live Floor priority board</h1>
+                  <h1 id="manager-title">Today&apos;s production overview</h1>
                   <p>
-                    Critical lines rise first. Review late updates, open actions, output position,
-                    and current material risk before contacting the floor.
+                    Start with plan completion, downtime and the lines that need support. Critical
+                    conditions remain first in the Live Floor view.
                   </p>
                 </div>
                 <div className="snapshot-copy">
@@ -300,7 +298,7 @@ export function ManagerConsole({
                 <article className="kpi-card kpi-card--warning">
                   <span>Late or missing updates</span>
                   <strong>{lateCount}</strong>
-                  <small>Follow up with the line owner</small>
+                  <small>Follow up with the responsible team</small>
                 </article>
                 <article className="kpi-card kpi-card--warning">
                   <span>Material risks</span>
@@ -391,7 +389,7 @@ export function ManagerConsole({
                           <span>
                             {row.assignment.production_line_name} · {titleCase(row.assignment.shift_type)}
                           </span>
-                          <span>Lead: {row.assignment.team_leader_username}</span>
+                          <span>Owner: Team Leader</span>
                         </td>
                         <td data-label="Status">
                           {row.update ? <StatusPill value={row.update.status} /> : <StatusPill value="missing" />}
@@ -471,7 +469,7 @@ export function ManagerConsole({
                     <div>
                       <strong>{item.production_line_code} · {item.summary}</strong>
                       <span>
-                        Owner: {item.owner_username || "Unassigned"} · Due {formatDateTime(item.response_due_at)}
+                        Responsible: {escalationRole(item.category)} · Due {formatDateTime(item.response_due_at)}
                       </span>
                     </div>
                     {item.is_overdue ? <span className="risk-label">Overdue</span> : null}
@@ -499,7 +497,7 @@ export function ManagerConsole({
                     <div>
                       <strong>{item.production_line_code} · {item.product_code}</strong>
                       <span>
-                        {item.product_name} · Owner {item.owner_username || "Unassigned"}
+                        {item.product_name} · Responsible: Materials
                       </span>
                     </div>
                     <span className="risk-label">
@@ -520,7 +518,7 @@ export function ManagerConsole({
             <>
               <ManagerViewIntro
                 eyebrow="Explainable evidence"
-                title="Risk Briefing"
+                title="AI Daily Risk Briefing"
                 body="Review deterministic line risk, confidence, ranked source evidence, and missing-data warnings."
               />
               <DailyRiskBriefingPanel operationalDate={operationalDate} />
@@ -531,14 +529,13 @@ export function ManagerConsole({
             <>
               <ManagerViewIntro
                 eyebrow="Recorded evidence"
-                title="Loss Analytics"
+                title="Loss & Asset History"
                 body="Review confirmed loss history and recurring mapped-asset evidence for the selected period."
               />
               <LossAnalyticsPanel assignments={data.assignments} />
             </>
           ) : null}
 
-          {view === "pilot" ? <PilotAdminPanel /> : null}
         </main>
       </div>
 
