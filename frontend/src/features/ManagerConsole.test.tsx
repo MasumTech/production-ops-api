@@ -207,7 +207,7 @@ describe("manager console", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: "Live Floor priority board",
+        name: "Today's production overview",
       }),
     ).toBeInTheDocument();
 
@@ -234,7 +234,7 @@ describe("manager console", () => {
       within(
         screen.getByRole("navigation", { name: "Operations Manager mobile workspace" }),
       ).getAllByRole("button"),
-    ).toHaveLength(6);
+    ).toHaveLength(5);
 
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Daily risk briefing" })).not.toBeInTheDocument();
@@ -263,10 +263,10 @@ describe("manager console", () => {
 
     const navigation = screen.getByRole("navigation", { name: "Manager sections" });
 
-    await actor.click(within(navigation).getByRole("button", { name: "Line Control" }));
+    await actor.click(within(navigation).getByRole("button", { name: "Live Floor" }));
     expect(screen.getByRole("heading", { name: "Line Control" })).toBeInTheDocument();
     const table = screen.getByRole("table");
-    expect(within(table).getByText("Lead: lead.two")).toBeInTheDocument();
+    expect(within(table).getAllByText("Owner: Team Leader")).toHaveLength(2);
     expect(within(table).getAllByText("Filler stopped")).toHaveLength(2);
 
     await actor.click(within(navigation).getByRole("button", { name: "Actions & Materials" }));
@@ -274,12 +274,12 @@ describe("manager console", () => {
     expect(screen.getByRole("heading", { name: "Open actions" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Material risks" })).toBeInTheDocument();
 
-    await actor.click(within(navigation).getByRole("button", { name: "Risk Briefing" }));
-    expect(screen.getByRole("heading", { name: "Risk Briefing" })).toBeInTheDocument();
+    await actor.click(within(navigation).getByRole("button", { name: "AI Risk Briefing" }));
+    expect(screen.getByRole("heading", { name: "AI Daily Risk Briefing" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Daily risk briefing" })).toBeInTheDocument();
 
-    await actor.click(within(navigation).getByRole("button", { name: "Loss Analytics" }));
-    expect(screen.getByRole("heading", { name: "Loss Analytics" })).toBeInTheDocument();
+    await actor.click(within(navigation).getByRole("button", { name: "Loss History" }));
+    expect(screen.getByRole("heading", { name: "Loss & Asset History" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Loss and asset history" })).toBeInTheDocument();
   });
 
@@ -315,7 +315,7 @@ describe("manager console", () => {
     await actor.click(
       within(screen.getByRole("navigation", { name: "Manager sections" })).getByRole(
         "button",
-        { name: "Line Control" },
+        { name: "Live Floor" },
       ),
     );
 

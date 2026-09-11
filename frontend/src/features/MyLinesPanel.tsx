@@ -1,5 +1,6 @@
 import { EmptyState, PageIntro, StatusPill } from "../components";
 import { formatDateTime } from "../format";
+import { lineResponseRole } from "../operationalRoles";
 import type { WorkspaceData } from "../types";
 
 export function MyLinesPanel({
@@ -10,14 +11,22 @@ export function MyLinesPanel({
   onRaiseIssue: (assignmentId: number) => void;
 }) {
   const updateByAssignment = new Map(data.updates.map((update) => [update.assignment, update]));
+  const focusedAssignments = data.assignments.slice(0, 2);
 
   return (
     <section>
       <PageIntro
         eyebrow="Shift control"
         title="My Lines"
-        body="One view of each assigned line, its latest RAG state, product, next check, and unresolved actions."
+        body="Your two-line shift view: current product, RAG position, next check, and the team responsible for recovery."
       />
+
+      {data.assignments.length > 2 ? (
+        <div className="scope-warning" role="alert">
+          This Team Leader has {data.assignments.length} assignments. Only the first two are shown;
+          ask Operations to correct today&apos;s line allocation.
+        </div>
+      ) : null}
 
       {data.assignments.length === 0 ? (
         <EmptyState
@@ -26,7 +35,7 @@ export function MyLinesPanel({
         />
       ) : (
         <div className="line-grid">
-          {data.assignments.map((assignment) => {
+          {focusedAssignments.map((assignment) => {
             const update = updateByAssignment.get(assignment.id);
             const escalations = data.escalations.filter(
               (item) => item.assignment === assignment.id && item.status !== "resolved",
@@ -57,6 +66,10 @@ export function MyLinesPanel({
                     <dd>{update?.issue_summary || "No active line issue reported"}</dd>
                   </div>
                   <div>
+                    <dt>Responsible team</dt>
+                    <dd>{lineResponseRole(escalations[0], update?.support_required)}</dd>
+                  </div>
+                  <div>
                     <dt>Next update</dt>
                     <dd>{formatDateTime(update?.next_update_due_at ?? null)}</dd>
                   </div>
@@ -75,7 +88,7 @@ export function MyLinesPanel({
                   className="button button--primary button--full"
                   onClick={() => onRaiseIssue(assignment.id)}
                 >
-                  Update line or raise issue
+                  Update status / raise issue
                 </button>
               </article>
             );

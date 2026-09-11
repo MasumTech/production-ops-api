@@ -86,7 +86,6 @@ const EMPTY_SUPPORT_DATA: SupportCompanionData = {
 
 const NAV_ITEMS: Array<{ id: WorkspaceTab; label: string; shortLabel: string }> = [
   { id: "lines", label: "My Lines", shortLabel: "Lines" },
-  { id: "issues", label: "Raise Issue", shortLabel: "Issue" },
   { id: "materials", label: "Materials", shortLabel: "Materials" },
   { id: "breaks", label: "Break & Recovery", shortLabel: "Breaks" },
   { id: "handover", label: "Handover", shortLabel: "Handover" },
@@ -498,7 +497,7 @@ export default function App() {
         summary={
           <>
           <span className="eyebrow">Current scope</span>
-          <strong>{data.assignments.length} assigned lines</strong>
+          <strong>{Math.min(data.assignments.length, 2)} of 2 line positions</strong>
           <span>{unresolvedCount} unresolved escalations</span>
           </>
         }
@@ -516,15 +515,20 @@ export default function App() {
           <MyLinesPanel data={data} onRaiseIssue={openIssueFor} />
         ) : null}
         {tab === "issues" && profile ? (
-          <RaiseIssuePanel
-            assignments={data.assignments}
-            users={data.users}
-            selectedAssignment={selectedAssignment}
-            onSaved={async (message) => {
-              if (online) await refresh();
-              setToast(message);
-            }}
-          />
+          <>
+            <button className="button button--ghost workspace-back" onClick={() => setTab("lines")}>
+              Back to My Lines
+            </button>
+            <RaiseIssuePanel
+              assignments={data.assignments.slice(0, 2)}
+              users={data.users}
+              selectedAssignment={selectedAssignment}
+              onSaved={async (message) => {
+                if (online) await refresh();
+                setToast(message);
+              }}
+            />
+          </>
         ) : null}
         {tab === "materials" && profile ? (
           <MaterialsPanel
