@@ -78,12 +78,12 @@ def test_seed_demo_data_creates_complete_dataset():
     )
 
     assert demo_counts() == {
-        "users": 4,
-        "lines": 3,
+        "users": 6,
+        "lines": 6,
         "assets": 3,
-        "assignments": 6,
-        "shifts": 3,
-        "plan_blocks": 10,
+        "assignments": 9,
+        "shifts": 6,
+        "plan_blocks": 30,
         "updates": 3,
         "materials": 3,
         "escalations": 5,
@@ -172,7 +172,7 @@ def test_reset_removes_only_demo_records():
         ),
         (
             {"date": DEMO_DATE, "password": "short"},
-            "The demo password must contain at least 8 characters.",
+            "Provide --password or DEMO_SEED_PASSWORD",
         ),
     ],
 )
