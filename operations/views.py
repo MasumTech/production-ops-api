@@ -27,9 +27,12 @@ from rest_framework.views import APIView
 from config.health import database_is_available, redis_is_available
 
 from .access import OPERATIONAL_SUPPORT_GROUP, WorkspaceRole
+from .break_opportunities import detect_break_opportunity
 from .events import create_operational_event, event_queryset_for_user
 from .models import (
+    BreakOpportunity,
     BreakRecovery,
+    DailyPlanBlock,
     HourlyLineUpdate,
     OperationalEscalation,
     OperationalEvent,
@@ -56,11 +59,17 @@ from .permissions import (
     IsStaffOrReadOnly,
 )
 from .serializers import (
+    BreakOpportunityDeclineSerializer,
+    BreakOpportunityFilterSerializer,
+    BreakOpportunityResumeSerializer,
+    BreakOpportunitySerializer,
     BreakRecoveryCancelSerializer,
     BreakRecoveryCompleteSerializer,
     BreakRecoveryFilterSerializer,
     BreakRecoverySerializer,
     CurrentUserSerializer,
+    DailyPlanBlockFilterSerializer,
+    DailyPlanBlockSerializer,
     HourlyLineUpdateFilterSerializer,
     HourlyLineUpdateSerializer,
     NotificationInboxSerializer,
@@ -1183,7 +1192,8 @@ class HourlyLineUpdateViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        serializer.save(recorded_by=self.request.user)
+        line_update = serializer.save(recorded_by=self.request.user)
+        detect_break_opportunity(line_update)
 
     @extend_schema(
         parameters=[HourlyLineUpdateFilterSerializer],
@@ -1819,6 +1829,187 @@ class ShiftHandoverViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(handover)
         return Response(serializer.data)
+
+
+@extend_schema_view(
+    list=extend_schema(parameters=[DailyPlanBlockFilterSerializer]),
+)
+class DailyPlanBlockViewSet(viewsets.ModelViewSet):
+    queryset = DailyPlanBlock.objects.all()
+    serializer_class = DailyPlanBlockSerializer
+    permission_classes = (IsStaffOrReadOnly,)
+    http_method_names = ("get", "post", "head", "options")
+    ordering = ("planned_start_at", "sequence_number")
+
+    def get_queryset(self):
+        queryset = self.queryset.select_related(
+            "assignment",
+            "assignment__production_line",
+            "assignment__team_leader",
+            "created_by",
+        )
+        if not self.request.user.is_staff:
+            queryset = queryset.filter(assignment__team_leader=self.request.user)
+
+        filter_serializer = DailyPlanBlockFilterSerializer(
+            data=self.request.query_params
+        )
+        filter_serializer.is_valid(raise_exception=True)
+        filters_data = filter_serializer.validated_data
+        if filters_data.get("date"):
+            queryset = queryset.filter(assignment__date=filters_data["date"])
+        if filters_data.get("assignment"):
+            queryset = queryset.filter(assignment_id=filters_data["assignment"])
+        if filters_data.get("production_line"):
+            queryset = queryset.filter(
+                assignment__production_line_id=filters_data["production_line"]
+            )
+        if filters_data.get("block_type"):
+            queryset = queryset.filter(block_type=filters_data["block_type"])
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+@extend_schema_view(
+    list=extend_schema(parameters=[BreakOpportunityFilterSerializer]),
+)
+class BreakOpportunityViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = BreakOpportunity.objects.all()
+    serializer_class = BreakOpportunitySerializer
+    permission_classes = (IsAssignedTeamLeaderOrStaff,)
+    ordering = ("status", "-fault_at")
+
+    def get_queryset(self):
+        queryset = self.queryset.select_related(
+            "assignment",
+            "assignment__production_line",
+            "assignment__team_leader",
+            "break_block",
+            "source_update",
+        )
+        if not self.request.user.is_staff:
+            queryset = queryset.filter(assignment__team_leader=self.request.user)
+
+        filter_serializer = BreakOpportunityFilterSerializer(
+            data=self.request.query_params
+        )
+        filter_serializer.is_valid(raise_exception=True)
+        filters_data = filter_serializer.validated_data
+        if filters_data.get("date"):
+            queryset = queryset.filter(assignment__date=filters_data["date"])
+        if filters_data.get("assignment"):
+            queryset = queryset.filter(assignment_id=filters_data["assignment"])
+        if filters_data.get("status"):
+            queryset = queryset.filter(status=filters_data["status"])
+        return queryset
+
+    def _require_team_leader(self, opportunity):
+        if not self.request.user.is_staff and (
+            opportunity.assignment.team_leader_id != self.request.user.id
+        ):
+            raise PermissionDenied(
+                "Only the assigned Team Leader or management staff can update this opportunity."
+            )
+
+    def _save_transition(self, opportunity, fields):
+        opportunity.full_clean()
+        opportunity.save(update_fields=(*fields, "updated_at"))
+        return Response(self.get_serializer(opportunity).data)
+
+    @extend_schema(request=None, responses=BreakOpportunitySerializer)
+    @action(detail=True, methods=("post",), url_path="confirm")
+    def confirm(self, request, pk=None):
+        opportunity = self.get_object()
+        self._require_team_leader(opportunity)
+        if opportunity.status != BreakOpportunity.Status.SUGGESTED:
+            raise ValidationError(
+                {"status": "Only a suggested opportunity can be confirmed."}
+            )
+        opportunity.status = BreakOpportunity.Status.CONFIRMED
+        opportunity.confirmed_at = timezone.now()
+        opportunity.confirmed_by = request.user
+        opportunity.expected_return_at = opportunity.confirmed_at + timedelta(
+            minutes=40
+        )
+        return self._save_transition(
+            opportunity,
+            ("status", "confirmed_at", "confirmed_by", "expected_return_at"),
+        )
+
+    @extend_schema(
+        request=BreakOpportunityDeclineSerializer,
+        responses=BreakOpportunitySerializer,
+    )
+    @action(detail=True, methods=("post",), url_path="decline")
+    def decline(self, request, pk=None):
+        opportunity = self.get_object()
+        self._require_team_leader(opportunity)
+        if opportunity.status != BreakOpportunity.Status.SUGGESTED:
+            raise ValidationError(
+                {"status": "Only a suggested opportunity can be declined."}
+            )
+        input_serializer = BreakOpportunityDeclineSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        opportunity.status = BreakOpportunity.Status.DECLINED
+        opportunity.declined_at = timezone.now()
+        opportunity.declined_by = request.user
+        opportunity.decline_reason = input_serializer.validated_data["decline_reason"]
+        return self._save_transition(
+            opportunity,
+            ("status", "declined_at", "declined_by", "decline_reason"),
+        )
+
+    @extend_schema(request=None, responses=BreakOpportunitySerializer)
+    @action(detail=True, methods=("post",), url_path="return")
+    def record_return(self, request, pk=None):
+        opportunity = self.get_object()
+        self._require_team_leader(opportunity)
+        if opportunity.status != BreakOpportunity.Status.CONFIRMED:
+            raise ValidationError(
+                {"status": "Return can only follow a confirmed break."}
+            )
+        if timezone.now() < opportunity.expected_return_at:
+            raise ValidationError(
+                {"status": "The approved 40-minute break has not finished yet."}
+            )
+        opportunity.status = BreakOpportunity.Status.RETURNED
+        opportunity.returned_at = timezone.now()
+        return self._save_transition(opportunity, ("status", "returned_at"))
+
+    @extend_schema(request=None, responses=BreakOpportunitySerializer)
+    @action(detail=True, methods=("post",), url_path="complete-checks")
+    def complete_checks(self, request, pk=None):
+        opportunity = self.get_object()
+        self._require_team_leader(opportunity)
+        if opportunity.status != BreakOpportunity.Status.RETURNED:
+            raise ValidationError(
+                {"status": "Checks can only follow the recorded return."}
+            )
+        opportunity.status = BreakOpportunity.Status.CHECKS_COMPLETE
+        opportunity.checks_completed_at = timezone.now()
+        return self._save_transition(opportunity, ("status", "checks_completed_at"))
+
+    @extend_schema(
+        request=BreakOpportunityResumeSerializer,
+        responses=BreakOpportunitySerializer,
+    )
+    @action(detail=True, methods=("post",), url_path="resume")
+    def resume(self, request, pk=None):
+        opportunity = self.get_object()
+        self._require_team_leader(opportunity)
+        if opportunity.status != BreakOpportunity.Status.CHECKS_COMPLETE:
+            raise ValidationError({"status": "Run resume requires completed checks."})
+        input_serializer = BreakOpportunityResumeSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        opportunity.status = BreakOpportunity.Status.RECOVERED
+        opportunity.run_resumed_at = timezone.now()
+        opportunity.recovery_notes = input_serializer.validated_data["recovery_notes"]
+        return self._save_transition(
+            opportunity,
+            ("status", "run_resumed_at", "recovery_notes"),
+        )
 
 
 @extend_schema_view(

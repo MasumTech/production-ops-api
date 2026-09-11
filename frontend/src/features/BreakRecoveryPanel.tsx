@@ -1,77 +1,50 @@
 import { useState } from "react";
 
 import { OfflineQueuedError, postJson } from "../api";
-import {
-  AssignmentSelect,
-  EmptyState,
-  ErrorBanner,
-  PageIntro,
-  StatusPill,
-  SubmitButton,
-  UserSelect,
-} from "../components";
-import { formatDateTime, toIso } from "../format";
-import type { Assignment, BreakRecovery, UserChoice, UserSummary } from "../types";
+import { EmptyState, ErrorBanner, PageIntro, StatusPill } from "../components";
+import { formatDateTime } from "../format";
+import type { Assignment, BreakOpportunity } from "../types";
+
+const TIMELINE_STEPS: Array<{
+  key: keyof Pick<
+    BreakOpportunity,
+    "fault_at" | "confirmed_at" | "returned_at" | "checks_completed_at" | "run_resumed_at"
+  >;
+  label: string;
+}> = [
+  { key: "fault_at", label: "Fault" },
+  { key: "confirmed_at", label: "Break" },
+  { key: "returned_at", label: "Returned" },
+  { key: "checks_completed_at", label: "Checks" },
+  { key: "run_resumed_at", label: "Running" },
+];
 
 export function BreakRecoveryPanel({
-  profile,
   assignments,
-  breaks,
-  users,
+  opportunities,
   onSaved,
 }: {
-  profile: UserSummary;
   assignments: Assignment[];
-  breaks: BreakRecovery[];
-  users: UserChoice[];
+  opportunities: BreakOpportunity[];
   onSaved: (message: string) => Promise<void>;
 }) {
-  const [showForm, setShowForm] = useState(false);
-  const [assignment, setAssignment] = useState("");
-  const [coverUser, setCoverUser] = useState("");
-  const [plannedStart, setPlannedStart] = useState("");
-  const [expectedReturn, setExpectedReturn] = useState("");
-  const [coverageNotes, setCoverageNotes] = useState("");
-  const [actionNotes, setActionNotes] = useState<Record<number, string>>({});
-  const [busyId, setBusyId] = useState<number | "new" | null>(null);
+  const [notes, setNotes] = useState<Record<number, string>>({});
+  const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState("");
-  const ownAssignmentIds = new Set(assignments.map((item) => item.id));
+  const visibleAssignmentIds = new Set(assignments.slice(0, 2).map((item) => item.id));
+  const visible = opportunities.filter((item) => visibleAssignmentIds.has(item.assignment));
 
-  const planBreak = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setBusyId("new");
-    setError("");
-    try {
-      await postJson<BreakRecovery>("/break-recoveries/", {
-        assignment: Number(assignment),
-        cover_user: Number(coverUser),
-        planned_start_at: toIso(plannedStart),
-        expected_return_at: toIso(expectedReturn),
-        coverage_notes: coverageNotes.trim(),
-      });
-      await onSaved("Break plan created. Cover acceptance is now required.");
-      setShowForm(false);
-      setCoverageNotes("");
-    } catch (caught) {
-      if (caught instanceof OfflineQueuedError) {
-        await onSaved(caught.message);
-        setShowForm(false);
-        setCoverageNotes("");
-      } else {
-        setError(caught instanceof Error ? caught.message : "Could not create the break plan.");
-      }
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const action = async (
-    item: BreakRecovery,
-    path: "accept-coverage" | "start" | "recover" | "cancel",
+  const transition = async (
+    item: BreakOpportunity,
+    path: "confirm" | "decline" | "return" | "complete-checks" | "resume",
   ) => {
-    const note = actionNotes[item.id]?.trim();
-    if ((path === "recover" || path === "cancel") && !note) {
-      setError(path === "recover" ? "Recovery notes are required." : "A cancellation reason is required.");
+    const note = notes[item.id]?.trim() ?? "";
+    if ((path === "decline" || path === "resume") && !note) {
+      setError(
+        path === "decline"
+          ? "Add a reason before declining."
+          : "Add recovery notes before resuming the line.",
+      );
       return;
     }
 
@@ -79,28 +52,28 @@ export function BreakRecoveryPanel({
     setError("");
     try {
       const body =
-        path === "recover"
-          ? { recovery_notes: note }
-          : path === "cancel"
-            ? { cancellation_reason: note }
+        path === "decline"
+          ? { decline_reason: note }
+          : path === "resume"
+            ? { recovery_notes: note }
             : undefined;
-      await postJson<BreakRecovery>(`/break-recoveries/${item.id}/${path}/`, body);
-      await onSaved(
-        path === "accept-coverage"
-          ? "Coverage accepted."
-          : path === "start"
-            ? "Break started under accepted cover."
-            : path === "recover"
-              ? "Line control recovered."
-              : "Break plan cancelled.",
-      );
-      setActionNotes((current) => ({ ...current, [item.id]: "" }));
+      await postJson<BreakOpportunity>(`/break-opportunities/${item.id}/${path}/`, body);
+      const messages = {
+        confirm: "Break confirmed. The full 40-minute return time is protected.",
+        decline: "Break opportunity declined with a reason.",
+        return: "Return recorded. Complete all required checks before restart.",
+        "complete-checks": "Safety, quality and technical checks recorded.",
+        resume: "Line recovery completed and run resumed.",
+      };
+      await onSaved(messages[path]);
+      setNotes((current) => ({ ...current, [item.id]: "" }));
     } catch (caught) {
       if (caught instanceof OfflineQueuedError) {
         await onSaved(caught.message);
-        setActionNotes((current) => ({ ...current, [item.id]: "" }));
       } else {
-        setError(caught instanceof Error ? caught.message : "Could not update the break record.");
+        setError(
+          caught instanceof Error ? caught.message : "Could not update the recovery timeline.",
+        );
       }
     } finally {
       setBusyId(null);
@@ -110,123 +83,140 @@ export function BreakRecoveryPanel({
   return (
     <section>
       <PageIntro
-        eyebrow="Temporary ownership"
+        eyebrow="Decision support"
         title="Break & Recovery"
-        body="Plan cover, capture acceptance, start only after acceptance, and confirm line-control recovery."
-        action={
-          <button className="button button--primary" onClick={() => setShowForm((value) => !value)}>
-            {showForm ? "Close form" : "Plan break"}
-          </button>
-        }
+        body="When a Red stop is close to an approved break, review the opportunity and capture the complete fault-to-restart timeline."
       />
       {error ? <ErrorBanner message={error} /> : null}
 
-      {showForm ? (
-        <form className="form-card form-grid form-card--spaced" onSubmit={planBreak}>
-          <label className="span-2">
-            Assigned line
-            <AssignmentSelect
-              assignments={assignments}
-              value={assignment}
-              onChange={(event) => setAssignment(event.target.value)}
-              required
-            />
-          </label>
-          <label>
-            Nominated cover
-            <UserSelect
-              users={users}
-              currentUserId={profile.id}
-              includeBlank={false}
-              value={coverUser}
-              onChange={(event) => setCoverUser(event.target.value)}
-              required
-            />
-          </label>
-          <label>
-            Planned start
-            <input
-              type="datetime-local"
-              value={plannedStart}
-              onChange={(event) => setPlannedStart(event.target.value)}
-              required
-            />
-          </label>
-          <label>
-            Expected return
-            <input
-              type="datetime-local"
-              value={expectedReturn}
-              onChange={(event) => setExpectedReturn(event.target.value)}
-              required
-            />
-          </label>
-          <label>
-            Coverage notes
-            <input value={coverageNotes} onChange={(event) => setCoverageNotes(event.target.value)} />
-          </label>
-          <div className="form-actions span-2">
-            <SubmitButton busy={busyId === "new"}>Create break plan</SubmitButton>
-          </div>
-        </form>
-      ) : null}
+      <div className="break-policy-banner">
+        <strong>Team Leader confirms every decision.</strong>
+        <span>
+          The system never shortens the 40-minute break or bypasses safety, food-safety, QA or
+          engineering checks.
+        </span>
+      </div>
 
-      {breaks.length === 0 ? (
+      {visible.length === 0 ? (
         <EmptyState
-          title="No break records visible"
-          body="New plans and breaks where you are the nominated cover will appear here."
+          title="No break opportunities"
+          body="A suggestion appears only when a Red line stop is within 60 minutes of an approved break window."
         />
       ) : (
         <div className="card-list">
-          {breaks.map((item) => {
-            const ownsAssignment = ownAssignmentIds.has(item.assignment) || profile.is_staff;
-            const isCover = item.cover_user === profile.id;
-            const needsNotes =
-              (item.status === "active" && ownsAssignment) ||
-              (["planned", "coverage_accepted"].includes(item.status) && ownsAssignment);
+          {visible.map((item) => (
+            <article
+              className={
+                item.status === "suggested"
+                  ? "workflow-card workflow-card--attention"
+                  : "workflow-card"
+              }
+              key={item.id}
+            >
+              <header className="workflow-card__header">
+                <div>
+                  <span className="eyebrow">
+                    {item.production_line_code} · Break {item.break_number}
+                  </span>
+                  <h3>{item.issue_summary}</h3>
+                  <p className="break-suggestion-copy">
+                    Suggested {formatDateTime(item.suggested_start_at)} · protected return{" "}
+                    {formatDateTime(item.expected_return_at)}
+                  </p>
+                </div>
+                <StatusPill value={item.status} />
+              </header>
 
-            return (
-              <article className={item.needs_attention ? "workflow-card workflow-card--attention" : "workflow-card"} key={item.id}>
-                <div className="workflow-card__header">
-                  <div>
-                    <span className="eyebrow">{item.production_line_code}</span>
-                    <h3>{item.team_leader_username} → {item.cover_user_username}</h3>
-                  </div>
-                  <StatusPill value={item.status} />
-                </div>
-                <div className="timeline-pair">
-                  <span>Start <strong>{formatDateTime(item.planned_start_at)}</strong></span>
-                  <span>Return <strong>{formatDateTime(item.expected_return_at)}</strong></span>
-                </div>
-                {item.needs_attention ? <p className="attention-copy">Attention required: planned or expected time has passed.</p> : null}
-                {needsNotes ? (
-                  <label>
-                    {item.status === "active" ? "Recovery notes" : "Cancellation reason"}
-                    <input
-                      value={actionNotes[item.id] ?? ""}
-                      onChange={(event) =>
-                        setActionNotes((current) => ({ ...current, [item.id]: event.target.value }))
-                      }
-                    />
-                  </label>
+              <ol
+                className="recovery-timeline"
+                aria-label={`${item.production_line_code} recovery timeline`}
+              >
+                {TIMELINE_STEPS.map((step) => {
+                  const value = item[step.key];
+                  return (
+                    <li className={value ? "is-complete" : ""} key={step.key}>
+                      <span className="recovery-timeline__marker" aria-hidden="true" />
+                      <strong>{step.label}</strong>
+                      <span>{value ? formatDateTime(value) : "Pending"}</span>
+                    </li>
+                  );
+                })}
+              </ol>
+
+              {item.recovery_notes ? (
+                <p className="recovery-note">
+                  <strong>Recovery:</strong> {item.recovery_notes}
+                </p>
+              ) : null}
+              {item.decline_reason ? (
+                <p className="recovery-note">
+                  <strong>Declined:</strong> {item.decline_reason}
+                </p>
+              ) : null}
+
+              {item.status === "suggested" || item.status === "checks_complete" ? (
+                <label className="break-action-note">
+                  {item.status === "suggested"
+                    ? "Reason if declining"
+                    : "Recovery notes before restart"}
+                  <input
+                    value={notes[item.id] ?? ""}
+                    onChange={(event) =>
+                      setNotes((current) => ({ ...current, [item.id]: event.target.value }))
+                    }
+                  />
+                </label>
+              ) : null}
+
+              <div className="workflow-actions">
+                {item.status === "suggested" ? (
+                  <>
+                    <button
+                      className="button button--primary"
+                      disabled={busyId === item.id}
+                      onClick={() => void transition(item, "confirm")}
+                    >
+                      Confirm full break
+                    </button>
+                    <button
+                      className="button button--ghost"
+                      disabled={busyId === item.id}
+                      onClick={() => void transition(item, "decline")}
+                    >
+                      Decline with reason
+                    </button>
+                  </>
                 ) : null}
-                <div className="workflow-actions">
-                  {item.status === "planned" && isCover ? (
-                    <button className="button button--primary" disabled={busyId === item.id} onClick={() => void action(item, "accept-coverage")}>Accept coverage</button>
-                  ) : null}
-                  {item.status === "coverage_accepted" && ownsAssignment ? (
-                    <button className="button button--primary" disabled={busyId === item.id} onClick={() => void action(item, "start")}>Start break</button>
-                  ) : null}
-                  {item.status === "active" && ownsAssignment ? (
-                    <button className="button button--primary" disabled={busyId === item.id} onClick={() => void action(item, "recover")}>Confirm recovery</button>
-                  ) : null}
-                  {["planned", "coverage_accepted"].includes(item.status) && ownsAssignment ? (
-                    <button className="button button--danger" disabled={busyId === item.id} onClick={() => void action(item, "cancel")}>Cancel plan</button>
-                  ) : null}
-                </div>
-              </article>
-            );
-          })}
+                {item.status === "confirmed" ? (
+                  <button
+                    className="button button--primary"
+                    disabled={busyId === item.id}
+                    onClick={() => void transition(item, "return")}
+                  >
+                    Record return
+                  </button>
+                ) : null}
+                {item.status === "returned" ? (
+                  <button
+                    className="button button--primary"
+                    disabled={busyId === item.id}
+                    onClick={() => void transition(item, "complete-checks")}
+                  >
+                    Confirm checks complete
+                  </button>
+                ) : null}
+                {item.status === "checks_complete" ? (
+                  <button
+                    className="button button--primary"
+                    disabled={busyId === item.id}
+                    onClick={() => void transition(item, "resume")}
+                  >
+                    Resume line
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          ))}
         </div>
       )}
     </section>

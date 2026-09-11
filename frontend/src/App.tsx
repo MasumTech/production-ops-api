@@ -15,6 +15,7 @@ import {
 import { ErrorBanner } from "./components";
 import { NotificationCentre } from "./NotificationCentre";
 import { BreakRecoveryPanel } from "./features/BreakRecoveryPanel";
+import { DailyPlanPanel } from "./features/DailyPlanPanel";
 import { HandoversPanel } from "./features/HandoversPanel";
 import { ManagerConsole } from "./features/ManagerConsole";
 import { MaterialsPanel } from "./features/MaterialsPanel";
@@ -29,7 +30,8 @@ import {
 } from "./WorkspaceNavigation";
 import type {
   Assignment,
-  BreakRecovery,
+  BreakOpportunity,
+  DailyPlanBlock,
   Escalation,
   LineUpdate,
   ManagerWorkspaceData,
@@ -54,6 +56,8 @@ const EMPTY_DATA: WorkspaceData = {
   updates: [],
   materials: [],
   escalations: [],
+  planBlocks: [],
+  breakOpportunities: [],
   breaks: [],
   handovers: [],
   users: [],
@@ -86,6 +90,7 @@ const EMPTY_SUPPORT_DATA: SupportCompanionData = {
 
 const NAV_ITEMS: Array<{ id: WorkspaceTab; label: string; shortLabel: string }> = [
   { id: "lines", label: "My Lines", shortLabel: "Lines" },
+  { id: "plan", label: "Daily Plan", shortLabel: "Plan" },
   { id: "materials", label: "Materials", shortLabel: "Materials" },
   { id: "breaks", label: "Break & Recovery", shortLabel: "Breaks" },
   { id: "handover", label: "Handover", shortLabel: "Handover" },
@@ -108,8 +113,16 @@ function useOnlineStatus(): boolean {
 }
 
 async function loadWorkspaceData(operationalDate: string): Promise<WorkspaceData> {
-  const [assignments, updates, materials, escalations, breaks, handovers, users] =
-    await Promise.all([
+  const [
+    assignments,
+    updates,
+    materials,
+    escalations,
+    planBlocks,
+    breakOpportunities,
+    handovers,
+    users,
+  ] = await Promise.all([
       apiList<Assignment>(
         `/team-leader-assignments/my-lines/?date=${operationalDate}`,
       ),
@@ -120,12 +133,23 @@ async function loadWorkspaceData(operationalDate: string): Promise<WorkspaceData
         `/product-material-readiness/?date=${operationalDate}&ordering=sequence_number`,
       ),
       apiList<Escalation>("/operational-escalations/?ordering=-raised_at"),
-      apiList<BreakRecovery>("/break-recoveries/?ordering=-created_at"),
+      apiList<DailyPlanBlock>(`/daily-plan-blocks/?date=${operationalDate}`),
+      apiList<BreakOpportunity>(`/break-opportunities/?date=${operationalDate}`),
       apiList<ShiftHandover>("/shift-handovers/?ordering=-handed_over_at"),
       apiList<UserChoice>("/active-users/"),
     ]);
 
-  return { assignments, updates, materials, escalations, breaks, handovers, users };
+  return {
+    assignments,
+    updates,
+    materials,
+    escalations,
+    planBlocks,
+    breakOpportunities,
+    breaks: [],
+    handovers,
+    users,
+  };
 }
 
 async function loadManagerData(operationalDate: string): Promise<ManagerWorkspaceData> {
@@ -530,6 +554,12 @@ export default function App() {
             />
           </>
         ) : null}
+        {tab === "plan" ? (
+          <DailyPlanPanel
+            assignments={data.assignments}
+            planBlocks={data.planBlocks}
+          />
+        ) : null}
         {tab === "materials" && profile ? (
           <MaterialsPanel
             assignments={data.assignments}
@@ -543,10 +573,8 @@ export default function App() {
         ) : null}
         {tab === "breaks" && profile ? (
           <BreakRecoveryPanel
-            profile={profile}
             assignments={data.assignments}
-            breaks={data.breaks}
-            users={data.users}
+            opportunities={data.breakOpportunities}
             onSaved={async (message) => {
               if (online) await refresh();
               setToast(message);

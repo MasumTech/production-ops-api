@@ -124,6 +124,53 @@ export interface BreakRecovery {
   needs_attention: boolean;
 }
 
+export interface DailyPlanBlock {
+  id: number;
+  assignment: number;
+  assignment_date: string;
+  production_line: number;
+  production_line_code: string;
+  sequence_number: number;
+  block_type: "production" | "break";
+  planned_start_at: string;
+  planned_end_at: string;
+  product_code: string;
+  product_name: string;
+  target_units_per_hour: number | null;
+  planned_units: number;
+  break_number: number | null;
+}
+
+export type BreakOpportunityStatus =
+  | "suggested"
+  | "confirmed"
+  | "returned"
+  | "checks_complete"
+  | "recovered"
+  | "declined";
+
+export interface BreakOpportunity {
+  id: number;
+  assignment: number;
+  production_line: number;
+  production_line_code: string;
+  break_block: number;
+  break_number: number;
+  source_update: number;
+  issue_summary: string;
+  status: BreakOpportunityStatus;
+  fault_at: string;
+  suggested_start_at: string;
+  expected_return_at: string;
+  confirmed_at: string | null;
+  returned_at: string | null;
+  checks_completed_at: string | null;
+  run_resumed_at: string | null;
+  recovery_notes: string;
+  declined_at: string | null;
+  decline_reason: string;
+}
+
 export interface ShiftHandover {
   id: number;
   outgoing_assignment: number;
@@ -172,6 +219,8 @@ export interface WorkspaceData {
   updates: LineUpdate[];
   materials: MaterialReadiness[];
   escalations: Escalation[];
+  planBlocks: DailyPlanBlock[];
+  breakOpportunities: BreakOpportunity[];
   breaks: BreakRecovery[];
   handovers: ShiftHandover[];
   users: UserChoice[];
@@ -446,4 +495,4 @@ export interface DailyRiskBriefing {
   lines: LineRiskBriefing[];
 }
 
-export type WorkspaceTab = "lines" | "issues" | "materials" | "breaks" | "handover";
+export type WorkspaceTab = "lines" | "issues" | "plan" | "materials" | "breaks" | "handover";

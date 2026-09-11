@@ -1,10 +1,13 @@
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import serializers
 
 from .access import WorkspaceRole, workspace_role_for_user
 from .models import (
+    BreakOpportunity,
     BreakRecovery,
+    DailyPlanBlock,
     HourlyLineUpdate,
     OperationalEscalation,
     OperationalEvent,
@@ -1184,6 +1187,158 @@ class ShiftHandoverFilterSerializer(serializers.Serializer):
         allow_null=True,
         default=None,
     )
+
+
+class DailyPlanBlockSerializer(serializers.ModelSerializer):
+    production_line = serializers.IntegerField(
+        source="assignment.production_line_id",
+        read_only=True,
+    )
+    production_line_code = serializers.CharField(
+        source="assignment.production_line.code",
+        read_only=True,
+    )
+    assignment_date = serializers.DateField(source="assignment.date", read_only=True)
+    planned_units = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = DailyPlanBlock
+        fields = (
+            "id",
+            "assignment",
+            "assignment_date",
+            "production_line",
+            "production_line_code",
+            "sequence_number",
+            "block_type",
+            "planned_start_at",
+            "planned_end_at",
+            "product_code",
+            "product_name",
+            "target_units_per_hour",
+            "planned_units",
+            "break_number",
+            "created_by",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "planned_units",
+            "created_by",
+            "created_at",
+            "updated_at",
+        )
+
+    def validate(self, attrs):
+        instance = DailyPlanBlock(
+            assignment=attrs.get(
+                "assignment", getattr(self.instance, "assignment", None)
+            ),
+            sequence_number=attrs.get(
+                "sequence_number", getattr(self.instance, "sequence_number", 1)
+            ),
+            block_type=attrs.get(
+                "block_type", getattr(self.instance, "block_type", "")
+            ),
+            planned_start_at=attrs.get(
+                "planned_start_at", getattr(self.instance, "planned_start_at", None)
+            ),
+            planned_end_at=attrs.get(
+                "planned_end_at", getattr(self.instance, "planned_end_at", None)
+            ),
+            product_code=attrs.get(
+                "product_code", getattr(self.instance, "product_code", "")
+            ),
+            product_name=attrs.get(
+                "product_name", getattr(self.instance, "product_name", "")
+            ),
+            target_units_per_hour=attrs.get(
+                "target_units_per_hour",
+                getattr(self.instance, "target_units_per_hour", None),
+            ),
+            break_number=attrs.get(
+                "break_number", getattr(self.instance, "break_number", None)
+            ),
+        )
+        if self.instance:
+            instance.pk = self.instance.pk
+        try:
+            instance.clean()
+        except DjangoValidationError as error:
+            raise serializers.ValidationError(error.message_dict) from error
+        return attrs
+
+
+class DailyPlanBlockFilterSerializer(serializers.Serializer):
+    date = serializers.DateField(required=False)
+    assignment = serializers.IntegerField(required=False, min_value=1)
+    production_line = serializers.IntegerField(required=False, min_value=1)
+    block_type = serializers.ChoiceField(
+        choices=DailyPlanBlock.BlockType.choices,
+        required=False,
+    )
+
+
+class BreakOpportunitySerializer(serializers.ModelSerializer):
+    production_line = serializers.IntegerField(
+        source="assignment.production_line_id",
+        read_only=True,
+    )
+    production_line_code = serializers.CharField(
+        source="assignment.production_line.code",
+        read_only=True,
+    )
+    break_number = serializers.IntegerField(
+        source="break_block.break_number", read_only=True
+    )
+    issue_summary = serializers.CharField(
+        source="source_update.issue_summary", read_only=True
+    )
+
+    class Meta:
+        model = BreakOpportunity
+        fields = (
+            "id",
+            "assignment",
+            "production_line",
+            "production_line_code",
+            "break_block",
+            "break_number",
+            "source_update",
+            "issue_summary",
+            "status",
+            "fault_at",
+            "suggested_start_at",
+            "expected_return_at",
+            "confirmed_at",
+            "returned_at",
+            "checks_completed_at",
+            "run_resumed_at",
+            "recovery_notes",
+            "declined_at",
+            "decline_reason",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = fields
+
+
+class BreakOpportunityFilterSerializer(serializers.Serializer):
+    date = serializers.DateField(required=False)
+    assignment = serializers.IntegerField(required=False, min_value=1)
+    status = serializers.ChoiceField(
+        choices=BreakOpportunity.Status.choices,
+        required=False,
+    )
+
+
+class BreakOpportunityDeclineSerializer(serializers.Serializer):
+    decline_reason = serializers.CharField(allow_blank=False, trim_whitespace=True)
+
+
+class BreakOpportunityResumeSerializer(serializers.Serializer):
+    recovery_notes = serializers.CharField(allow_blank=False, trim_whitespace=True)
 
 
 class BreakRecoverySerializer(serializers.ModelSerializer):

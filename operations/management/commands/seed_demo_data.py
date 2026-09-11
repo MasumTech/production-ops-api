@@ -1,4 +1,4 @@
-from datetime import time, timedelta
+from datetime import datetime, time, timedelta
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -10,7 +10,9 @@ from django.utils import timezone
 
 from operations.access import OPERATIONAL_SUPPORT_GROUP
 from operations.models import (
+    BreakOpportunity,
     BreakRecovery,
+    DailyPlanBlock,
     HourlyLineUpdate,
     IdempotentRequest,
     OperationalEscalation,
@@ -78,10 +80,12 @@ class Command(BaseCommand):
             f"{summary['assets']} assets, "
             f"{summary['assignments']} assignments, "
             f"{summary['shifts']} shifts, "
+            f"{summary['plan_blocks']} daily plan blocks, "
             f"{summary['updates']} line updates, "
             f"{summary['materials']} material items, "
             f"{summary['escalations']} escalations, "
-            f"{summary['breaks']} break records, and "
+            f"{summary['break_opportunities']} break opportunities, "
+            f"{summary['breaks']} legacy break records, and "
             f"{summary['handovers']} handover."
         )
         self.stdout.write("")
@@ -128,10 +132,12 @@ class Command(BaseCommand):
             user__username__startswith=DEMO_USER_PREFIX
         ).delete()
         ShiftHandover.objects.filter(demo_handover).delete()
+        BreakOpportunity.objects.filter(demo_assignment).delete()
         BreakRecovery.objects.filter(demo_assignment).delete()
         OperationalEscalation.objects.filter(demo_assignment).delete()
         ProductMaterialReadiness.objects.filter(demo_assignment).delete()
         HourlyLineUpdate.objects.filter(demo_assignment).delete()
+        DailyPlanBlock.objects.filter(demo_assignment).delete()
         QualityIncident.objects.filter(
             shift__production_line__code__startswith=DEMO_PREFIX
         ).delete()
@@ -160,7 +166,15 @@ class Command(BaseCommand):
             users,
             lines,
         )
-        updates = self._seed_updates(now, users, assignments)
+        plan_blocks = self._seed_daily_plan(operational_date, users, assignments)
+        updates = self._seed_updates(now, operational_date, users, assignments)
+        break_opportunities = self._seed_break_opportunities(
+            operational_date,
+            users,
+            assignments,
+            plan_blocks,
+            updates,
+        )
         materials = self._seed_materials(now, users, assignments)
         escalations = self._seed_escalations(
             now,
@@ -183,9 +197,11 @@ class Command(BaseCommand):
             "assets": len(assets),
             "assignments": len(assignments),
             "shifts": len(shifts),
+            "plan_blocks": len(plan_blocks),
             "updates": len(updates),
             "materials": len(materials),
             "escalations": len(escalations),
+            "break_opportunities": len(break_opportunities),
             "breaks": len(breaks),
             "handovers": len(handovers),
         }
@@ -393,7 +409,7 @@ class Command(BaseCommand):
                 shift_type=Shift.ShiftType.DAY,
                 defaults={
                     "supervisor": users["manager"],
-                    "start_time": time(6, 0),
+                    "start_time": time(7, 0),
                     "end_time": time(18, 0),
                     "planned_output": planned,
                     "actual_output": actual,
@@ -406,7 +422,98 @@ class Command(BaseCommand):
         return shifts
 
     @staticmethod
-    def _seed_updates(now, users, assignments):
+    def _seed_daily_plan(operational_date, users, assignments):
+        def planned_time(hour, minute=0):
+            return timezone.make_aware(
+                datetime.combine(operational_date, time(hour, minute))
+            )
+
+        schedules = {
+            "line_1": (
+                ("production", 7, 0, 9, 0, "SPC-01", "Salt & Pepper Chicken", 24, None),
+                ("break", 9, 0, 9, 40, "", "", None, 1),
+                (
+                    "production",
+                    9,
+                    40,
+                    12,
+                    0,
+                    "SSC-02",
+                    "Sweet & Sour Chicken",
+                    30,
+                    None,
+                ),
+                ("break", 12, 0, 12, 40, "", "", None, 2),
+                (
+                    "production",
+                    12,
+                    40,
+                    18,
+                    0,
+                    "VSR-03",
+                    "Vegetable Spring Rolls",
+                    20,
+                    None,
+                ),
+            ),
+            "line_2": (
+                ("production", 7, 0, 10, 0, "ODM-01", "Oat Drink 1L", 20, None),
+                ("break", 10, 0, 10, 40, "", "", None, 1),
+                ("production", 10, 40, 14, 0, "BBQ-02", "BBQ Chicken Bites", 28, None),
+                ("break", 14, 0, 14, 40, "", "", None, 2),
+                (
+                    "production",
+                    14,
+                    40,
+                    18,
+                    0,
+                    "VMF-03",
+                    "Vegetable Mix Filling",
+                    24,
+                    None,
+                ),
+            ),
+        }
+        plan_blocks = {}
+
+        for line_key, schedule in schedules.items():
+            for sequence, definition in enumerate(schedule, start=1):
+                (
+                    block_type,
+                    start_hour,
+                    start_minute,
+                    end_hour,
+                    end_minute,
+                    product_code,
+                    product_name,
+                    hourly_target,
+                    break_number,
+                ) = definition
+                block, _ = DailyPlanBlock.objects.update_or_create(
+                    assignment=assignments[line_key],
+                    sequence_number=sequence,
+                    defaults={
+                        "block_type": block_type,
+                        "planned_start_at": planned_time(start_hour, start_minute),
+                        "planned_end_at": planned_time(end_hour, end_minute),
+                        "product_code": product_code,
+                        "product_name": product_name,
+                        "target_units_per_hour": hourly_target,
+                        "break_number": break_number,
+                        "created_by": users["manager"],
+                    },
+                )
+                plan_blocks[f"{line_key}_{sequence}"] = block
+
+        return plan_blocks
+
+    @staticmethod
+    def _seed_updates(now, operational_date, users, assignments):
+        def recorded_time(hour, minute=0):
+            return timezone.make_aware(
+                datetime.combine(operational_date, time(hour, minute))
+            )
+
         definitions = {
             "red": {
                 "assignment": assignments["line_1"],
@@ -416,8 +523,8 @@ class Command(BaseCommand):
                 "action_taken": "Engineering inspection started",
                 "support_required": "Replacement valve inspection",
                 "requires_follow_up": True,
-                "recorded_at": now - timedelta(minutes=80),
-                "next_update_due_at": now - timedelta(minutes=20),
+                "recorded_at": recorded_time(8, 5),
+                "next_update_due_at": recorded_time(9, 5),
             },
             "amber": {
                 "assignment": assignments["line_2"],
@@ -427,8 +534,19 @@ class Command(BaseCommand):
                 "action_taken": "Warehouse replenishment requested",
                 "support_required": "Confirm delivery ETA",
                 "requires_follow_up": True,
-                "recorded_at": now - timedelta(minutes=25),
-                "next_update_due_at": now + timedelta(minutes=35),
+                "recorded_at": recorded_time(10, 15),
+                "next_update_due_at": recorded_time(11, 15),
+            },
+            "line_2_stop": {
+                "assignment": assignments["line_2"],
+                "status": HourlyLineUpdate.Status.RED,
+                "current_product": "BBQ Chicken Bites",
+                "issue_summary": "Case packer stopped before approved break",
+                "action_taken": "Line made safe and break opportunity reviewed",
+                "support_required": "Engineering checks before restart",
+                "requires_follow_up": True,
+                "recorded_at": recorded_time(13, 20),
+                "next_update_due_at": recorded_time(14, 20),
             },
         }
         updates = {}
@@ -437,6 +555,7 @@ class Command(BaseCommand):
             update, _ = HourlyLineUpdate.objects.update_or_create(
                 assignment=definition["assignment"],
                 recorded_by=users["leader"],
+                issue_summary=definition["issue_summary"],
                 defaults={
                     **definition,
                     "action_owner": users["engineer"],
@@ -445,6 +564,61 @@ class Command(BaseCommand):
             updates[key] = update
 
         return updates
+
+    @staticmethod
+    def _seed_break_opportunities(
+        operational_date,
+        users,
+        assignments,
+        plan_blocks,
+        updates,
+    ):
+        def event_time(hour, minute=0):
+            return timezone.make_aware(
+                datetime.combine(operational_date, time(hour, minute))
+            )
+
+        recovered, _ = BreakOpportunity.objects.update_or_create(
+            source_update=updates["red"],
+            defaults={
+                "assignment": assignments["line_1"],
+                "break_block": plan_blocks["line_1_2"],
+                "status": BreakOpportunity.Status.RECOVERED,
+                "fault_at": event_time(8, 5),
+                "suggested_start_at": event_time(8, 10),
+                "confirmed_at": event_time(8, 10),
+                "confirmed_by": users["leader"],
+                "expected_return_at": event_time(8, 50),
+                "returned_at": event_time(8, 50),
+                "checks_completed_at": event_time(8, 55),
+                "run_resumed_at": event_time(9, 0),
+                "recovery_notes": (
+                    "Safety, quality and technical checks completed before restart."
+                ),
+            },
+        )
+        suggested, _ = BreakOpportunity.objects.update_or_create(
+            source_update=updates["line_2_stop"],
+            defaults={
+                "assignment": assignments["line_2"],
+                "break_block": plan_blocks["line_2_4"],
+                "status": BreakOpportunity.Status.SUGGESTED,
+                "fault_at": event_time(13, 20),
+                "suggested_start_at": event_time(13, 25),
+                "expected_return_at": event_time(14, 5),
+                "confirmed_at": None,
+                "confirmed_by": None,
+                "returned_at": None,
+                "checks_completed_at": None,
+                "run_resumed_at": None,
+                "recovery_notes": "",
+                "declined_at": None,
+                "declined_by": None,
+                "decline_reason": "",
+            },
+        )
+
+        return {"recovered": recovered, "suggested": suggested}
 
     @staticmethod
     def _seed_materials(now, users, assignments):

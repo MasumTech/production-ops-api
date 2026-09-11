@@ -1,12 +1,15 @@
-from datetime import time, timedelta
+from datetime import datetime, time, timedelta
 
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
+from operations.break_opportunities import detect_break_opportunity
 from operations.models import (
+    BreakOpportunity,
     BreakRecovery,
+    DailyPlanBlock,
     HourlyLineUpdate,
     OperationalEscalation,
     ProductionLine,
@@ -16,6 +19,10 @@ from operations.models import (
     ShiftHandover,
     TeamLeaderAssignment,
 )
+
+
+def at_assignment_time(assignment, hour, minute=0):
+    return timezone.make_aware(datetime.combine(assignment.date, time(hour, minute)))
 
 
 @pytest.fixture
@@ -230,6 +237,156 @@ def test_hourly_line_update_string_representation(
 ):
     assert str(hourly_line_update) == (
         f"LINE-01 - Green - {hourly_line_update.recorded_at:%Y-%m-%d %H:%M}"
+    )
+
+
+@pytest.mark.django_db
+def test_daily_plan_production_block_calculates_planned_units(
+    team_leader_assignment,
+    supervisor,
+):
+    block = DailyPlanBlock(
+        assignment=team_leader_assignment,
+        sequence_number=1,
+        block_type=DailyPlanBlock.BlockType.PRODUCTION,
+        planned_start_at=at_assignment_time(team_leader_assignment, 7),
+        planned_end_at=at_assignment_time(team_leader_assignment, 9, 30),
+        product_code="SPC-01",
+        product_name="Salt & Pepper Chicken",
+        target_units_per_hour=24,
+        created_by=supervisor,
+    )
+
+    block.full_clean()
+
+    assert block.planned_units == 60
+
+
+@pytest.mark.django_db
+def test_daily_plan_requires_each_break_to_preserve_40_minutes(
+    team_leader_assignment,
+    supervisor,
+):
+    block = DailyPlanBlock(
+        assignment=team_leader_assignment,
+        sequence_number=2,
+        block_type=DailyPlanBlock.BlockType.BREAK,
+        break_number=1,
+        planned_start_at=at_assignment_time(team_leader_assignment, 9),
+        planned_end_at=at_assignment_time(team_leader_assignment, 9, 30),
+        created_by=supervisor,
+    )
+
+    with pytest.raises(ValidationError, match="exactly 40 minutes"):
+        block.full_clean()
+
+
+@pytest.mark.django_db
+def test_daily_plan_rejects_overlapping_blocks(
+    team_leader_assignment,
+    supervisor,
+):
+    DailyPlanBlock.objects.create(
+        assignment=team_leader_assignment,
+        sequence_number=1,
+        block_type=DailyPlanBlock.BlockType.PRODUCTION,
+        planned_start_at=at_assignment_time(team_leader_assignment, 7),
+        planned_end_at=at_assignment_time(team_leader_assignment, 9),
+        product_code="SPC-01",
+        product_name="Salt & Pepper Chicken",
+        target_units_per_hour=24,
+        created_by=supervisor,
+    )
+    overlap = DailyPlanBlock(
+        assignment=team_leader_assignment,
+        sequence_number=2,
+        block_type=DailyPlanBlock.BlockType.PRODUCTION,
+        planned_start_at=at_assignment_time(team_leader_assignment, 8, 30),
+        planned_end_at=at_assignment_time(team_leader_assignment, 10),
+        product_code="VSR-02",
+        product_name="Vegetable Spring Rolls",
+        target_units_per_hour=30,
+        created_by=supervisor,
+    )
+
+    with pytest.raises(ValidationError, match="cannot overlap"):
+        overlap.full_clean()
+
+
+@pytest.mark.django_db
+def test_break_opportunity_rejects_early_return(
+    team_leader_assignment,
+    supervisor,
+):
+    break_block = DailyPlanBlock.objects.create(
+        assignment=team_leader_assignment,
+        sequence_number=2,
+        block_type=DailyPlanBlock.BlockType.BREAK,
+        break_number=1,
+        planned_start_at=at_assignment_time(team_leader_assignment, 9),
+        planned_end_at=at_assignment_time(team_leader_assignment, 9, 40),
+        created_by=supervisor,
+    )
+    fault_at = at_assignment_time(team_leader_assignment, 8, 5)
+    update = HourlyLineUpdate.objects.create(
+        assignment=team_leader_assignment,
+        status=HourlyLineUpdate.Status.RED,
+        issue_summary="Machine fault",
+        requires_follow_up=True,
+        recorded_at=fault_at,
+        next_update_due_at=fault_at + timedelta(hours=1),
+        recorded_by=supervisor,
+    )
+    confirmed_at = at_assignment_time(team_leader_assignment, 8, 10)
+    opportunity = BreakOpportunity(
+        assignment=team_leader_assignment,
+        break_block=break_block,
+        source_update=update,
+        status=BreakOpportunity.Status.RETURNED,
+        fault_at=fault_at,
+        suggested_start_at=confirmed_at,
+        confirmed_at=confirmed_at,
+        confirmed_by=supervisor,
+        expected_return_at=confirmed_at + timedelta(minutes=40),
+        returned_at=confirmed_at + timedelta(minutes=35),
+    )
+
+    with pytest.raises(ValidationError, match="40-minute break must finish"):
+        opportunity.full_clean()
+
+
+@pytest.mark.django_db
+def test_red_stop_near_approved_break_creates_one_opportunity(
+    team_leader_assignment,
+    supervisor,
+):
+    break_block = DailyPlanBlock.objects.create(
+        assignment=team_leader_assignment,
+        sequence_number=2,
+        block_type=DailyPlanBlock.BlockType.BREAK,
+        break_number=1,
+        planned_start_at=at_assignment_time(team_leader_assignment, 9),
+        planned_end_at=at_assignment_time(team_leader_assignment, 9, 40),
+        created_by=supervisor,
+    )
+    fault_at = at_assignment_time(team_leader_assignment, 8, 5)
+    update = HourlyLineUpdate.objects.create(
+        assignment=team_leader_assignment,
+        status=HourlyLineUpdate.Status.RED,
+        issue_summary="Filler stopped",
+        requires_follow_up=True,
+        recorded_at=fault_at,
+        next_update_due_at=fault_at + timedelta(hours=1),
+        recorded_by=supervisor,
+    )
+
+    opportunity = detect_break_opportunity(update)
+
+    assert opportunity is not None
+    assert opportunity.break_block == break_block
+    assert opportunity.status == BreakOpportunity.Status.SUGGESTED
+    assert opportunity.expected_return_at - opportunity.suggested_start_at == timedelta(
+        minutes=40
     )
 
 

@@ -6,7 +6,15 @@ import type { Assignment, UserChoice } from "./types";
 export function StatusPill({ value }: { value: string }): ReactNode {
   const tone = ["green", "ready", "recovered", "accepted", "resolved"].includes(value)
     ? "positive"
-    : ["amber", "short", "planned", "coverage_accepted", "acknowledged"].includes(value)
+    : [
+          "amber",
+          "short",
+          "planned",
+          "coverage_accepted",
+          "acknowledged",
+          "suggested",
+          "confirmed",
+        ].includes(value)
       ? "warning"
       : ["red", "held", "critical", "active", "cancelled"].includes(value)
         ? "danger"
