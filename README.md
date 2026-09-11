@@ -696,7 +696,7 @@ The default local accounts are:
 | Break cover | `demo.cover` |
 | Operational Support Engineer | `demo.engineer` |
 
-The default password is `DemoPass123!`. Override it with `--password` when required.
+Set a local demo password explicitly with `--password` or the `DEMO_SEED_PASSWORD` environment variable.
 
 Running the command again updates the same demo records rather than creating duplicates. The `--reset` option deletes and recreates only demo users and records identified by the `demo.` username or `DEMO-` data prefix.
 

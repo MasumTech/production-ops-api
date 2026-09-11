@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, time, timedelta
 
 from django.conf import settings
@@ -28,7 +29,6 @@ from operations.models import (
 
 DEMO_PREFIX = "DEMO-"
 DEMO_USER_PREFIX = "demo."
-DEFAULT_PASSWORD = "DemoPass123!"
 
 
 class Command(BaseCommand):
@@ -44,8 +44,8 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--password",
-            default=DEFAULT_PASSWORD,
-            help="Password assigned to every demo user.",
+            default=None,
+            help="Password assigned to every demo user (or DEMO_SEED_PASSWORD).",
         )
         parser.add_argument(
             "--reset",
@@ -58,10 +58,12 @@ class Command(BaseCommand):
             raise CommandError("Demo seeding is disabled while DJANGO_DEBUG is false.")
 
         operational_date = self._parse_date(options["date"])
-        password = options["password"]
+        password = options["password"] or os.environ.get("DEMO_SEED_PASSWORD")
 
-        if len(password) < 8:
-            raise CommandError("The demo password must contain at least 8 characters.")
+        if not password or len(password) < 8:
+            raise CommandError(
+                "Provide --password or DEMO_SEED_PASSWORD (at least 8 characters)."
+            )
 
         with transaction.atomic():
             if options["reset"]:
@@ -222,6 +224,18 @@ class Command(BaseCommand):
                 "last_name": "Khan",
                 "is_staff": False,
             },
+            "leader_2": {
+                "username": "demo.leader.two",
+                "first_name": "Team",
+                "last_name": "Leader Two",
+                "is_staff": False,
+            },
+            "leader_3": {
+                "username": "demo.leader.three",
+                "first_name": "Team",
+                "last_name": "Leader Three",
+                "is_staff": False,
+            },
             "cover": {
                 "username": "demo.cover",
                 "first_name": "Sara",
@@ -278,6 +292,24 @@ class Command(BaseCommand):
                 "name": "Labelling and Dispatch",
                 "location": "Hall C",
                 "target_units_per_hour": 750,
+            },
+            "line_4": {
+                "code": "DEMO-LINE-04",
+                "name": "Secondary Filling",
+                "location": "Hall D",
+                "target_units_per_hour": 800,
+            },
+            "line_5": {
+                "code": "DEMO-LINE-05",
+                "name": "Final Packing",
+                "location": "Hall E",
+                "target_units_per_hour": 700,
+            },
+            "line_6": {
+                "code": "DEMO-LINE-06",
+                "name": "Dispatch Preparation",
+                "location": "Hall F",
+                "target_units_per_hour": 650,
             },
         }
         lines = {}
@@ -357,6 +389,24 @@ class Command(BaseCommand):
                 operational_date,
                 Shift.ShiftType.DAY,
             ),
+            "line_4": (
+                lines["line_4"],
+                users["leader_2"],
+                operational_date,
+                Shift.ShiftType.DAY,
+            ),
+            "line_5": (
+                lines["line_5"],
+                users["leader_3"],
+                operational_date,
+                Shift.ShiftType.DAY,
+            ),
+            "line_6": (
+                lines["line_6"],
+                users["leader_3"],
+                operational_date,
+                Shift.ShiftType.DAY,
+            ),
             "incoming": (
                 lines["line_1"],
                 users["cover"],
@@ -396,9 +446,15 @@ class Command(BaseCommand):
     @staticmethod
     def _seed_shifts(operational_date, users, lines):
         definitions = {
-            "line_1": (lines["line_1"], 5000, 3200, 47),
-            "line_2": (lines["line_2"], 4200, 3650, 18),
-            "line_3": (lines["line_3"], 3600, 2100, 31),
+            key: (lines[key], planned, actual, downtime)
+            for key, planned, actual, downtime in (
+                ("line_1", 8400, 4980, 12),
+                ("line_2", 6000, 2760, 18),
+                ("line_3", 7200, 6350, 5),
+                ("line_4", 6400, 3450, 32),
+                ("line_5", 7000, 6160, 8),
+                ("line_6", 5800, 3538, 42),
+            )
         }
         shifts = {}
 
@@ -474,6 +530,23 @@ class Command(BaseCommand):
                 ),
             ),
         }
+        schedules.update(
+            {
+                key: (
+                    ("production", 7, 0, 11, 0, code, name, target, None),
+                    ("break", 11, 0, 11, 40, "", "", None, 1),
+                    ("production", 11, 40, 15, 0, code, name, target, None),
+                    ("break", 15, 0, 15, 40, "", "", None, 2),
+                    ("production", 15, 40, 18, 0, code, name, target, None),
+                )
+                for key, code, name, target in (
+                    ("line_3", "SPC-04", "Salt & Pepper Chicken", 26),
+                    ("line_4", "VSR-05", "Vegetable Spring Rolls", 22),
+                    ("line_5", "OBT-06", "Oat Milk Chai", 30),
+                    ("line_6", "BMF-07", "Baja Milk Foam", 24),
+                )
+            }
+        )
         plan_blocks = {}
 
         for line_key, schedule in schedules.items():
