@@ -18,6 +18,7 @@ from operations.models import (
     IdempotentRequest,
     OperationalEscalation,
     OperationalEvent,
+    PilotObservation,
     ProductionAsset,
     ProductionLine,
     ProductMaterialReadiness,
@@ -132,6 +133,11 @@ class Command(BaseCommand):
 
         IdempotentRequest.objects.filter(
             user__username__startswith=DEMO_USER_PREFIX
+        ).delete()
+        # Pilot observations protect their production line, so remove demo
+        # evidence before deleting the demo lines themselves.
+        PilotObservation.objects.filter(
+            production_line__code__startswith=DEMO_PREFIX
         ).delete()
         ShiftHandover.objects.filter(demo_handover).delete()
         BreakOpportunity.objects.filter(demo_assignment).delete()
