@@ -18,7 +18,10 @@ from operations.models import (
     IdempotentRequest,
     OperationalEscalation,
     OperationalEvent,
+    PilotApproval,
+    PilotFeedback,
     PilotObservation,
+    PilotTrial,
     ProductionAsset,
     ProductionLine,
     ProductMaterialReadiness,
@@ -139,6 +142,10 @@ class Command(BaseCommand):
         PilotObservation.objects.filter(
             production_line__code__startswith=DEMO_PREFIX
         ).delete()
+        demo_trials = Q(trial__name__startswith=DEMO_PREFIX)
+        PilotApproval.objects.filter(demo_trials).delete()
+        PilotFeedback.objects.filter(demo_trials).delete()
+        PilotTrial.objects.filter(name__startswith=DEMO_PREFIX).delete()
         ShiftHandover.objects.filter(demo_handover).delete()
         BreakOpportunity.objects.filter(demo_assignment).delete()
         BreakRecovery.objects.filter(demo_assignment).delete()
