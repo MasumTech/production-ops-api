@@ -3,12 +3,19 @@ import { useEffect, useState } from "react";
 import { ApiError, OfflineQueuedError, apiRequest, postJson } from "./api";
 import { formatDateTime, titleCase } from "./format";
 import type { NotificationInbox, OperationalEvent } from "./types";
+import { AppIcon } from "./AppIcon";
 
 function notificationTitle(event: OperationalEvent): string {
   return event.event_type.split(".").map(titleCase).join(" · ");
 }
 
-export function NotificationCentre({ refreshToken }: { refreshToken: string | null }) {
+export function NotificationCentre({
+  refreshToken,
+  iconOnly = false,
+}: {
+  refreshToken: string | null;
+  iconOnly?: boolean;
+}) {
   const [inbox, setInbox] = useState<NotificationInbox>({ unread_count: 0, results: [] });
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
@@ -57,12 +64,18 @@ export function NotificationCentre({ refreshToken }: { refreshToken: string | nu
     <div className="notification-centre">
       <button
         type="button"
-        className="button button--ghost notification-trigger"
+        className={`button button--ghost notification-trigger${iconOnly ? " notification-trigger--icon" : ""}`}
         aria-expanded={open}
         aria-controls="notification-panel"
+        aria-label={iconOnly ? `Alerts${inbox.unread_count ? ` (${inbox.unread_count})` : ""}` : undefined}
         onClick={() => setOpen((current) => !current)}
       >
-        Alerts{inbox.unread_count ? ` (${inbox.unread_count})` : ""}
+        {iconOnly
+          ? <AppIcon name="bell" size={23} />
+          : `Alerts${inbox.unread_count ? ` (${inbox.unread_count})` : ""}`}
+        {iconOnly && inbox.unread_count ? (
+          <span className="notification-count">{inbox.unread_count}</span>
+        ) : null}
       </button>
       {open ? (
         <section id="notification-panel" className="notification-panel" aria-label="Notifications">

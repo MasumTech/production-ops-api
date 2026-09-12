@@ -204,6 +204,22 @@ export interface ShiftRecord {
   performance_percentage: number | null;
 }
 
+export interface DowntimeEvent {
+  id: number;
+  shift: number;
+  production_line: number;
+  production_line_code: string;
+  shift_date: string;
+  started_at: string;
+  ended_at: string | null;
+  duration_minutes: number;
+  reason_category: "equipment" | "material" | "quality" | "staffing" | "changeover" | "other";
+  description: string;
+  owner_group: "operations" | "engineering" | "qa" | "machine_minder";
+  status: "open" | "resolved";
+  resolution_note: string;
+}
+
 export interface DashboardSummary {
   total_shifts: number;
   total_planned_output: number;
@@ -232,6 +248,7 @@ export interface ManagerWorkspaceData {
   materials: MaterialReadiness[];
   escalations: Escalation[];
   shifts: ShiftRecord[];
+  downtimeEvents: DowntimeEvent[];
   summary: DashboardSummary;
 }
 

@@ -18,12 +18,12 @@ test("manager can open the daily risk briefing after secure sign-in", async ({ p
   await signIn(page, "demo.manager");
 
   await expect(
-    page.getByRole("heading", { name: "Today's production overview" }),
+    page.getByRole("heading", { name: "Before-shift and live overview" }),
   ).toBeVisible();
 
   const workspace = page.locator('aside[aria-label="Operations Manager workspace"]');
-  await expect(workspace.getByRole("button")).toHaveCount(5);
-  await workspace.getByRole("button", { name: "AI Risk Briefing" }).click();
+  await expect(workspace.getByRole("button")).toHaveCount(8);
+  await workspace.getByRole("button", { name: "Risk briefing" }).click();
   await expect(
     page.getByRole("heading", { name: "AI Daily Risk Briefing" }),
   ).toBeVisible();

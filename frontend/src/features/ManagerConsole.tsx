@@ -5,6 +5,7 @@ import { EmptyState, ErrorBanner, StatusPill } from "../components";
 import { formatDateTime, titleCase } from "../format";
 import { escalationRole } from "../operationalRoles";
 import { NotificationCentre } from "../NotificationCentre";
+import { AppIcon, type AppIconName } from "../AppIcon";
 import type { LiveConnectionState } from "../realtime";
 import {
   WorkspaceBottomNavigation,
@@ -12,6 +13,7 @@ import {
 } from "../WorkspaceNavigation";
 import type {
   Assignment,
+  DowntimeEvent,
   Escalation,
   LineUpdate,
   ManagerWorkspaceData,
@@ -25,20 +27,23 @@ type BoardFilter = "all" | "attention" | "red" | "late" | "materials";
 type ManagerWorkspaceView =
   | "overview"
   | "lines"
+  | "plans"
   | "actions"
   | "briefing"
-  | "analytics";
+  | "recovery";
 
 const MANAGER_NAV_ITEMS: Array<{
   id: ManagerWorkspaceView;
   label: string;
   shortLabel: string;
+  icon: AppIconName;
 }> = [
-  { id: "overview", label: "Overview", shortLabel: "Overview" },
-  { id: "lines", label: "Live Floor", shortLabel: "Floor" },
-  { id: "actions", label: "Actions & Materials", shortLabel: "Actions" },
-  { id: "briefing", label: "AI Risk Briefing", shortLabel: "Briefing" },
-  { id: "analytics", label: "Loss History", shortLabel: "Loss" },
+  { id: "overview", label: "Overview", shortLabel: "Overview", icon: "home" },
+  { id: "lines", label: "Team Leaders", shortLabel: "Teams", icon: "users" },
+  { id: "plans", label: "Daily plans", shortLabel: "Plans", icon: "calendar" },
+  { id: "actions", label: "Materials", shortLabel: "Materials", icon: "package" },
+  { id: "recovery", label: "Break recovery", shortLabel: "Recovery", icon: "coffee" },
+  { id: "briefing", label: "Risk briefing", shortLabel: "Risks", icon: "warning" },
 ];
 
 export interface ManagerLineRow {
@@ -79,6 +84,7 @@ export function buildManagerRows(
   const shiftByLine = new Map(data.shifts.map((item) => [shiftKey(item), item]));
 
   return data.assignments
+    .filter((assignment) => assignment.shift_type === "day")
     .map((assignment) => {
       const update = updateByAssignment.get(assignment.id) ?? null;
       const openActions = data.escalations.filter(
@@ -145,6 +151,11 @@ function planPercent(shift: ShiftRecord | null): number | null {
   return Math.round((shift.actual_output / shift.planned_output) * 100);
 }
 
+function displayLine(code: string): string {
+  const number = Number(code.split("-").at(-1));
+  return Number.isFinite(number) ? `Line ${number}` : code;
+}
+
 function buildHierarchyGroups(assignments: Assignment[]) {
   const groups = new Map<number, Assignment[]>();
   assignments.forEach((assignment) => {
@@ -155,6 +166,58 @@ function buildHierarchyGroups(assignments: Assignment[]) {
   return [...groups.entries()]
     .sort((left, right) => left[0] - right[0])
     .map(([teamLeaderId, lines]) => ({ teamLeaderId, lines }));
+}
+
+function lineDowntime(events: DowntimeEvent[], productionLine: number): number {
+  return events
+    .filter((event) => event.production_line === productionLine)
+    .reduce((total, event) => total + event.duration_minutes, 0);
+}
+
+function shortTime(value: string | null): string {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(value));
+}
+
+function controlBoardDate(value: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(`${value}T12:00:00`));
+}
+
+function hourlyDowntime(events: DowntimeEvent[], operationalDate: string) {
+  return Array.from({ length: 11 }, (_, offset) => {
+    const hour = 7 + offset;
+    const bucketStart = new Date(`${operationalDate}T${String(hour).padStart(2, "0")}:00:00`);
+    const bucketEnd = new Date(bucketStart.getTime() + 60 * 60 * 1000);
+    const matching = events.filter((event) => {
+      const start = new Date(event.started_at);
+      const end = new Date(event.ended_at ?? Date.now());
+      return start < bucketEnd && end > bucketStart;
+    });
+    const minutes = matching.reduce((total, event) => {
+      const start = Math.max(new Date(event.started_at).getTime(), bucketStart.getTime());
+      const end = Math.min(
+        new Date(event.ended_at ?? Date.now()).getTime(),
+        bucketEnd.getTime(),
+      );
+      return total + Math.max(0, Math.round((end - start) / 60_000));
+    }, 0);
+    return {
+      label: `${String(hour).padStart(2, "0")}:00–${String(hour + 1).padStart(2, "0")}:00`,
+      minutes,
+      description: matching.length
+        ? [...new Set(matching.map((event) => event.description))].join(" · ")
+        : "No recorded loss",
+    };
+  });
 }
 
 function ManagerViewIntro({
@@ -202,6 +265,7 @@ export function ManagerConsole({
 }) {
   const [view, setView] = useState<ManagerWorkspaceView>("overview");
   const [filter, setFilter] = useState<BoardFilter>("all");
+  const [selectedDowntimeLine, setSelectedDowntimeLine] = useState<number | null>(null);
   const rows = useMemo(() => buildManagerRows(data), [data]);
   const visibleRows = useMemo(
     () => rows.filter((row) => matchesFilter(row, filter)),
@@ -213,10 +277,24 @@ export function ManagerConsole({
   const materialRisks = data.materials.filter((item) =>
     ["short", "held"].includes(item.status),
   );
-  const lateCount = rows.filter((row) => row.isLate || !row.update).length;
-  const attentionCount = rows.filter((row) => row.attentionLevel !== "stable").length;
   const summary = data.summary ?? EMPTY_SUMMARY;
-  const hierarchyGroups = useMemo(() => buildHierarchyGroups(data.assignments), [data.assignments]);
+  const hierarchyGroups = useMemo(
+    () => buildHierarchyGroups(rows.map((row) => row.assignment)),
+    [rows],
+  );
+  const effectiveDowntimeLine = selectedDowntimeLine ?? rows[0]?.assignment.production_line ?? null;
+  const selectedDowntimeEvents = data.downtimeEvents.filter(
+    (event) => event.production_line === effectiveDowntimeLine,
+  );
+  const downtimeHours = hourlyDowntime(selectedDowntimeEvents, operationalDate);
+  const planCompletion = summary.overall_performance_percentage ?? 0;
+  const downtimeRisk = Math.min(100, Math.round((summary.total_downtime_minutes / 66) * 100));
+  const materialRisk = Math.min(100, materialRisks.length * 21);
+  const highestRiskLine = rows.find((row) => row.update?.status === "red") ?? rows[0];
+  const stableLineLabels = rows
+    .filter((row) => row.update?.status === "green")
+    .map((row) => displayLine(row.assignment.production_line_code))
+    .join(", ");
 
   return (
     <div className="manager-shell">
@@ -227,20 +305,11 @@ export function ManagerConsole({
       ) : null}
 
       <header className="manager-topbar">
-        <div className="topbar__brand">
-          <div className="brand-mark brand-mark--small" aria-hidden="true">
-            ML
-          </div>
-          <div>
-            <strong>Operations Manager Console</strong>
-            <span>
-              Live Floor · {liveState === "live" ? "Event stream connected" : "Snapshot fallback"}
-            </span>
-          </div>
-        </div>
-        <div className="topbar__actions">
-          <label className="date-control">
-            <span>Operational date</span>
+        <strong className="manager-brand">OPERATIONS CONTROL BOARD</strong>
+        <div className="manager-header-meta">
+          <label className="manager-header-date">
+            <AppIcon name="clock" size={25} />
+            <span>{controlBoardDate(operationalDate)}</span>
             <input
               aria-label="Operational date"
               type="date"
@@ -248,14 +317,10 @@ export function ManagerConsole({
               onChange={(event) => onDateChange(event.target.value)}
             />
           </label>
-          <span className="user-chip">{profile.display_name}</span>
-          <NotificationCentre refreshToken={lastUpdatedAt} />
-          <button className="button button--ghost" onClick={onRefresh} disabled={busy}>
-            {busy ? "Refreshing…" : "Refresh now"}
-          </button>
-          <button className="button button--ghost" onClick={onSignOut}>
-            Sign out
-          </button>
+          <span className="manager-header-divider" aria-hidden="true" />
+          <span>Shift&nbsp; 07:00 – 18:00</span>
+          <span className="manager-header-divider" aria-hidden="true" />
+          <NotificationCentre refreshToken={lastUpdatedAt} iconOnly />
         </div>
       </header>
 
@@ -269,16 +334,19 @@ export function ManagerConsole({
           onSelect={setView}
           summary={
             <>
-            <span className="eyebrow">Current scope</span>
-            <strong>{rows.length} active assignments</strong>
-            <span>{attentionCount} lines need attention</span>
+              <span className="manager-live-dot" aria-hidden="true" />
+              <strong>{liveState === "live" ? "Live data" : "Snapshot data"}</strong>
+              <span>{rows.length} lines scheduled</span>
             </>
           }
           boundary={
-            <>
-              Visibility and prioritisation aid only. Confirm urgent conditions through approved
-              safety, quality, engineering, and production-control procedures.
-            </>
+            <div className="manager-sidebar-footer">
+              <p>Keep production<br />moving safely</p>
+              <button type="button" onClick={onRefresh} disabled={busy}>
+                {busy ? "Refreshing…" : "Refresh data"}
+              </button>
+              <button type="button" onClick={onSignOut}>Sign out {profile.display_name}</button>
+            </div>
           }
         />
 
@@ -289,110 +357,76 @@ export function ManagerConsole({
             <>
               <section className="manager-hero" aria-labelledby="manager-title">
                 <div>
-                  <span className="eyebrow">Management oversight</span>
-                  <h1 id="manager-title">Today&apos;s production overview</h1>
-                  <p>
-                    Start with plan completion, downtime and the lines that need support. Critical
-                    conditions remain first in the Live Floor view.
-                  </p>
-                </div>
-                <div className="snapshot-copy">
-                  <span>Last refreshed</span>
-                  <strong>{lastUpdatedAt ? formatDateTime(lastUpdatedAt) : "Not refreshed"}</strong>
+                  <h1 id="manager-title">Before-shift and live overview</h1>
+                  <p>Shift 07:00 – 18:00&nbsp;&nbsp; | &nbsp;&nbsp;{liveState === "live" ? "Live data" : "Snapshot data"}</p>
                 </div>
               </section>
 
               <section className="manager-kpis" aria-label="Operational summary">
-                <article className="kpi-card">
-                  <span>Active line assignments</span>
-                  <strong>{rows.length}</strong>
-                  <small>{attentionCount} need attention</small>
+                <article className="control-kpi">
+                  <span className="control-kpi__icon control-kpi__icon--blue"><AppIcon name="factory" size={31} /></span>
+                  <div><strong>{rows.length}</strong><span>lines</span><small>All lines scheduled</small></div>
                 </article>
-                <article className="kpi-card kpi-card--danger">
-                  <span>Open actions</span>
-                  <strong>{openActions.length}</strong>
-                  <small>{openActions.filter((item) => item.is_overdue).length} overdue</small>
+                <article className="control-kpi">
+                  <span className="control-kpi__icon control-kpi__icon--blue"><AppIcon name="users" size={31} /></span>
+                  <div><strong>{hierarchyGroups.length}</strong><span>Team Leaders</span><small>2 lines each</small></div>
                 </article>
-                <article className="kpi-card kpi-card--warning">
-                  <span>Late or missing updates</span>
-                  <strong>{lateCount}</strong>
-                  <small>Follow up with the responsible team</small>
+                <article className="control-kpi">
+                  <span className="control-kpi__icon control-kpi__icon--green"><AppIcon name="chart" size={31} /></span>
+                  <div><strong>{Math.round(planCompletion)}%</strong><span>plan complete</span><small>Across all lines</small></div>
                 </article>
-                <article className="kpi-card kpi-card--warning">
-                  <span>Material risks</span>
-                  <strong>{materialRisks.length}</strong>
-                  <small>Short or held products</small>
+                <article className="control-kpi">
+                  <span className="control-kpi__icon control-kpi__icon--orange"><AppIcon name="clock" size={31} /></span>
+                  <div><strong>{NUMBER.format(summary.total_downtime_minutes)} min</strong><span>downtime</span><small>Total today</small></div>
                 </article>
-                <article className="kpi-card">
-                  <span>Output position</span>
-                  <strong>
-                    {NUMBER.format(summary.total_actual_output)} /{" "}
-                    {NUMBER.format(summary.total_planned_output)}
-                  </strong>
-                  <small>
-                    {summary.overall_performance_percentage === null
-                      ? "No performance yet"
-                      : `${summary.overall_performance_percentage.toFixed(1)}% overall`}
-                  </small>
-                </article>
-                <article className="kpi-card">
-                  <span>Downtime</span>
-                  <strong>{NUMBER.format(summary.total_downtime_minutes)} min</strong>
-                  <small>{summary.open_incidents} open quality incidents</small>
-                </article>
-              </section>
-
-              <section className="manager-hierarchy" aria-labelledby="manager-hierarchy-title">
-                <div className="manager-section-heading">
-                  <div>
-                    <span className="eyebrow">Operating structure</span>
-                    <h2 id="manager-hierarchy-title">Operations Manager coverage</h2>
-                  </div>
-                  <span className="hierarchy-badge">{hierarchyGroups.length} Team Leader lanes</span>
-                </div>
-                <p className="manager-hierarchy__note">
-                  Functional coverage for today&apos;s plan. Use the line board for status and the risk briefing for recorded priorities.
-                </p>
-                <div className="manager-hierarchy__grid">
-                  {hierarchyGroups.map(({ teamLeaderId, lines }) => (
-                    <article className="hierarchy-node" key={teamLeaderId}>
-                      <span className="hierarchy-node__role">Team Leader</span>
-                      <strong>{lines.length} assigned {lines.length === 1 ? "line" : "lines"}</strong>
-                      <div className="hierarchy-node__lines">
-                        {lines.map((line) => <span key={line.id}>{line.production_line_code}</span>)}
-                      </div>
-                    </article>
-                  ))}
-                </div>
               </section>
 
               <section className="manager-overview-board" aria-labelledby="coverage-board-title">
                 <div className="manager-section-heading">
                   <div>
-                    <span className="eyebrow">Live status and plan</span>
                     <h2 id="coverage-board-title">Team Leaders and production lines</h2>
+                    <p>Live status, plan progress and next check for each line</p>
                   </div>
-                  <button className="text-button" onClick={() => setView("lines")}>Open line control →</button>
                 </div>
                 <div className="manager-leader-grid">
-                  {hierarchyGroups.map(({ teamLeaderId, lines }) => (
+                  {hierarchyGroups.map(({ teamLeaderId, lines }, leaderIndex) => (
                     <article className="leader-card" key={teamLeaderId}>
                       <header className="leader-card__header">
                         <div>
-                          <span className="leader-card__icon" aria-hidden="true">●</span>
-                          <div><strong>Team Leader</strong><span>{lines.length} assigned lines</span></div>
+                          <span className="leader-card__icon">
+                            <AppIcon
+                              name={(["users", "settings", "shield"] as AppIconName[])[leaderIndex] ?? "users"}
+                              size={24}
+                            />
+                          </span>
+                          <div>
+                            <strong>Team Leader {leaderIndex + 1}</strong>
+                            <span>{lines.map((line) => displayLine(line.production_line_code)).join(" and ")}</span>
+                          </div>
                         </div>
-                        <span className="hierarchy-badge">Operations</span>
+                        <span className="hierarchy-badge">
+                          {(["Operations", "Engineering", "QA"] as const)[leaderIndex] ?? "Operations"}
+                        </span>
                       </header>
-                      <div className="leader-card__columns"><span>Line</span><span>Product</span><span>Status</span><span>Plan</span></div>
+                      <div className="leader-card__columns">
+                        <span>Line</span><span>Product</span><span>Status</span><span>Plan</span><span>Downtime</span><span>Next check</span>
+                      </div>
                       {lines.map((line) => {
                         const row = rows.find((item) => item.assignment.id === line.id);
                         const percent = planPercent(row?.shift ?? null);
                         return <div className="leader-line" key={line.id}>
-                          <strong>{line.production_line_code.replace("DEMO-", "")}</strong>
+                          <strong>{displayLine(line.production_line_code)}</strong>
                           <span>{row?.update?.current_product || "Planned production"}</span>
                           <span className={`status-dot status-dot--${row?.update?.status || "missing"}`} aria-label={row?.update?.status || "missing"} />
                           <span>{percent === null ? "—" : `${percent}%`}</span>
+                          <button
+                            type="button"
+                            className="downtime-link"
+                            onClick={() => setSelectedDowntimeLine(line.production_line)}
+                          >
+                            {lineDowntime(data.downtimeEvents, line.production_line)} min
+                          </button>
+                          <span>{shortTime(row?.update?.next_update_due_at ?? null)}</span>
                         </div>;
                       })}
                     </article>
@@ -401,15 +435,56 @@ export function ManagerConsole({
               </section>
 
               <section className="manager-overview-risk" aria-labelledby="overview-risk-title">
-                <div className="manager-section-heading">
-                  <div><span className="eyebrow">Decision support</span><h2 id="overview-risk-title">AI daily risk briefing</h2></div>
-                  <button className="text-button" onClick={() => setView("briefing")}>Full briefing →</button>
+                <header className="risk-overview-heading">
+                  <span className="risk-overview-icon"><AppIcon name="lightbulb" size={28} /></span>
+                  <div><h2 id="overview-risk-title">AI daily risk briefing</h2><p>Key risks for today based on current data</p></div>
+                </header>
+                <div className="risk-overview-layout">
+                  <div className="risk-metric-grid">
+                    <article><span>Plan completion</span><strong>{Math.round(planCompletion)}%</strong><i className="risk-signal risk-signal--green" /><small>On track</small></article>
+                    <article><span>Downtime risk</span><strong>{downtimeRisk}%</strong><i className="risk-signal risk-signal--red" /><small>{downtimeRisk >= 50 ? "Higher than normal" : "Controlled"}</small></article>
+                    <article><span>Material delay risk</span><strong>{materialRisk}%</strong><i className="risk-signal risk-signal--amber" /><small>{materialRisk ? "Moderate risk" : "No current delay"}</small></article>
+                  </div>
+                  <div className="risk-priorities">
+                    <h3>Suggested priorities (advisory only)</h3>
+                    <ol>
+                      <li><span>1</span>Focus on {highestRiskLine ? displayLine(highestRiskLine.assignment.production_line_code) : "the highest-risk line"} – investigate downtime and restore output.</li>
+                      <li><span>2</span>{materialRisks[0] ? `Check material supply for ${materialRisks[0].product_name}.` : "Maintain confirmed material availability."}</li>
+                      <li><span>3</span>{stableLineLabels ? `Maintain current performance on ${stableLineLabels}.` : "Confirm the next hourly line updates."}</li>
+                    </ol>
+                    <p className="advisory-note"><AppIcon name="info" size={20} />AI suggestions are advisory only. Operational decisions remain with you.</p>
+                  </div>
                 </div>
-                <p>Recorded evidence only. Suggestions are advisory; approved safety, quality and engineering procedures remain authoritative.</p>
-                <div className="overview-risk-items">
-                  <span><strong>{attentionCount}</strong> lines needing attention</span>
-                  <span><strong>{materialRisks.length}</strong> material risks</span>
-                  <span><strong>{summary.total_downtime_minutes} min</strong> downtime recorded</span>
+              </section>
+
+              <section className="hourly-downtime" aria-labelledby="hourly-downtime-title">
+                <div className="manager-section-heading">
+                  <div>
+                    <h2 id="hourly-downtime-title">Hourly downtime by line</h2>
+                    <p>Planned breaks are excluded. Select a line to review each hour and the recorded reason.</p>
+                  </div>
+                  <strong>{selectedDowntimeEvents.reduce((total, event) => total + event.duration_minutes, 0)} min</strong>
+                </div>
+                <div className="downtime-line-tabs" role="tablist" aria-label="Production lines">
+                  {rows.map((row) => (
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={effectiveDowntimeLine === row.assignment.production_line}
+                      className={effectiveDowntimeLine === row.assignment.production_line ? "is-active" : ""}
+                      key={row.assignment.production_line}
+                      onClick={() => setSelectedDowntimeLine(row.assignment.production_line)}
+                    >
+                      {displayLine(row.assignment.production_line_code)}
+                    </button>
+                  ))}
+                </div>
+                <div className="hourly-downtime-grid">
+                  {downtimeHours.map((hour) => (
+                    <article className={hour.minutes ? "has-loss" : ""} key={hour.label}>
+                      <span>{hour.label}</span><strong>{hour.minutes} min</strong><small>{hour.description}</small>
+                    </article>
+                  ))}
                 </div>
               </section>
             </>
@@ -534,6 +609,27 @@ export function ManagerConsole({
             </>
           ) : null}
 
+          {view === "plans" ? (
+            <>
+              <ManagerViewIntro
+                eyebrow="Today&apos;s schedule"
+                title="Daily plans"
+                body="Compare each line&apos;s planned output with the live recorded position for this shift."
+              />
+              <section className="daily-plan-summary" aria-label="Daily production plans">
+                {rows.map((row) => (
+                  <article key={row.assignment.id}>
+                    <span>{displayLine(row.assignment.production_line_code)}</span>
+                    <strong>{row.update?.current_product || "Planned production"}</strong>
+                    <div><span>{NUMBER.format(row.shift?.actual_output ?? 0)} actual</span><span>{NUMBER.format(row.shift?.planned_output ?? 0)} planned</span></div>
+                    <progress value={planPercent(row.shift) ?? 0} max="100" />
+                    <small>{planPercent(row.shift) ?? 0}% complete</small>
+                  </article>
+                ))}
+              </section>
+            </>
+          ) : null}
+
           {view === "actions" ? (
             <>
               <ManagerViewIntro
@@ -614,12 +710,12 @@ export function ManagerConsole({
             </>
           ) : null}
 
-          {view === "analytics" ? (
+          {view === "recovery" ? (
             <>
               <ManagerViewIntro
-                eyebrow="Recorded evidence"
-                title="Loss & Asset History"
-                body="Review confirmed loss history and recurring mapped-asset evidence for the selected period."
+                eyebrow="Recorded recovery evidence"
+                title="Break recovery and loss history"
+                body="Review confirmed downtime, recovered production time and recurring mapped-asset evidence."
               />
               <LossAnalyticsPanel assignments={data.assignments} />
             </>
