@@ -670,7 +670,7 @@ Open http://localhost:5173/. Vite proxies `/api` to the local Django server. The
 
 ## Local Demo Dataset
 
-A repeatable management command creates realistic local demonstration data for the Team Leader PWA, Operations Manager console, break/recovery, handover, escalation, material-readiness, and loss-analytics workflows.
+A repeatable management command creates realistic local demonstration data for the Team Leader PWA, Operations Manager control board, hourly line downtime, break/recovery, handover, escalation, material-readiness, and loss-analytics workflows. The seeded day shift contains three Team Leaders with two lines each, Green/Amber/Red conditions, and seven timestamped downtime events with short operational reasons.
 
 Run the command only in a local development environment where `DJANGO_DEBUG=True`:
 
@@ -721,7 +721,7 @@ curl http://localhost:8000/api/production-lines/ \
 
 ## Testing and Code Quality
 
-The current suite contains **203 backend tests** and **27 frontend tests** covering models, API behaviour, authentication, workspace roles, audited role administration, notification scoping and read evidence, reminder-worker heartbeat and safe error reporting, pilot monitoring, bounded trial lifecycle, cross-functional sign-off, immutable human feedback, and evidence validation, deployment boundaries, dependency-aware health checks, permissions, filters, dashboard aggregation, demo-data seeding, release, escalation, handover, break/recovery auditing, support-companion scoping and acknowledgement, scoped event replay, JWT WebSockets, reminder deduplication, idempotent requests, deterministic risk evidence, missing-data disclosure, bounded briefing queries, risk-briefing rendering and retry behaviour, shared desktop/mobile navigation, offline outbox behaviour, safe cursor recovery, tablet rendering, role routing, priority ordering, pagination, token refresh, and validation.
+The current suite contains **216 backend tests** and **30 frontend tests** covering models, API behaviour, authentication, workspace roles, audited role administration, notification scoping and read evidence, reminder-worker heartbeat and safe error reporting, pilot monitoring, bounded trial lifecycle, cross-functional sign-off, immutable human feedback, and evidence validation, deployment boundaries, dependency-aware health checks, permissions, filters, dashboard aggregation, timestamped downtime evidence, deterministic Manager control-board rendering, demo-data seeding, release, escalation, handover, break/recovery auditing, support-companion scoping and acknowledgement, scoped event replay, JWT WebSockets, reminder deduplication, idempotent requests, deterministic risk evidence, missing-data disclosure, bounded briefing queries, risk-briefing rendering and retry behaviour, shared desktop/mobile navigation, offline outbox behaviour, safe cursor recovery, tablet rendering, role routing, priority ordering, pagination, token refresh, and validation.
 
 Run the complete test suite:
 

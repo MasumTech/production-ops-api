@@ -8,6 +8,7 @@ from .models import (
     BreakOpportunity,
     BreakRecovery,
     DailyPlanBlock,
+    DowntimeEvent,
     HourlyLineUpdate,
     OperationalEscalation,
     OperationalEvent,
@@ -182,6 +183,66 @@ class ShiftSerializer(serializers.ModelSerializer):
                 {"end_time": ("End time must be different from start time.")}
             )
 
+        return attrs
+
+
+class DowntimeEventSerializer(serializers.ModelSerializer):
+    production_line = serializers.IntegerField(
+        source="shift.production_line_id",
+        read_only=True,
+    )
+    production_line_code = serializers.CharField(
+        source="shift.production_line.code",
+        read_only=True,
+    )
+    shift_date = serializers.DateField(source="shift.date", read_only=True)
+    duration_minutes = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = DowntimeEvent
+        fields = (
+            "id",
+            "shift",
+            "production_line",
+            "production_line_code",
+            "shift_date",
+            "started_at",
+            "ended_at",
+            "duration_minutes",
+            "reason_category",
+            "description",
+            "owner_group",
+            "status",
+            "resolution_note",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "production_line",
+            "production_line_code",
+            "shift_date",
+            "duration_minutes",
+            "created_at",
+            "updated_at",
+        )
+
+    def validate(self, attrs):
+        instance = self.instance
+        started_at = attrs.get("started_at", getattr(instance, "started_at", None))
+        ended_at = attrs.get("ended_at", getattr(instance, "ended_at", None))
+        event_status = attrs.get(
+            "status", getattr(instance, "status", DowntimeEvent.Status.OPEN)
+        )
+
+        if started_at and ended_at and ended_at <= started_at:
+            raise serializers.ValidationError(
+                {"ended_at": "End time must be later than start time."}
+            )
+        if event_status == DowntimeEvent.Status.RESOLVED and not ended_at:
+            raise serializers.ValidationError(
+                {"ended_at": "Resolved downtime requires an end time."}
+            )
         return attrs
 
 

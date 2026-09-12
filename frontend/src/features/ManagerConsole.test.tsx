@@ -145,6 +145,23 @@ const data: ManagerWorkspaceData = {
       performance_percentage: 64,
     },
   ],
+  downtimeEvents: [
+    {
+      id: 1,
+      shift: 40,
+      production_line: 102,
+      production_line_code: "LINE-02",
+      shift_date: "2026-09-01",
+      started_at: "2026-09-01T08:05:00Z",
+      ended_at: "2026-09-01T08:17:00Z",
+      duration_minutes: 12,
+      reason_category: "equipment",
+      description: "Filler sensor reset",
+      owner_group: "engineering",
+      status: "resolved",
+      resolution_note: "Line restarted",
+    },
+  ],
   summary: {
     total_shifts: 1,
     total_planned_output: 5000,
@@ -188,7 +205,7 @@ describe("manager console", () => {
     expect(rows[1].attentionLevel).toBe("stable");
   });
 
-  it("shows the overview and matching desktop and mobile navigation", () => {
+  it("shows the overview and matching desktop and mobile navigation", async () => {
     render(
       <ManagerConsole
         profile={profile}
@@ -207,28 +224,33 @@ describe("manager console", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: "Today's production overview",
+        name: "Before-shift and live overview",
       }),
     ).toBeInTheDocument();
 
     const summary = screen.getByRole("region", {
       name: "Operational summary",
     });
+    expect(summary.querySelectorAll(".control-kpi")).toHaveLength(4);
+    expect(summary.querySelectorAll(".app-icon")).toHaveLength(4);
 
     expect(
-      within(summary).getByText("3,200 / 5,000"),
+      within(summary).getByText("64%"),
     ).toBeInTheDocument();
 
     expect(
-      within(summary).getByText("1 overdue"),
+      within(summary).getByText("45 min"),
     ).toBeInTheDocument();
 
-    const hierarchy = screen.getByRole("region", { name: "Operations Manager coverage" });
-    expect(within(hierarchy).getByText("2 Team Leader lanes")).toBeInTheDocument();
-    expect(within(hierarchy).getAllByText("Team Leader")).toHaveLength(2);
-    expect(within(hierarchy).getByText("LINE-01")).toBeInTheDocument();
-    expect(within(hierarchy).getByText("LINE-02")).toBeInTheDocument();
-    expect(within(hierarchy).queryByText("lead.one")).not.toBeInTheDocument();
+    const coverage = screen.getByRole("region", { name: "Team Leaders and production lines" });
+    expect(within(coverage).getByText("Team Leader 1")).toBeInTheDocument();
+    expect(within(coverage).getByText("Team Leader 2")).toBeInTheDocument();
+    expect(within(coverage).getAllByText("Line 1")).toHaveLength(2);
+    expect(within(coverage).getAllByText("Line 2")).toHaveLength(2);
+    expect(within(coverage).queryByText("lead.one")).not.toBeInTheDocument();
+
+    await userEvent.click(within(coverage).getByRole("button", { name: "12 min" }));
+    expect(screen.getByText("Filler sensor reset")).toBeInTheDocument();
 
     expect(
       within(screen.getByRole("navigation", { name: "Manager sections" })).getByRole(
@@ -241,7 +263,7 @@ describe("manager console", () => {
       within(
         screen.getByRole("navigation", { name: "Operations Manager mobile workspace" }),
       ).getAllByRole("button"),
-    ).toHaveLength(5);
+    ).toHaveLength(6);
 
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Daily risk briefing" })).not.toBeInTheDocument();
@@ -270,23 +292,26 @@ describe("manager console", () => {
 
     const navigation = screen.getByRole("navigation", { name: "Manager sections" });
 
-    await actor.click(within(navigation).getByRole("button", { name: "Live Floor" }));
+    await actor.click(within(navigation).getByRole("button", { name: "Team Leaders" }));
     expect(screen.getByRole("heading", { name: "Line Control" })).toBeInTheDocument();
     const table = screen.getByRole("table");
     expect(within(table).getAllByText("Owner: Team Leader")).toHaveLength(2);
     expect(within(table).getAllByText("Filler stopped")).toHaveLength(2);
 
-    await actor.click(within(navigation).getByRole("button", { name: "Actions & Materials" }));
+    await actor.click(within(navigation).getByRole("button", { name: "Daily plans" }));
+    expect(screen.getByRole("heading", { name: "Daily plans" })).toBeInTheDocument();
+
+    await actor.click(within(navigation).getByRole("button", { name: "Materials" }));
     expect(screen.getByRole("heading", { name: "Actions and materials" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Open actions" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Material risks" })).toBeInTheDocument();
 
-    await actor.click(within(navigation).getByRole("button", { name: "AI Risk Briefing" }));
+    await actor.click(within(navigation).getByRole("button", { name: "Risk briefing" }));
     expect(screen.getByRole("heading", { name: "AI Daily Risk Briefing" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Daily risk briefing" })).toBeInTheDocument();
 
-    await actor.click(within(navigation).getByRole("button", { name: "Loss History" }));
-    expect(screen.getByRole("heading", { name: "Loss & Asset History" })).toBeInTheDocument();
+    await actor.click(within(navigation).getByRole("button", { name: "Break recovery" }));
+    expect(screen.getByRole("heading", { name: "Break recovery and loss history" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Loss and asset history" })).toBeInTheDocument();
   });
 
@@ -322,7 +347,7 @@ describe("manager console", () => {
     await actor.click(
       within(screen.getByRole("navigation", { name: "Manager sections" })).getByRole(
         "button",
-        { name: "Live Floor" },
+        { name: "Team Leaders" },
       ),
     );
 

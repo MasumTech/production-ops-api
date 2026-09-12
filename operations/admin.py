@@ -4,6 +4,7 @@ from .models import (
     BreakOpportunity,
     BreakRecovery,
     DailyPlanBlock,
+    DowntimeEvent,
     HourlyLineUpdate,
     OperationalEscalation,
     OperationalEventReadReceipt,
@@ -19,6 +20,37 @@ from .models import (
     ShiftHandover,
     TeamLeaderAssignment,
 )
+
+
+@admin.register(DowntimeEvent)
+class DowntimeEventAdmin(admin.ModelAdmin):
+    list_display = (
+        "started_at",
+        "production_line",
+        "duration_minutes",
+        "reason_category",
+        "description",
+        "owner_group",
+        "status",
+    )
+    list_filter = (
+        "status",
+        "reason_category",
+        "owner_group",
+        "shift__date",
+        "shift__production_line",
+    )
+    search_fields = (
+        "shift__production_line__code",
+        "description",
+        "resolution_note",
+    )
+    autocomplete_fields = ("shift",)
+    readonly_fields = ("duration_minutes", "created_at", "updated_at")
+
+    @admin.display(ordering="shift__production_line__code", description="Line")
+    def production_line(self, obj):
+        return obj.shift.production_line
 
 
 @admin.register(DailyPlanBlock)

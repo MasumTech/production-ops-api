@@ -205,9 +205,9 @@ describe("tablet workspace", () => {
     render(<App />);
 
     expect(
-      await screen.findByRole("heading", { name: "Today's production overview" }),
+      await screen.findByRole("heading", { name: "Before-shift and live overview" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Operations Manager Console")).toBeInTheDocument();
+    expect(screen.getByText("OPERATIONS CONTROL BOARD")).toBeInTheDocument();
     expect(screen.queryByText("My Lines")).not.toBeInTheDocument();
   });
 

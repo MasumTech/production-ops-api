@@ -1,9 +1,13 @@
 import type { CSSProperties, ReactNode } from "react";
 
+import type { AppIconName } from "./AppIcon";
+import { AppIcon } from "./AppIcon";
+
 export interface WorkspaceNavigationItem<Id extends string> {
   id: Id;
   label: string;
   shortLabel: string;
+  icon?: AppIconName;
 }
 
 interface NavigationProps<Id extends string> {
@@ -40,12 +44,16 @@ export function WorkspaceSidebar<Id extends string>({
             onClick={() => onSelect(item.id)}
             aria-current={activeItem === item.id ? "page" : undefined}
           >
-            <span className="nav-item__dot" aria-hidden="true" />
+            {item.icon ? (
+              <span className="nav-item__icon"><AppIcon name={item.icon} size={22} /></span>
+            ) : (
+              <span className="nav-item__dot" aria-hidden="true" />
+            )}
             {item.label}
           </button>
         ))}
       </nav>
-      <p className="sidebar__boundary">{boundary}</p>
+      <div className="sidebar__boundary">{boundary}</div>
     </aside>
   );
 }
@@ -74,6 +82,7 @@ export function WorkspaceBottomNavigation<Id extends string>({
           onClick={() => onSelect(item.id)}
           aria-current={activeItem === item.id ? "page" : undefined}
         >
+          {item.icon ? <AppIcon name={item.icon} size={19} /> : null}
           {item.shortLabel}
         </button>
       ))}

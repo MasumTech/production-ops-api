@@ -32,6 +32,7 @@ import type {
   Assignment,
   BreakOpportunity,
   DailyPlanBlock,
+  DowntimeEvent,
   Escalation,
   LineUpdate,
   ManagerWorkspaceData,
@@ -69,6 +70,7 @@ const EMPTY_MANAGER_DATA: ManagerWorkspaceData = {
   materials: [],
   escalations: [],
   shifts: [],
+  downtimeEvents: [],
   summary: {
     total_shifts: 0,
     total_planned_output: 0,
@@ -153,7 +155,15 @@ async function loadWorkspaceData(operationalDate: string): Promise<WorkspaceData
 }
 
 async function loadManagerData(operationalDate: string): Promise<ManagerWorkspaceData> {
-  const [assignments, updates, materials, escalations, shifts, summary] = await Promise.all([
+  const [
+    assignments,
+    updates,
+    materials,
+    escalations,
+    shifts,
+    downtimeEvents,
+    summary,
+  ] = await Promise.all([
     apiList<Assignment>(`/team-leader-assignments/?date=${operationalDate}`),
     apiList<LineUpdate>(`/hourly-line-updates/latest-status/?date=${operationalDate}`),
     apiList<MaterialReadiness>(
@@ -163,12 +173,21 @@ async function loadManagerData(operationalDate: string): Promise<ManagerWorkspac
       `/operational-escalations/?date=${operationalDate}&ordering=-raised_at`,
     ),
     apiList<ShiftRecord>(`/shifts/?date=${operationalDate}&ordering=-actual_output`),
+    apiList<DowntimeEvent>(`/downtime-events/?date=${operationalDate}&ordering=started_at`),
     apiRequest<ManagerWorkspaceData["summary"]>(
       `/dashboard/summary/?date_from=${operationalDate}&date_to=${operationalDate}`,
     ),
   ]);
 
-  return { assignments, updates, materials, escalations, shifts, summary };
+  return {
+    assignments,
+    updates,
+    materials,
+    escalations,
+    shifts,
+    downtimeEvents,
+    summary,
+  };
 }
 
 async function loadSupportData(operationalDate: string): Promise<SupportCompanionData> {
