@@ -68,10 +68,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--confirm-full-reset",
             default=None,
-            help=(
-                "Required with --full-reset; must be "
-                f"{FULL_RESET_CONFIRMATION}."
-            ),
+            help=(f"Required with --full-reset; must be {FULL_RESET_CONFIRMATION}."),
         )
 
     def handle(self, *args, **options):

@@ -103,9 +103,7 @@ def test_seed_demo_data_creates_complete_dataset():
     manager = get_user_model().objects.get(username="demo.manager")
     assert manager.is_staff is True
     assert manager.check_password(DEMO_PASSWORD)
-    assert set(
-        get_user_model().objects.values_list("username", flat=True)
-    ) == {
+    assert set(get_user_model().objects.values_list("username", flat=True)) == {
         "demo.manager",
         "demo.leader",
         "demo.leader.two",
@@ -174,9 +172,7 @@ def test_seed_demo_data_creates_complete_dataset():
         HourlyLineUpdate.Status.AMBER,
         HourlyLineUpdate.Status.RED,
     }
-    assert set(
-        ProductMaterialReadiness.objects.values_list("status", flat=True)
-    ) == {
+    assert set(ProductMaterialReadiness.objects.values_list("status", flat=True)) == {
         ProductMaterialReadiness.Status.READY,
         ProductMaterialReadiness.Status.IN_PROCESS,
         ProductMaterialReadiness.Status.SHORT,
