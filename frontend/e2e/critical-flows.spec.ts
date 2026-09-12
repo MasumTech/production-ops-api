@@ -34,6 +34,11 @@ test("team leader is routed to the assigned-line workspace", async ({ page }) =>
 
   await expect(page.getByText("LINE CONTROL ASSISTANT")).toBeVisible();
   await expect(page.getByRole("heading", { name: "My lines" })).toBeVisible();
+  await page.locator('summary[aria-label="Open workspace controls"]').click();
+  await page.getByLabel("Operational date").fill(
+    process.env.E2E_OPERATIONAL_DATE ?? "2026-09-04",
+  );
+  await page.locator('summary[aria-label="Open workspace controls"]').click();
   await expect(page.locator(".team-line-card")).toHaveCount(2);
   await expect(
     page.getByRole("heading", { name: "Today's product timeline 07:00 – 18:00" }),
