@@ -672,7 +672,8 @@ Open http://localhost:5173/. Vite proxies `/api` to the local Django server. The
 
 A repeatable management command creates realistic local demonstration data for the Team Leader PWA, Operations Manager control board, hourly line downtime, break/recovery, handover, escalation, material-readiness, and loss-analytics workflows. The seeded day shift contains three Team Leaders with two lines each, Green/Amber/Red conditions, and seven timestamped downtime events with short operational reasons.
 
-Run the command only in a local development environment where `DJANGO_DEBUG=True`:
+Run the command only in a local development environment where `DJANGO_DEBUG=True`.
+To remove only the previous demo records and recreate them:
 
 ```bash
 python manage.py seed_demo_data --reset
@@ -682,23 +683,39 @@ Use a fixed operational date when preparing screenshots or demonstrations:
 
 ```bash
 python manage.py seed_demo_data \
-  --date 2026-09-02 \
+  --date 2026-09-04 \
   --password "Choose-A-Local-Demo-Password" \
   --reset
 ```
+
+To empty **every record** from the local development database and rebuild the
+complete persona dataset from scratch, use the guarded full reset:
+
+```bash
+python manage.py seed_demo_data \
+  --date 2026-09-04 \
+  --password "Choose-A-Local-Demo-Password" \
+  --full-reset \
+  --confirm-full-reset DELETE-ALL-LOCAL-DATA
+```
+
+`--full-reset` preserves the database schema and migration history, but deletes
+all users and application records before reseeding. It cannot be combined with
+`--reset`, requires the exact confirmation phrase, and remains blocked whenever
+`DJANGO_DEBUG=False`.
 
 The default local accounts are:
 
 | Role | Username |
 |---|---|
 | Operations Manager | `demo.manager` |
-| Team Leader | `demo.leader` |
-| Break cover | `demo.cover` |
-| Operational Support Engineer | `demo.engineer` |
+| Team Leader 1 — Lines 1 and 2 | `demo.leader` |
+| Team Leader 2 — Lines 3 and 4 | `demo.leader.two` |
+| Team Leader 3 — Lines 5 and 6 | `demo.leader.three` |
 
 Set a local demo password explicitly with `--password` or the `DEMO_SEED_PASSWORD` environment variable.
 
-Running the command again updates the same demo records rather than creating duplicates. The `--reset` option deletes and recreates only demo users and records identified by the `demo.` username or `DEMO-` data prefix.
+Running the command again updates the same demo records rather than creating duplicates. The `--reset` option deletes and recreates only demo users and records identified by the `demo.` username or `DEMO-` data prefix. The dataset deliberately has no Engineer, QA, Cover, or Support login account; those remain functional responsibility labels inside the Manager and Team Leader workflows.
 
 The command refuses to run when `DJANGO_DEBUG=False`. These accounts, credentials, and records must never be used in staging or production.
 

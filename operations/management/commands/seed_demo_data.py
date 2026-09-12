@@ -3,13 +3,12 @@ from datetime import datetime, time, timedelta
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group
+from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from operations.access import OPERATIONAL_SUPPORT_GROUP
 from operations.models import (
     BreakOpportunity,
     BreakRecovery,
@@ -34,6 +33,7 @@ from operations.models import (
 
 DEMO_PREFIX = "DEMO-"
 DEMO_USER_PREFIX = "demo."
+FULL_RESET_CONFIRMATION = "DELETE-ALL-LOCAL-DATA"
 
 
 class Command(BaseCommand):
@@ -57,6 +57,19 @@ class Command(BaseCommand):
             action="store_true",
             help="Delete only DEMO-* records and recreate the dataset.",
         )
+        parser.add_argument(
+            "--full-reset",
+            action="store_true",
+            help=(
+                "Flush every record from the local development database before "
+                "creating the demo dataset. Schema and migrations are preserved."
+            ),
+        )
+        parser.add_argument(
+            "--confirm-full-reset",
+            default=None,
+            help=(f"Required with --full-reset; must be {FULL_RESET_CONFIRMATION}."),
+        )
 
     def handle(self, *args, **options):
         if not settings.DEBUG:
@@ -70,10 +83,21 @@ class Command(BaseCommand):
                 "Provide --password or DEMO_SEED_PASSWORD (at least 8 characters)."
             )
 
+        if options["reset"] and options["full_reset"]:
+            raise CommandError("Use either --reset or --full-reset, not both.")
+
+        if options["full_reset"]:
+            if options["confirm_full_reset"] != FULL_RESET_CONFIRMATION:
+                raise CommandError(
+                    "Full reset deletes every local database record. Re-run with "
+                    f"--confirm-full-reset {FULL_RESET_CONFIRMATION}."
+                )
+            self._flush_local_database()
+
         with transaction.atomic():
             if options["reset"]:
                 self._delete_demo_data()
-            else:
+            elif not options["full_reset"]:
                 self._delete_demo_events()
 
             summary = self._seed(operational_date, password)
@@ -98,11 +122,11 @@ class Command(BaseCommand):
         )
         self.stdout.write("")
         self.stdout.write("Local demo accounts:")
-        self.stdout.write("  Manager:    demo.manager")
-        self.stdout.write("  Team Leader: demo.leader")
-        self.stdout.write("  Cover user:  demo.cover")
-        self.stdout.write("  Engineer:    demo.engineer")
-        self.stdout.write(f"  Password:    {password}")
+        self.stdout.write("  Operations Manager: demo.manager")
+        self.stdout.write("  Team Leader 1:      demo.leader")
+        self.stdout.write("  Team Leader 2:      demo.leader.two")
+        self.stdout.write("  Team Leader 3:      demo.leader.three")
+        self.stdout.write("  Password: use the value supplied by you")
         self.stdout.write("")
         self.stdout.write("Frontend: http://localhost:5173/")
         self.stdout.write("Admin:    http://localhost:8000/admin/")
@@ -128,6 +152,14 @@ class Command(BaseCommand):
             | Q(assignment__production_line__code__startswith=DEMO_PREFIX)
             | Q(actor__username__startswith=DEMO_USER_PREFIX)
         ).delete()
+
+    @staticmethod
+    def _flush_local_database():
+        call_command(
+            "flush",
+            interactive=False,
+            verbosity=0,
+        )
 
     def _delete_demo_data(self):
         self._delete_demo_events()
@@ -253,18 +285,6 @@ class Command(BaseCommand):
                 "last_name": "Leader Three",
                 "is_staff": False,
             },
-            "cover": {
-                "username": "demo.cover",
-                "first_name": "Sara",
-                "last_name": "Ahmed",
-                "is_staff": False,
-            },
-            "engineer": {
-                "username": "demo.engineer",
-                "first_name": "Nadia",
-                "last_name": "Hossain",
-                "is_staff": False,
-            },
         }
         users = {}
 
@@ -281,11 +301,6 @@ class Command(BaseCommand):
             user.set_password(password)
             user.save(update_fields=("password",))
             users[key] = user
-
-        support_group, _ = Group.objects.get_or_create(
-            name=OPERATIONAL_SUPPORT_GROUP,
-        )
-        users["engineer"].groups.add(support_group)
 
         return users
 
@@ -426,7 +441,7 @@ class Command(BaseCommand):
             ),
             "incoming": (
                 lines["line_1"],
-                users["cover"],
+                users["leader_2"],
                 operational_date,
                 Shift.ShiftType.NIGHT,
             ),
@@ -780,7 +795,7 @@ class Command(BaseCommand):
                 recorded_at=definition["recorded_at"],
                 defaults={
                     **definition,
-                    "action_owner": users["engineer"],
+                    "action_owner": users["manager"],
                     "recorded_by": definition["assignment"].team_leader,
                 },
             )
@@ -849,34 +864,45 @@ class Command(BaseCommand):
             "ready": {
                 "assignment": assignments["line_1"],
                 "sequence_number": 1,
-                "product_code": "PJ-1L",
-                "product_name": "Premium Juice 1L",
-                "planned_quantity": 5000,
+                "product_code": "SPC-01",
+                "product_name": "Salt & Pepper Chicken",
+                "planned_quantity": 8400,
                 "status": ProductMaterialReadiness.Status.READY,
-                "notes": "All ingredients released.",
+                "notes": "Ingredients, packaging and release checks are complete.",
+            },
+            "in_process": {
+                "assignment": assignments["line_1"],
+                "sequence_number": 2,
+                "product_code": "SSC-02",
+                "product_name": "Sweet & Sour Chicken",
+                "planned_quantity": 2600,
+                "status": ProductMaterialReadiness.Status.IN_PROCESS,
+                "owner": users["manager"],
+                "expected_available_at": now + timedelta(minutes=25),
+                "notes": "Final sauce batch is being prepared for the next run.",
             },
             "short": {
                 "assignment": assignments["line_2"],
                 "sequence_number": 1,
-                "product_code": "SW-500",
-                "product_name": "Sparkling Water 500ml",
-                "planned_quantity": 4200,
+                "product_code": "OMC-01",
+                "product_name": "Oat Milk Chai",
+                "planned_quantity": 6000,
                 "status": ProductMaterialReadiness.Status.SHORT,
                 "shortage_quantity": 640,
-                "owner": users["engineer"],
+                "owner": users["manager"],
                 "expected_available_at": now + timedelta(hours=1),
                 "notes": "Carton delivery is in transit.",
             },
             "held": {
-                "assignment": assignments["line_3"],
-                "sequence_number": 1,
-                "product_code": "LB-330",
-                "product_name": "Labelled Bottle 330ml",
-                "planned_quantity": 3600,
+                "assignment": assignments["line_2"],
+                "sequence_number": 2,
+                "product_code": "BBQ-02",
+                "product_name": "BBQ Chicken Bites",
+                "planned_quantity": 2200,
                 "status": ProductMaterialReadiness.Status.HELD,
-                "hold_reason": "Label artwork confirmation pending.",
-                "owner": users["engineer"],
-                "notes": "Management release required.",
+                "hold_reason": "QA label verification is pending.",
+                "owner": users["manager"],
+                "notes": "QA release is required before the planned product change.",
             },
         }
         materials = {}
@@ -897,7 +923,7 @@ class Command(BaseCommand):
                     "owner": definition.get("owner"),
                     "expected_available_at": definition.get("expected_available_at"),
                     "hold_reason": definition.get("hold_reason", ""),
-                    "created_by": users["leader"],
+                    "created_by": definition["assignment"].team_leader,
                     "notes": definition["notes"],
                 },
             )
@@ -916,7 +942,7 @@ class Command(BaseCommand):
                 "summary": "Filler pressure repeatedly dropping",
                 "details": "Pressure drops during high-speed production.",
                 "immediate_action": "Line isolated and engineering contacted.",
-                "owner": users["engineer"],
+                "owner": users["manager"],
                 "raised_at": now - timedelta(minutes=70),
                 "response_due_at": now - timedelta(minutes=10),
                 "hourly_update": updates["red"],
@@ -932,7 +958,7 @@ class Command(BaseCommand):
                 "summary": "Carton stock below next-hour demand",
                 "details": "640 cartons are needed to protect the plan.",
                 "immediate_action": "Warehouse replenishment requested.",
-                "owner": users["engineer"],
+                "owner": users["manager"],
                 "raised_at": now - timedelta(minutes=20),
                 "response_due_at": now + timedelta(minutes=25),
                 "loss_minutes": 8,
@@ -946,7 +972,7 @@ class Command(BaseCommand):
                 "summary": "Label feed alignment issue",
                 "details": "Asset mapping is intentionally pending.",
                 "immediate_action": "Operator reduced line speed.",
-                "owner": users["engineer"],
+                "owner": users["manager"],
                 "raised_at": now - timedelta(minutes=15),
                 "response_due_at": now + timedelta(minutes=45),
                 "loss_minutes": 12,
@@ -960,14 +986,14 @@ class Command(BaseCommand):
                 "summary": "Historical filler pressure loss - 1",
                 "details": "Repeated-loss evidence for demonstration.",
                 "immediate_action": "Valve inspected.",
-                "owner": users["engineer"],
+                "owner": users["manager"],
                 "raised_at": now - timedelta(days=4),
                 "response_due_at": now - timedelta(days=4) + timedelta(hours=1),
                 "acknowledged_at": now - timedelta(days=4) + timedelta(minutes=10),
-                "acknowledged_by": users["engineer"],
+                "acknowledged_by": users["manager"],
                 "resolution_notes": "Pressure restored.",
                 "resolved_at": now - timedelta(days=4) + timedelta(minutes=45),
-                "resolved_by": users["engineer"],
+                "resolved_by": users["manager"],
                 "asset": assets["filler"],
                 "loss_minutes": 32,
                 "estimated_lost_units": 610,
@@ -980,14 +1006,14 @@ class Command(BaseCommand):
                 "summary": "Historical filler pressure loss - 2",
                 "details": "Repeated-loss evidence for demonstration.",
                 "immediate_action": "Valve recalibrated.",
-                "owner": users["engineer"],
+                "owner": users["manager"],
                 "raised_at": now - timedelta(days=11),
                 "response_due_at": now - timedelta(days=11) + timedelta(hours=1),
                 "acknowledged_at": now - timedelta(days=11) + timedelta(minutes=8),
-                "acknowledged_by": users["engineer"],
+                "acknowledged_by": users["manager"],
                 "resolution_notes": "Valve recalibrated and verified.",
                 "resolved_at": now - timedelta(days=11) + timedelta(minutes=40),
-                "resolved_by": users["engineer"],
+                "resolved_by": users["manager"],
                 "asset": assets["filler"],
                 "loss_minutes": 24,
                 "estimated_lost_units": 450,
@@ -1035,7 +1061,7 @@ class Command(BaseCommand):
                 "expected_return_at": now - timedelta(minutes=5),
                 "coverage_notes": "Monitor filler pressure and alarms.",
                 "coverage_accepted_at": now - timedelta(minutes=35),
-                "coverage_accepted_by": users["cover"],
+                "coverage_accepted_by": users["leader_2"],
                 "started_at": now - timedelta(minutes=30),
                 "started_by": users["leader"],
             },
@@ -1054,7 +1080,7 @@ class Command(BaseCommand):
                 assignment=definition["assignment"],
                 defaults={
                     **definition,
-                    "cover_user": users["cover"],
+                    "cover_user": users["leader_2"],
                     "created_by": users["leader"],
                 },
             )
