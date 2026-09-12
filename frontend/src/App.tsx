@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   ApiError,
@@ -28,6 +28,7 @@ import {
   WorkspaceBottomNavigation,
   WorkspaceSidebar,
 } from "./WorkspaceNavigation";
+import type { WorkspaceNavigationItem } from "./WorkspaceNavigation";
 import type {
   Assignment,
   BreakOpportunity,
@@ -62,6 +63,8 @@ const EMPTY_DATA: WorkspaceData = {
   breaks: [],
   handovers: [],
   users: [],
+  shifts: [],
+  downtimeEvents: [],
 };
 
 const EMPTY_MANAGER_DATA: ManagerWorkspaceData = {
@@ -90,13 +93,22 @@ const EMPTY_SUPPORT_DATA: SupportCompanionData = {
   escalations: [],
 };
 
-const NAV_ITEMS: Array<{ id: WorkspaceTab; label: string; shortLabel: string }> = [
-  { id: "lines", label: "My Lines", shortLabel: "Lines" },
-  { id: "plan", label: "Daily Plan", shortLabel: "Plan" },
-  { id: "materials", label: "Materials", shortLabel: "Materials" },
-  { id: "breaks", label: "Break & Recovery", shortLabel: "Breaks" },
-  { id: "handover", label: "Handover", shortLabel: "Handover" },
+const NAV_ITEMS: Array<WorkspaceNavigationItem<WorkspaceTab>> = [
+  { id: "lines", label: "My lines", shortLabel: "Lines", icon: "home" },
+  { id: "plan", label: "Daily plan", shortLabel: "Plan", icon: "calendar" },
+  { id: "materials", label: "Materials", shortLabel: "Materials", icon: "package" },
+  { id: "breaks", label: "Break & recovery", shortLabel: "Breaks", icon: "coffee" },
+  { id: "handover", label: "Handover", shortLabel: "Handover", icon: "clipboard" },
 ];
+
+function formatOperationalDate(value: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(`${value}T12:00:00`));
+}
 
 function useOnlineStatus(): boolean {
   const [online, setOnline] = useState(navigator.onLine);
@@ -124,6 +136,8 @@ async function loadWorkspaceData(operationalDate: string): Promise<WorkspaceData
     breakOpportunities,
     handovers,
     users,
+    shifts,
+    downtimeEvents,
   ] = await Promise.all([
       apiList<Assignment>(
         `/team-leader-assignments/my-lines/?date=${operationalDate}`,
@@ -139,6 +153,8 @@ async function loadWorkspaceData(operationalDate: string): Promise<WorkspaceData
       apiList<BreakOpportunity>(`/break-opportunities/?date=${operationalDate}`),
       apiList<ShiftHandover>("/shift-handovers/?ordering=-handed_over_at"),
       apiList<UserChoice>("/active-users/"),
+      apiList<ShiftRecord>(`/shifts/?date=${operationalDate}`),
+      apiList<DowntimeEvent>(`/downtime-events/?date=${operationalDate}&ordering=started_at`),
     ]);
 
   return {
@@ -151,6 +167,8 @@ async function loadWorkspaceData(operationalDate: string): Promise<WorkspaceData
     breaks: [],
     handovers,
     users,
+    shifts,
+    downtimeEvents,
   };
 }
 
@@ -399,11 +417,6 @@ export default function App() {
     setTab("issues");
   };
 
-  const unresolvedCount = useMemo(
-    () => data.escalations.filter((item) => item.status !== "resolved").length,
-    [data.escalations],
-  );
-
   if (!profile && !loading) return <LoginScreen onAuthenticated={() => void load()} />;
 
   if (loading && !profile) {
@@ -500,34 +513,36 @@ export default function App() {
           </button>
         </div>
       ) : null}
-      <header className="topbar">
-        <div className="topbar__brand">
-          <div className="brand-mark brand-mark--small" aria-hidden="true">
-            ML
-          </div>
-          <div>
-            <strong>Multi-Line Control</strong>
-            <span>{operationalDate} · {liveState === "live" ? "Live connected" : "Snapshot mode"}</span>
-          </div>
-        </div>
-        <div className="topbar__actions">
-          <label className="date-control">
-            <span>Operational date</span>
-            <input
-              aria-label="Operational date"
-              type="date"
-              value={operationalDate}
-              onChange={(event) => setOperationalDate(event.target.value)}
-            />
-          </label>
-          <span className="user-chip">{profile?.display_name}</span>
-          <NotificationCentre refreshToken={lastUpdatedAt} />
-          <button className="button button--ghost" onClick={() => void refresh()}>
-            Refresh
-          </button>
-          <button className="button button--ghost" onClick={signOut}>
-            Sign out
-          </button>
+      <header className="topbar team-leader-topbar">
+        <strong className="team-leader-brand">LINE CONTROL ASSISTANT</strong>
+        <div className="team-leader-shift-meta">
+          <span>Shift&nbsp; 07:00 – 18:00</span>
+          <span className="team-leader-header-divider" aria-hidden="true" />
+          <details className="team-leader-tools">
+            <summary aria-label="Open workspace controls">
+              {formatOperationalDate(operationalDate)}
+            </summary>
+            <div className="team-leader-tools__menu">
+              <strong>{profile?.display_name}</strong>
+              <span>{liveState === "live" ? "Live connected" : "Snapshot mode"}</span>
+              <label>
+                Operational date
+                <input
+                  aria-label="Operational date"
+                  type="date"
+                  value={operationalDate}
+                  onChange={(event) => setOperationalDate(event.target.value)}
+                />
+              </label>
+              <NotificationCentre refreshToken={lastUpdatedAt} />
+              <button className="button button--ghost" onClick={() => void refresh()}>
+                Refresh
+              </button>
+              <button className="button button--ghost" onClick={signOut}>
+                Sign out
+              </button>
+            </div>
+          </details>
         </div>
       </header>
 
@@ -537,25 +552,17 @@ export default function App() {
         items={NAV_ITEMS}
         activeItem={tab}
         onSelect={setTab}
-        summary={
-          <>
-          <span className="eyebrow">Current scope</span>
-          <strong>{Math.min(data.assignments.length, 2)} of 2 line positions</strong>
-          <span>{unresolvedCount} unresolved escalations</span>
-          </>
-        }
-        boundary={
-          <>
-            Visibility tool only. It does not replace approved verbal communication or official
-            production records.
-          </>
-        }
+        className="team-leader-sidebar"
       />
 
       <main className="workspace">
         {error ? <ErrorBanner message={error} /> : null}
         {tab === "lines" ? (
-          <MyLinesPanel data={data} onRaiseIssue={openIssueFor} />
+          <MyLinesPanel
+            data={data}
+            onRaiseIssue={openIssueFor}
+            onNavigate={setTab}
+          />
         ) : null}
         {tab === "issues" && profile ? (
           <>

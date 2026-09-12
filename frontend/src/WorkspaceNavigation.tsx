@@ -28,13 +28,13 @@ export function WorkspaceSidebar<Id extends string>({
 }: NavigationProps<Id> & {
   ariaLabel: string;
   navigationLabel: string;
-  summary: ReactNode;
-  boundary: ReactNode;
+  summary?: ReactNode;
+  boundary?: ReactNode;
   className?: string;
 }) {
   return (
     <aside className={`sidebar ${className}`.trim()} aria-label={ariaLabel}>
-      <div className="shift-summary">{summary}</div>
+      {summary ? <div className="shift-summary">{summary}</div> : null}
       <nav aria-label={navigationLabel}>
         {items.map((item) => (
           <button
@@ -53,7 +53,7 @@ export function WorkspaceSidebar<Id extends string>({
           </button>
         ))}
       </nav>
-      <div className="sidebar__boundary">{boundary}</div>
+      {boundary ? <div className="sidebar__boundary">{boundary}</div> : null}
     </aside>
   );
 }
