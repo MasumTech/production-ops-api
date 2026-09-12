@@ -34,7 +34,7 @@ screenshot or API evidence, defect reference, and owner.
 | UAT-04 | Team Leader | Review material readiness | Ready, In Process, Short, and Held states are visible | [ ] |
 | UAT-05 | Team Leader | Plan, accept, start, and recover a break | Lifecycle and audit evidence are preserved | [ ] |
 | UAT-06 | Team Leader | Create and accept shift handover | Incoming/outgoing context and acceptance timestamp are shown | [ ] |
-| UAT-07 | Operations Manager | Open Overview and Line Control | All authorised lines are ranked by operational attention | [ ] |
+| UAT-07 | Operations Manager | Open Overview and Team Leaders | Three Team Leaders, two assigned lines each, reference-style KPIs and RAG status are visible | [ ] |
 | UAT-08 | Operations Manager | Review Actions & Materials | Open, overdue, unassigned, and material-risk evidence is visible | [ ] |
 | UAT-09 | Operations Manager | Open Risk Briefing | Deterministic factors, confidence, and missing-data warnings are shown | [ ] |
 | UAT-10 | Operations Manager | Open Loss Analytics | Recorded downtime/loss and asset evidence is shown without prediction claims | [ ] |
@@ -46,6 +46,7 @@ screenshot or API evidence, defect reference, and owner.
 | UAT-16 | All roles | Lose network, queue a safe action, reconnect | Outbox retries idempotently; duplicate state change is not created | [ ] |
 | UAT-17 | Unauthorised user | Request another workspace's endpoint | API returns the expected permission response and no data leak | [ ] |
 | UAT-18 | All roles | Resize to mobile, tablet, and desktop | Navigation and critical actions remain usable at each viewport | [ ] |
+| UAT-19 | Operations Manager | Review hourly downtime for every line | Each 07:00–18:00 bucket shows recorded minutes and a short reason, or an explicit no-loss state | [ ] |
 
 ## Defect and sign-off record
 
