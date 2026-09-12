@@ -14,6 +14,7 @@ from operations.models import (
     BreakOpportunity,
     BreakRecovery,
     DailyPlanBlock,
+    DowntimeEvent,
     HourlyLineUpdate,
     IdempotentRequest,
     OperationalEscalation,
@@ -86,6 +87,7 @@ class Command(BaseCommand):
             f"{summary['assets']} assets, "
             f"{summary['assignments']} assignments, "
             f"{summary['shifts']} shifts, "
+            f"{summary['downtime_events']} downtime events, "
             f"{summary['plan_blocks']} daily plan blocks, "
             f"{summary['updates']} line updates, "
             f"{summary['materials']} material items, "
@@ -181,6 +183,7 @@ class Command(BaseCommand):
             users,
             lines,
         )
+        downtime_events = self._seed_downtime_events(operational_date, shifts)
         plan_blocks = self._seed_daily_plan(operational_date, users, assignments)
         updates = self._seed_updates(now, operational_date, users, assignments)
         break_opportunities = self._seed_break_opportunities(
@@ -212,6 +215,7 @@ class Command(BaseCommand):
             "assets": len(assets),
             "assignments": len(assignments),
             "shifts": len(shifts),
+            "downtime_events": len(downtime_events),
             "plan_blocks": len(plan_blocks),
             "updates": len(updates),
             "materials": len(materials),
@@ -398,7 +402,7 @@ class Command(BaseCommand):
             ),
             "line_3": (
                 lines["line_3"],
-                users["leader"],
+                users["leader_2"],
                 operational_date,
                 Shift.ShiftType.DAY,
             ),
@@ -461,12 +465,12 @@ class Command(BaseCommand):
         definitions = {
             key: (lines[key], planned, actual, downtime)
             for key, planned, actual, downtime in (
-                ("line_1", 8400, 4980, 12),
-                ("line_2", 6000, 2760, 18),
+                ("line_1", 8400, 6888, 4),
+                ("line_2", 6000, 4020, 8),
                 ("line_3", 7200, 6350, 5),
-                ("line_4", 6400, 3450, 32),
-                ("line_5", 7000, 6160, 8),
-                ("line_6", 5800, 3538, 42),
+                ("line_4", 6400, 3450, 14),
+                ("line_5", 7000, 6160, 3),
+                ("line_6", 5800, 3538, 8),
             )
         }
         shifts = {}
@@ -489,6 +493,84 @@ class Command(BaseCommand):
             shifts[key] = shift
 
         return shifts
+
+    @staticmethod
+    def _seed_downtime_events(operational_date, shifts):
+        def event_time(hour, minute=0):
+            return timezone.make_aware(
+                datetime.combine(operational_date, time(hour, minute))
+            )
+
+        definitions = (
+            ("line_1", 8, 5, 8, 9, "equipment", "Filler sensor reset", "engineering"),
+            ("line_2", 9, 12, 9, 20, "material", "Carton replenishment", "operations"),
+            (
+                "line_3",
+                10,
+                18,
+                10,
+                23,
+                "changeover",
+                "Label roll change",
+                "machine_minder",
+            ),
+            (
+                "line_4",
+                8,
+                40,
+                8,
+                49,
+                "equipment",
+                "Conveyor jam cleared",
+                "engineering",
+            ),
+            (
+                "line_4",
+                13,
+                15,
+                13,
+                20,
+                "equipment",
+                "Restart safety checks",
+                "engineering",
+            ),
+            ("line_5", 14, 22, 14, 25, "quality", "QA sample hold", "qa"),
+            (
+                "line_6",
+                15,
+                10,
+                15,
+                18,
+                "equipment",
+                "Sealer temperature reset",
+                "machine_minder",
+            ),
+        )
+        events = []
+        for (
+            line_key,
+            start_hour,
+            start_minute,
+            end_hour,
+            end_minute,
+            reason,
+            description,
+            owner,
+        ) in definitions:
+            event, _ = DowntimeEvent.objects.update_or_create(
+                shift=shifts[line_key],
+                started_at=event_time(start_hour, start_minute),
+                defaults={
+                    "ended_at": event_time(end_hour, end_minute),
+                    "reason_category": reason,
+                    "description": description,
+                    "owner_group": owner,
+                    "status": DowntimeEvent.Status.RESOLVED,
+                    "resolution_note": "Line returned to planned operation.",
+                },
+            )
+            events.append(event)
+        return events
 
     @staticmethod
     def _seed_daily_plan(operational_date, users, assignments):
@@ -604,7 +686,7 @@ class Command(BaseCommand):
             "red": {
                 "assignment": assignments["line_1"],
                 "status": HourlyLineUpdate.Status.RED,
-                "current_product": "Premium Juice 1L",
+                "current_product": "Salt & Pepper Chicken",
                 "issue_summary": "Filler stopping intermittently",
                 "action_taken": "Engineering inspection started",
                 "support_required": "Replacement valve inspection",
@@ -615,13 +697,13 @@ class Command(BaseCommand):
             "amber": {
                 "assignment": assignments["line_2"],
                 "status": HourlyLineUpdate.Status.AMBER,
-                "current_product": "Sparkling Water 500ml",
+                "current_product": "Oat Milk Chai",
                 "issue_summary": "Carton stock running low",
                 "action_taken": "Warehouse replenishment requested",
                 "support_required": "Confirm delivery ETA",
                 "requires_follow_up": True,
-                "recorded_at": recorded_time(10, 15),
-                "next_update_due_at": recorded_time(11, 15),
+                "recorded_at": recorded_time(16, 10),
+                "next_update_due_at": recorded_time(17, 10),
             },
             "line_2_stop": {
                 "assignment": assignments["line_2"],
@@ -634,17 +716,72 @@ class Command(BaseCommand):
                 "recorded_at": recorded_time(13, 20),
                 "next_update_due_at": recorded_time(14, 20),
             },
+            "line_1_current": {
+                "assignment": assignments["line_1"],
+                "status": HourlyLineUpdate.Status.GREEN,
+                "current_product": "Salt & Pepper Chicken",
+                "issue_summary": "",
+                "action_taken": "Filler reset completed",
+                "support_required": "",
+                "requires_follow_up": False,
+                "recorded_at": recorded_time(16, 0),
+                "next_update_due_at": recorded_time(17, 0),
+            },
+            "line_3_current": {
+                "assignment": assignments["line_3"],
+                "status": HourlyLineUpdate.Status.GREEN,
+                "current_product": "Vegetable Spring Rolls",
+                "issue_summary": "",
+                "action_taken": "Hourly check completed",
+                "support_required": "",
+                "requires_follow_up": False,
+                "recorded_at": recorded_time(16, 5),
+                "next_update_due_at": recorded_time(17, 5),
+            },
+            "line_4_current": {
+                "assignment": assignments["line_4"],
+                "status": HourlyLineUpdate.Status.RED,
+                "current_product": "Baja Milk Foam",
+                "issue_summary": "Conveyor restart remains below target",
+                "action_taken": "Engineering fault finding in progress",
+                "support_required": "Engineering recovery support",
+                "requires_follow_up": True,
+                "recorded_at": recorded_time(16, 15),
+                "next_update_due_at": recorded_time(16, 45),
+            },
+            "line_5_current": {
+                "assignment": assignments["line_5"],
+                "status": HourlyLineUpdate.Status.GREEN,
+                "current_product": "BBQ Chicken Bites",
+                "issue_summary": "",
+                "action_taken": "QA sample released",
+                "support_required": "",
+                "requires_follow_up": False,
+                "recorded_at": recorded_time(16, 20),
+                "next_update_due_at": recorded_time(17, 20),
+            },
+            "line_6_current": {
+                "assignment": assignments["line_6"],
+                "status": HourlyLineUpdate.Status.AMBER,
+                "current_product": "Sweet & Sour Chicken",
+                "issue_summary": "Sealer temperature trending high",
+                "action_taken": "Machine Minder monitoring every cycle",
+                "support_required": "Engineering standby",
+                "requires_follow_up": True,
+                "recorded_at": recorded_time(16, 25),
+                "next_update_due_at": recorded_time(16, 55),
+            },
         }
         updates = {}
 
         for key, definition in definitions.items():
             update, _ = HourlyLineUpdate.objects.update_or_create(
                 assignment=definition["assignment"],
-                recorded_by=users["leader"],
-                issue_summary=definition["issue_summary"],
+                recorded_at=definition["recorded_at"],
                 defaults={
                     **definition,
                     "action_owner": users["engineer"],
+                    "recorded_by": definition["assignment"].team_leader,
                 },
             )
             updates[key] = update

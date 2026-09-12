@@ -152,6 +152,82 @@ class Shift(TimeStampedModel):
         )
 
 
+class DowntimeEvent(TimeStampedModel):
+    class ReasonCategory(models.TextChoices):
+        EQUIPMENT = "equipment", "Equipment"
+        MATERIAL = "material", "Material"
+        QUALITY = "quality", "Quality"
+        STAFFING = "staffing", "Staffing"
+        CHANGEOVER = "changeover", "Changeover"
+        OTHER = "other", "Other"
+
+    class OwnerGroup(models.TextChoices):
+        OPERATIONS = "operations", "Operations"
+        ENGINEERING = "engineering", "Engineering"
+        QA = "qa", "QA"
+        MACHINE_MINDER = "machine_minder", "Machine Minder"
+
+    class Status(models.TextChoices):
+        OPEN = "open", "Open"
+        RESOLVED = "resolved", "Resolved"
+
+    shift = models.ForeignKey(
+        Shift,
+        on_delete=models.CASCADE,
+        related_name="downtime_events",
+    )
+    started_at = models.DateTimeField()
+    ended_at = models.DateTimeField(null=True, blank=True)
+    reason_category = models.CharField(
+        max_length=20,
+        choices=ReasonCategory.choices,
+    )
+    description = models.CharField(max_length=160)
+    owner_group = models.CharField(
+        max_length=20,
+        choices=OwnerGroup.choices,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.OPEN,
+    )
+    resolution_note = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ("started_at", "id")
+        indexes = [
+            models.Index(
+                fields=("shift", "started_at"),
+                name="ops_down_shift_started_idx",
+            ),
+            models.Index(
+                fields=("status", "started_at"),
+                name="ops_down_status_started_idx",
+            ),
+        ]
+
+    @property
+    def duration_minutes(self):
+        end = self.ended_at or timezone.now()
+        return max(0, int((end - self.started_at).total_seconds() // 60))
+
+    def clean(self):
+        errors = {}
+        if self.ended_at and self.ended_at <= self.started_at:
+            errors["ended_at"] = "End time must be later than start time."
+        if self.status == self.Status.RESOLVED and not self.ended_at:
+            errors["ended_at"] = "Resolved downtime requires an end time."
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self):
+        return (
+            f"{self.shift.production_line.code} - "
+            f"{self.started_at:%Y-%m-%d %H:%M} - {self.description}"
+        )
+
+
 class QualityIncident(TimeStampedModel):
     class Category(models.TextChoices):
         PRODUCT = "product", "Product Quality"

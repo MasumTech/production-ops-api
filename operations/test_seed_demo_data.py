@@ -1,10 +1,12 @@
 from datetime import date
 from io import StringIO
+from uuid import uuid4
 
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db.models import Count
 from django.test import override_settings
 
 from operations.access import OPERATIONAL_SUPPORT_GROUP
@@ -12,6 +14,7 @@ from operations.models import (
     BreakOpportunity,
     BreakRecovery,
     DailyPlanBlock,
+    DowntimeEvent,
     HourlyLineUpdate,
     OperationalEscalation,
     ProductionAsset,
@@ -24,7 +27,7 @@ from operations.models import (
 )
 
 DEMO_DATE = "2026-09-02"
-DEMO_PASSWORD = "StrongDemoPass123!"
+DEMO_PASSWORD = f"test-{uuid4().hex}"
 
 
 def run_seed(**options):
@@ -47,6 +50,9 @@ def demo_counts():
         "assets": ProductionAsset.objects.filter(**line_filter).count(),
         "assignments": TeamLeaderAssignment.objects.filter(**line_filter).count(),
         "shifts": Shift.objects.filter(**line_filter).count(),
+        "downtime_events": DowntimeEvent.objects.filter(
+            shift__production_line__code__startswith="DEMO-"
+        ).count(),
         "plan_blocks": DailyPlanBlock.objects.filter(**assignment_filter).count(),
         "updates": HourlyLineUpdate.objects.filter(**assignment_filter).count(),
         "materials": ProductMaterialReadiness.objects.filter(
@@ -83,8 +89,9 @@ def test_seed_demo_data_creates_complete_dataset():
         "assets": 3,
         "assignments": 9,
         "shifts": 6,
+        "downtime_events": 7,
         "plan_blocks": 30,
-        "updates": 3,
+        "updates": 8,
         "materials": 3,
         "escalations": 5,
         "breaks": 2,
@@ -117,6 +124,25 @@ def test_seed_demo_data_creates_complete_dataset():
     assert BreakOpportunity.objects.filter(
         status=BreakOpportunity.Status.SUGGESTED
     ).exists()
+    assert (
+        sum(
+            event.duration_minutes
+            for event in DowntimeEvent.objects.filter(
+                shift__production_line__code__startswith="DEMO-"
+            )
+        )
+        == 42
+    )
+    assert list(
+        TeamLeaderAssignment.objects.filter(
+            date=date(2026, 9, 2),
+            shift_type=Shift.ShiftType.DAY,
+        )
+        .values("team_leader_id")
+        .annotate(line_count=Count("production_line_id"))
+        .values_list("line_count", flat=True)
+        .order_by("team_leader_id")
+    ) == [2, 2, 2]
 
     assert "Demo dataset is ready." in output
     assert "Operational date: 2026-09-02" in output

@@ -33,6 +33,7 @@ from .models import (
     BreakOpportunity,
     BreakRecovery,
     DailyPlanBlock,
+    DowntimeEvent,
     HourlyLineUpdate,
     OperationalEscalation,
     OperationalEvent,
@@ -70,6 +71,7 @@ from .serializers import (
     CurrentUserSerializer,
     DailyPlanBlockFilterSerializer,
     DailyPlanBlockSerializer,
+    DowntimeEventSerializer,
     HourlyLineUpdateFilterSerializer,
     HourlyLineUpdateSerializer,
     NotificationInboxSerializer,
@@ -818,6 +820,12 @@ class OperationsDashboardView(APIView):
             ),
         )
 
+        downtime_events = DowntimeEvent.objects.filter(shift__in=shift_queryset)
+        if downtime_events.exists():
+            shift_summary["total_downtime_minutes"] = sum(
+                event.duration_minutes for event in downtime_events
+            )
+
         planned_output = shift_summary["total_planned_output"]
         actual_output = shift_summary["total_actual_output"]
 
@@ -925,6 +933,44 @@ class ShiftViewSet(viewsets.ModelViewSet):
             serializer.save()
         else:
             serializer.save(supervisor=self.request.user)
+
+
+class DowntimeEventViewSet(viewsets.ModelViewSet):
+    serializer_class = DowntimeEventSerializer
+    permission_classes = (IsAuthenticated,)
+    filter_backends = (
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    )
+    search_fields = (
+        "shift__production_line__code",
+        "description",
+        "resolution_note",
+    )
+    ordering_fields = (
+        "started_at",
+        "ended_at",
+        "status",
+        "created_at",
+    )
+    ordering = ("started_at",)
+
+    def get_queryset(self):
+        queryset = DowntimeEvent.objects.select_related(
+            "shift",
+            "shift__production_line",
+        )
+        shift_date = self.request.query_params.get("date")
+        production_line = self.request.query_params.get("production_line")
+        event_status = self.request.query_params.get("status")
+
+        if shift_date:
+            queryset = queryset.filter(shift__date=shift_date)
+        if production_line:
+            queryset = queryset.filter(shift__production_line_id=production_line)
+        if event_status:
+            queryset = queryset.filter(status=event_status)
+        return queryset
 
 
 class QualityIncidentViewSet(viewsets.ModelViewSet):

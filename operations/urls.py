@@ -7,6 +7,7 @@ from .views import (
     BreakRecoveryViewSet,
     CurrentUserView,
     DailyPlanBlockViewSet,
+    DowntimeEventViewSet,
     HourlyLineUpdateViewSet,
     NotificationInboxView,
     NotificationReadView,
@@ -44,6 +45,11 @@ router.register(
     "shifts",
     ShiftViewSet,
     basename="shift",
+)
+router.register(
+    "downtime-events",
+    DowntimeEventViewSet,
+    basename="downtime-event",
 )
 router.register(
     "quality-incidents",
