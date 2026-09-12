@@ -28,7 +28,7 @@ screenshot or API evidence, defect reference, and owner.
 
 | ID | Persona | Scenario | Expected evidence | Result |
 |---|---|---|---|---|
-| UAT-01 | Team Leader | Sign in and open My Lines | Assigned lines only; no unassigned line data | [ ] |
+| UAT-01 | Team Leader | Sign in and open My lines | Assigned lines only; no unassigned line data | [ ] |
 | UAT-02 | Team Leader | Record GREEN, AMBER, and RED hourly updates | Update appears with owner, time, and next-update deadline | [ ] |
 | UAT-03 | Team Leader | Raise an operational issue | Issue creates a scoped escalation with priority and response owner | [ ] |
 | UAT-04 | Team Leader | Review material readiness | Ready, In Process, Short, and Held states are visible | [ ] |
@@ -47,6 +47,7 @@ screenshot or API evidence, defect reference, and owner.
 | UAT-17 | Unauthorised user | Request another workspace's endpoint | API returns the expected permission response and no data leak | [ ] |
 | UAT-18 | All roles | Resize to mobile, tablet, and desktop | Navigation and critical actions remain usable at each viewport | [ ] |
 | UAT-19 | Operations Manager | Review hourly downtime for every line | Each 07:00–18:00 bucket shows recorded minutes and a short reason, or an explicit no-loss state | [ ] |
+| UAT-20 | Team Leader | Open My lines and expand downtime | Exactly two assigned lines, status/quantity/timeline/progress/priority/actions, two planned 40-minute breaks, and eleven hourly downtime buckets are visible | [ ] |
 
 ## Defect and sign-off record
 

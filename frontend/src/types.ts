@@ -240,6 +240,8 @@ export interface WorkspaceData {
   breaks: BreakRecovery[];
   handovers: ShiftHandover[];
   users: UserChoice[];
+  shifts: ShiftRecord[];
+  downtimeEvents: DowntimeEvent[];
 }
 
 export interface ManagerWorkspaceData {

@@ -113,15 +113,32 @@ describe("tablet workspace", () => {
       breaks: [],
       handovers: [],
       users: [user],
+      shifts: [
+        {
+          id: 40,
+          production_line: assignment.production_line,
+          production_line_code: assignment.production_line_code,
+          supervisor: user.id,
+          supervisor_username: user.username,
+          date: assignment.date,
+          shift_type: assignment.shift_type,
+          planned_output: 6000,
+          actual_output: 2760,
+          downtime_minutes: 0,
+          performance_percentage: 46,
+        },
+      ],
+      downtimeEvents: [],
     };
 
-    render(<MyLinesPanel data={data} onRaiseIssue={vi.fn()} />);
+    render(<MyLinesPanel data={data} onRaiseIssue={vi.fn()} onNavigate={vi.fn()} />);
 
-    expect(screen.getByText("LINE-03")).toBeInTheDocument();
-    expect(screen.getByText("Amber")).toBeInTheDocument();
-    expect(screen.getByText("Chicken Curry")).toBeInTheDocument();
-    expect(screen.getByText("1 open actions")).toBeInTheDocument();
-    expect(screen.getByText("Materials")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Line 3" })).toBeInTheDocument();
+    expect(screen.getByText("Behind plan")).toBeInTheDocument();
+    expect(screen.getAllByText("Chicken Curry").length).toBeGreaterThan(0);
+    expect(screen.getByText("6,000")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Today's product timeline 07:00 – 18:00" }))
+      .toBeInTheDocument();
   });
 
   it("keeps the Team Leader view to two lines and flags invalid extra scope", () => {
@@ -143,14 +160,17 @@ describe("tablet workspace", () => {
           breaks: [],
           handovers: [],
           users: [],
+          shifts: [],
+          downtimeEvents: [],
         }}
         onRaiseIssue={vi.fn()}
+        onNavigate={vi.fn()}
       />,
     );
 
-    expect(screen.getByText("LINE-03")).toBeInTheDocument();
-    expect(screen.getByText("LINE-04")).toBeInTheDocument();
-    expect(screen.queryByText("LINE-05")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Line 3" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Line 4" })).toBeInTheDocument();
+    expect(screen.queryByText("Line 5")).not.toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Only the first two are shown");
   });
 

@@ -14,7 +14,9 @@ export type AppIconName =
   | "settings"
   | "shield"
   | "lightbulb"
-  | "info";
+  | "info"
+  | "edit"
+  | "clipboard";
 
 const paths: Record<AppIconName, ReactNode> = {
   home: <><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></>,
@@ -31,6 +33,8 @@ const paths: Record<AppIconName, ReactNode> = {
   shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="M12 6v12M8 10h8"/></>,
   lightbulb: <><path d="M9 18h6M10 22h4M8.4 15.5A7 7 0 1 1 15.6 15.5c-.9.7-1.6 1.5-1.6 2.5h-4c0-1-.7-1.8-1.6-2.5Z"/></>,
   info: <><circle cx="12" cy="12" r="10"/><path d="M12 11v6M12 7h.01"/></>,
+  edit: <><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></>,
+  clipboard: <><rect x="5" y="4" width="14" height="18" rx="2"/><path d="M9 4V2h6v2M9 10h6M9 14h6M9 18h4"/></>,
 };
 
 export function AppIcon({ name, size = 24 }: { name: AppIconName; size?: number }) {
