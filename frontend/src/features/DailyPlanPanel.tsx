@@ -17,14 +17,39 @@ export function DailyPlanPanel({
   planBlocks: DailyPlanBlock[];
 }) {
   const visibleAssignments = assignments.slice(0, 2);
+  const visibleBlocks = planBlocks.filter((block) =>
+    visibleAssignments.some((assignment) => assignment.id === block.assignment),
+  );
+  const productionBlocks = visibleBlocks.filter((block) => block.block_type !== "break");
+  const breakBlocks = visibleBlocks.filter((block) => block.block_type === "break");
+  const plannedUnits = productionBlocks.reduce((total, block) => total + block.planned_units, 0);
 
   return (
     <section>
       <PageIntro
-        eyebrow="07:00–18:00 day shift"
+        eyebrow="07:00-18:00 day shift"
         title="Daily production plan"
         body="Follow the approved product sequence, hourly rate and two 40-minute break windows for each assigned line."
       />
+
+      <div className="daily-plan-toolbar" aria-label="Daily plan summary">
+        <article>
+          <span>Assigned lines</span>
+          <strong>{visibleAssignments.length}</strong>
+        </article>
+        <article>
+          <span>Planned products</span>
+          <strong>{productionBlocks.length}</strong>
+        </article>
+        <article>
+          <span>Planned units</span>
+          <strong>{plannedUnits}</strong>
+        </article>
+        <article>
+          <span>Break windows</span>
+          <strong>{breakBlocks.length}/4</strong>
+        </article>
+      </div>
 
       {visibleAssignments.length === 0 ? (
         <EmptyState
@@ -37,7 +62,7 @@ export function DailyPlanPanel({
             const blocks = planBlocks
               .filter((block) => block.assignment === assignment.id)
               .sort((left, right) => left.sequence_number - right.sequence_number);
-            const plannedUnits = blocks.reduce((total, block) => total + block.planned_units, 0);
+            const plannedLineUnits = blocks.reduce((total, block) => total + block.planned_units, 0);
             const breaks = blocks.filter((block) => block.block_type === "break");
 
             return (
@@ -48,7 +73,7 @@ export function DailyPlanPanel({
                     <h3>{assignment.production_line_name}</h3>
                   </div>
                   <div className="daily-plan-card__summary">
-                    <strong>{plannedUnits}</strong>
+                    <strong>{plannedLineUnits}</strong>
                     <span>planned units</span>
                   </div>
                 </header>
