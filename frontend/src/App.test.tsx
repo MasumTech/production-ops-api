@@ -227,7 +227,7 @@ describe("tablet workspace", () => {
     expect(
       await screen.findByRole("heading", { name: "Before-shift and live overview" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Operations Control Board")).toBeInTheDocument();
+    expect(screen.getByText("OPERATIONS CONTROL BOARD")).toBeInTheDocument();
     expect(screen.queryByText("My Lines")).not.toBeInTheDocument();
   });
 
