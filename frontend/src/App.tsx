@@ -248,28 +248,35 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: () => void }
         </div>
 
         <div className="production-illustration" aria-hidden="true">
-          <svg viewBox="0 0 502 281" role="presentation">
-            <path d="M18 229H473" />
-            <path d="M37 229V111L86 68v31l49-32v31l53-31v162" />
-            <path d="M159 67V16h18v51" />
-            <path d="M56 114h19v18H56zm35 0h19v18H91zm35 0h19v18h-19zm35 0h19v18h-19" />
-            <path d="M112 179v-31h48v31" />
-            <path d="M94 179h102M88 196h303" />
-            <path d="M88 179h303a16 16 0 0 1 0 32H88a16 16 0 0 1 0-32Z" />
-            <circle cx="88" cy="195" r="6" /><circle cx="135" cy="195" r="6" />
-            <circle cx="183" cy="195" r="6" /><circle cx="231" cy="195" r="6" />
-            <circle cx="279" cy="195" r="6" /><circle cx="328" cy="195" r="6" />
-            <circle cx="377" cy="195" r="6" />
-            <path d="M98 211v18m281-18v18M110 211v18m257-18v18" />
-            <path d="M198 179V129h49v50m52 0v-31h47v31" />
-            <path d="M214 129v-11h17v11m101 19v-11h-17v11" />
-            <circle cx="245" cy="145" r="16" /><circle cx="245" cy="145" r="6" />
-            <path d="M257 134l48-64h40v13h-34l-47 62" />
-            <path d="M335 83v30m-8 0h16v12l-8 9-8-9v-12Z" />
-            <path d="M374 94h85v61h-85Z" />
-            <path d="M391 139v-14m8 14v-24m8 24v-33" />
-            <path d="M425 109h22m-22 13h22m-22 13h15" />
-            <path d="M383 155v74m67-74v74M383 175h67" />
+          <svg viewBox="0 0 417 237" role="presentation" preserveAspectRatio="xMidYMid meet">
+            <path d="M7 208.5h392" />
+
+            <path d="M23.5 208.5V93.5l42-23v31l42-29v30l46-30v136" />
+            <path d="M128.5 69V25.5h16V69" />
+            <path d="M40.5 109.5h17v12h-17zm28 0h17v12h-17zm28 0h17v12h-17zm28 0h17v12h-17" />
+            <path d="M92 166v-29h40v29m-24-29v8h9v-8" />
+
+            <path d="M66 166h251a14 14 0 0 1 0 28H66a14 14 0 0 1 0-28Z" />
+            <path d="M66 180h251" />
+            <circle cx="66" cy="180" r="5.5" /><circle cx="108" cy="180" r="5.5" />
+            <circle cx="150" cy="180" r="5.5" /><circle cx="192" cy="180" r="5.5" />
+            <circle cx="234" cy="180" r="5.5" /><circle cx="276" cy="180" r="5.5" />
+            <circle cx="317" cy="180" r="5.5" />
+            <path d="M66 194v14.5m8-14.5v14.5m82-14.5v14.5m8-14.5v14.5m137-14.5v14.5m8-14.5v14.5" />
+
+            <path d="M168 166v-29h42v29m34 0v-29h42v29" />
+            <path d="M184 137v-9h10v9m76 0v-9h10v9" />
+
+            <circle cx="201" cy="116" r="12.5" /><circle cx="201" cy="116" r="4.5" />
+            <path d="M211.5 108.5 244.5 55h44v10h-38L213 119" />
+            <path d="M278.5 65v25m-5-25v25m-4 0h13v13" />
+            <path d="M282.5 103 297 112v12l-8-7-6.5 6.5-6.5-6.5-8 7v-12l14.5-9" />
+
+            <path d="M313 93h75a4 4 0 0 1 4 4v39a4 4 0 0 1-4 4h-75a4 4 0 0 1-4-4V97a4 4 0 0 1 4-4Z" />
+            <path d="M321 100h27v30h-27Z" />
+            <path d="M328 124v-8m6 8v-15m6 15v-22" />
+            <path d="M358 102h21m-21 9h21m-21 9h21m-21 9h14" />
+            <path d="M313 140v68.5m67-68.5v68.5M313 155h67" />
           </svg>
         </div>
 

@@ -29,6 +29,9 @@ for (const viewport of viewports) {
       expect(copyBox).not.toBeNull();
       expect(illustrationBox).not.toBeNull();
       expect(illustrationBox!.y).toBeGreaterThanOrEqual(copyBox!.y + copyBox!.height + 20);
+      expect(illustrationBox!.width / illustrationBox!.height).toBeCloseTo(417 / 237, 2);
+      expect(illustrationBox!.x).toBeGreaterThanOrEqual(0);
+      expect(illustrationBox!.x + illustrationBox!.width).toBeLessThanOrEqual(viewport.width);
     } else {
       await expect(page.locator(".login-brand-panel")).toBeHidden();
     }

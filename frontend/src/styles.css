@@ -4719,7 +4719,8 @@ td span {
 
   .login-brand-panel .production-illustration {
     position: static;
-    width: min(100%, 520px);
+    align-self: center;
+    width: min(calc(100% + 3rem), 630px);
     margin: clamp(2rem, 5.5vh, 3.6rem) auto 0;
     flex: 0 1 auto;
     color: #91badd;
@@ -4727,9 +4728,13 @@ td span {
   }
 
   .login-brand-panel .production-illustration svg {
+    display: block;
     width: 100%;
-    max-height: min(29vh, 281px);
-    object-fit: contain;
+    max-width: none;
+    height: auto;
+    aspect-ratio: 417 / 237;
+    overflow: visible;
+    filter: drop-shadow(0 0 2px rgb(145 186 221 / 18%));
   }
 
   .login-brand-values {
@@ -4747,7 +4752,7 @@ td span {
   }
 
   .login-brand-panel .production-illustration {
-    width: min(100%, 440px);
+    width: min(calc(100% + 1.5rem), 440px);
     margin-top: clamp(1.75rem, 4.5vh, 2.75rem);
   }
 }
@@ -4775,7 +4780,7 @@ td span {
   }
 
   .login-brand-panel .production-illustration {
-    width: min(82%, 390px);
+    width: min(88%, 390px);
     margin-top: 1.5rem;
   }
 
