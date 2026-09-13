@@ -13,6 +13,7 @@ import {
   subscribeToOutbox,
 } from "./api";
 import { ErrorBanner } from "./components";
+import productionLineIllustration from "./assets/production-line-illustration.png";
 import { NotificationCentre } from "./NotificationCentre";
 import { BreakRecoveryPanel } from "./features/BreakRecoveryPanel";
 import { DailyPlanPanel } from "./features/DailyPlanPanel";
@@ -248,36 +249,7 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: () => void }
         </div>
 
         <div className="production-illustration" aria-hidden="true">
-          <svg viewBox="0 0 417 237" role="presentation" preserveAspectRatio="xMidYMid meet">
-            <path d="M7 208.5h392" />
-
-            <path d="M23.5 208.5V93.5l42-23v31l42-29v30l46-30v136" />
-            <path d="M128.5 69V25.5h16V69" />
-            <path d="M40.5 109.5h17v12h-17zm28 0h17v12h-17zm28 0h17v12h-17zm28 0h17v12h-17" />
-            <path d="M92 166v-29h40v29m-24-29v8h9v-8" />
-
-            <path d="M66 166h251a14 14 0 0 1 0 28H66a14 14 0 0 1 0-28Z" />
-            <path d="M66 180h251" />
-            <circle cx="66" cy="180" r="5.5" /><circle cx="108" cy="180" r="5.5" />
-            <circle cx="150" cy="180" r="5.5" /><circle cx="192" cy="180" r="5.5" />
-            <circle cx="234" cy="180" r="5.5" /><circle cx="276" cy="180" r="5.5" />
-            <circle cx="317" cy="180" r="5.5" />
-            <path d="M66 194v14.5m8-14.5v14.5m82-14.5v14.5m8-14.5v14.5m137-14.5v14.5m8-14.5v14.5" />
-
-            <path d="M168 166v-29h42v29m34 0v-29h42v29" />
-            <path d="M184 137v-9h10v9m76 0v-9h10v9" />
-
-            <circle cx="201" cy="116" r="12.5" /><circle cx="201" cy="116" r="4.5" />
-            <path d="M211.5 108.5 244.5 55h44v10h-38L213 119" />
-            <path d="M278.5 65v25m-5-25v25m-4 0h13v13" />
-            <path d="M282.5 103 297 112v12l-8-7-6.5 6.5-6.5-6.5-8 7v-12l14.5-9" />
-
-            <path d="M313 93h75a4 4 0 0 1 4 4v39a4 4 0 0 1-4 4h-75a4 4 0 0 1-4-4V97a4 4 0 0 1 4-4Z" />
-            <path d="M321 100h27v30h-27Z" />
-            <path d="M328 124v-8m6 8v-15m6 15v-22" />
-            <path d="M358 102h21m-21 9h21m-21 9h21m-21 9h14" />
-            <path d="M313 140v68.5m67-68.5v68.5M313 155h67" />
-          </svg>
+          <img src={productionLineIllustration} alt="" />
         </div>
 
         <div className="login-brand-values" aria-label="People, process, a safer tomorrow">

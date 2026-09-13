@@ -4727,14 +4727,13 @@ td span {
     transform: none;
   }
 
-  .login-brand-panel .production-illustration svg {
+  .login-brand-panel .production-illustration img {
     display: block;
     width: 100%;
     max-width: none;
     height: auto;
     aspect-ratio: 417 / 237;
-    overflow: visible;
-    filter: drop-shadow(0 0 2px rgb(145 186 221 / 18%));
+    object-fit: contain;
   }
 
   .login-brand-values {
