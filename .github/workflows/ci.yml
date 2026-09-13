@@ -173,6 +173,15 @@ jobs:
           E2E_BASE_URL: http://127.0.0.1:3000
         run: npm run --prefix frontend e2e
 
+      - name: Upload responsive login screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: responsive-login-preview
+          path: frontend/test-results/**/login-*.png
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Stop application stack
         if: always()
         run: docker compose down
