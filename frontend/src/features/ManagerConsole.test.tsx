@@ -293,7 +293,7 @@ describe("manager console", () => {
     const navigation = screen.getByRole("navigation", { name: "Manager sections" });
 
     await actor.click(within(navigation).getByRole("button", { name: "Team Leaders" }));
-    expect(screen.getByRole("heading", { name: "Team Leaders & line control" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Line Control" })).toBeInTheDocument();
     const table = screen.getByRole("table");
     expect(within(table).getAllByText("Owner: Team Leader")).toHaveLength(2);
     expect(within(table).getAllByText("Filler stopped")).toHaveLength(2);
@@ -353,7 +353,7 @@ describe("manager console", () => {
 
     await actor.click(
       screen.getByRole("button", {
-        name: /Update due/,
+        name: "Late",
       }),
     );
 
@@ -370,11 +370,11 @@ describe("manager console", () => {
     ).getByRole("table");
 
     expect(
-      within(table).getByText(/LINE-02/),
+      within(table).getByText("LINE-02"),
     ).toBeInTheDocument();
 
     expect(
-      within(table).queryByText(/LINE-01/),
+      within(table).queryByText("LINE-01"),
     ).not.toBeInTheDocument();
   });
 });
