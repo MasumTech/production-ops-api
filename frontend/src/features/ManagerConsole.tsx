@@ -266,12 +266,14 @@ export function ManagerConsole({
   const [view, setView] = useState<ManagerWorkspaceView>("overview");
   const [filter, setFilter] = useState<BoardFilter>("all");
   const [selectedDowntimeLine, setSelectedDowntimeLine] = useState<number | null>(null);
+  const [selectedLineId, setSelectedLineId] = useState<number | null>(null);
   const rows = useMemo(() => buildManagerRows(data), [data]);
   const isHistorical = operationalDate !== localDate();
   const visibleRows = useMemo(
     () => rows.filter((row) => matchesFilter(row, filter)),
     [filter, rows],
   );
+  const selectedLine = rows.find((row) => row.assignment.id === selectedLineId) ?? null;
   const openActions = data.escalations
     .filter((item) => item.status !== "resolved")
     .sort((left, right) => Number(right.needs_attention) - Number(left.needs_attention));
@@ -562,6 +564,15 @@ export function ManagerConsole({
                       <tr
                         key={row.assignment.id}
                         className={`manager-row manager-row--${row.attentionLevel}`}
+                        tabIndex={0}
+                        aria-label={`Open details for ${row.assignment.production_line_code}`}
+                        onClick={() => setSelectedLineId(row.assignment.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setSelectedLineId(row.assignment.id);
+                          }
+                        }}
                       >
                         <td data-label="Line">
                           <span className={`priority-flag priority-flag--${row.attentionLevel}`}>
@@ -624,6 +635,45 @@ export function ManagerConsole({
             />
           )}
               </section>
+
+              {selectedLine ? (
+                <aside className="line-detail-drawer" aria-label={`${displayLine(selectedLine.assignment.production_line_code)} details`}>
+                  <header>
+                    <div>
+                      <span className="eyebrow">Selected line</span>
+                      <h2>{displayLine(selectedLine.assignment.production_line_code)}</h2>
+                      <p>{selectedLine.assignment.production_line_name}</p>
+                    </div>
+                    <button type="button" className="drawer-close" aria-label="Close line details" onClick={() => setSelectedLineId(null)}>×</button>
+                  </header>
+                  <div className="drawer-status-card">
+                    <StatusPill value={selectedLine.update?.status ?? "missing"} />
+                    <strong>{selectedLine.update?.current_product || "No current product"}</strong>
+                    <span>{selectedLine.shift?.downtime_minutes ?? 0} min recorded downtime</span>
+                  </div>
+                  <section>
+                    <h3>Issue severity & next action</h3>
+                    <dl className="drawer-facts">
+                      <div><dt>Severity</dt><dd>{selectedLine.openActions[0]?.priority ? titleCase(selectedLine.openActions[0].priority) : "No open issue"}</dd></div>
+                      <div><dt>Issue</dt><dd>{selectedLine.update?.issue_summary || selectedLine.openActions[0]?.summary || "No issue recorded"}</dd></div>
+                      <div><dt>Next action</dt><dd>{selectedLine.openActions[0]?.immediate_action || "Continue scheduled monitoring"}</dd></div>
+                    </dl>
+                  </section>
+                  <section>
+                    <h3>Event history</h3>
+                    <ol className="drawer-event-history">
+                      {data.downtimeEvents.filter((event) => event.production_line === selectedLine.assignment.production_line).slice(-4).map((event) => (
+                        <li key={event.id}><strong>{formatDateTime(event.started_at)}</strong><span>{event.description || event.reason_category}</span><small>{event.duration_minutes} min · {titleCase(event.status)}</small></li>
+                      ))}
+                      {selectedLine.update ? <li><strong>{formatDateTime(selectedLine.update.recorded_at)}</strong><span>Latest status: {titleCase(selectedLine.update.status)}</span><small>{selectedLine.update.action_taken || "Status recorded"}</small></li> : null}
+                    </ol>
+                  </section>
+                  <div className="drawer-actions">
+                    <button type="button" className="button button--primary" onClick={() => { setSelectedLineId(null); setView("plans"); }}>View daily plan</button>
+                    <button type="button" className="button button--ghost" onClick={() => { setSelectedLineId(null); setView("actions"); }}>View issues</button>
+                  </div>
+                </aside>
+              ) : null}
             </>
           ) : null}
 
