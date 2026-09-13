@@ -11,8 +11,8 @@ async function signIn(page: Page, username: string) {
   await page.goto("/");
   const usernameEnvKey = `${username.toUpperCase().replaceAll(".", "_")}_USERNAME`;
   await page.getByLabel("Username").fill(process.env[usernameEnvKey] ?? username);
-  await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Sign in securely" }).click();
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
 }
 
 test("manager can open the daily risk briefing after secure sign-in", async ({ page }) => {
