@@ -87,7 +87,7 @@ test("team leader is routed to the assigned-line workspace", async ({ page }) =>
   await workspace.getByRole("button", { name: "Break & recovery" }).click();
   await expect(page.getByRole("heading", { name: "Break & Recovery" })).toBeVisible();
   await expect(page.getByText("Recovered", { exact: true })).toBeVisible();
-  await expect(page.getByText("Suggested", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Break recovery summary").getByText("Suggested", { exact: true })).toBeVisible();
 
   await workspace.getByRole("button", { name: "Handover" }).click();
   await expect(page.getByRole("heading", { name: "Shift handover" })).toBeVisible();
