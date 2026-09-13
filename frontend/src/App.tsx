@@ -252,6 +252,16 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: () => void }
           <span>2 x 40 min breaks</span>
           <span>Manager + Team Leader views</span>
         </div>
+        <div className="production-illustration" aria-hidden="true">
+          <svg viewBox="0 0 520 220" role="presentation">
+            <path d="M20 190h480" fill="none" stroke="currentColor" strokeWidth="3" />
+            <path d="M55 190V105l55-36 45 28 55-42 62 38v97" fill="none" stroke="currentColor" strokeWidth="3" />
+            <path d="M80 135h28v20H80zm48 0h28v20h-28zm48 0h28v20h-28z" fill="currentColor" opacity=".24" />
+            <path d="M34 170h450M55 181h420" fill="none" stroke="currentColor" strokeWidth="8" opacity=".24" />
+            <circle cx="90" cy="181" r="8" fill="currentColor" /><circle cx="160" cy="181" r="8" fill="currentColor" /><circle cx="230" cy="181" r="8" fill="currentColor" /><circle cx="300" cy="181" r="8" fill="currentColor" /><circle cx="370" cy="181" r="8" fill="currentColor" />
+            <path d="M320 65h115v58H320zM342 65V38h24v27m18 0V28h24v37" fill="none" stroke="currentColor" strokeWidth="3" />
+          </svg>
+        </div>
       </section>
       <section className="login-card" aria-labelledby="login-title">
         <div className="brand-mark" aria-hidden="true">
