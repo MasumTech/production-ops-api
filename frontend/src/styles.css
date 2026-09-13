@@ -4201,7 +4201,7 @@ td span {
   padding: 0;
   overflow: hidden;
   color: #fff;
-  background: radial-gradient(circle at 42% 45%, #174873 0%, var(--login-navy) 56%, #123b63 100%);
+  background: #16406a;
 }
 
 .login-brand-copy {
@@ -4734,6 +4734,7 @@ td span {
     height: auto;
     aspect-ratio: 417 / 237;
     object-fit: contain;
+    mix-blend-mode: lighten;
   }
 
   .login-brand-values {
