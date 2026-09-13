@@ -131,7 +131,7 @@ describe("daily risk briefing panel", () => {
     expect(within(criticalLine as HTMLElement).getByText(/Source: Line Update/)).toBeInTheDocument();
     expect(within(criticalLine as HTMLElement).getByText("Latest Status: red")).toBeInTheDocument();
 
-    expect(screen.getByText("Missing evidence lowers confidence")).toBeInTheDocument();
+    expect(screen.getByText("Missing evidence lowers data completeness")).toBeInTheDocument();
     expect(screen.getByText(/No shift output record exists/)).toBeInTheDocument();
     expect(screen.getByText(/does not predict outcomes/)).toBeInTheDocument();
   });

@@ -11,8 +11,8 @@ async function signIn(page: Page, username: string) {
   await page.goto("/");
   const usernameEnvKey = `${username.toUpperCase().replaceAll(".", "_")}_USERNAME`;
   await page.getByLabel("Username").fill(process.env[usernameEnvKey] ?? username);
-  await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Sign in securely" }).click();
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
 }
 
 test("manager can open the daily risk briefing after secure sign-in", async ({ page }) => {
@@ -87,7 +87,7 @@ test("team leader is routed to the assigned-line workspace", async ({ page }) =>
   await workspace.getByRole("button", { name: "Break & recovery" }).click();
   await expect(page.getByRole("heading", { name: "Break & Recovery" })).toBeVisible();
   await expect(page.getByText("Recovered", { exact: true })).toBeVisible();
-  await expect(page.getByText("Suggested", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Break recovery summary").getByText("Suggested", { exact: true })).toBeVisible();
 
   await workspace.getByRole("button", { name: "Handover" }).click();
   await expect(page.getByRole("heading", { name: "Shift handover" })).toBeVisible();

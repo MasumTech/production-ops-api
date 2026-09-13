@@ -55,7 +55,7 @@ describe("tablet workspace", () => {
     render(<LoginScreen onAuthenticated={onAuthenticated} />);
     await actor.type(screen.getByLabelText("Username"), "team.leader");
     await actor.type(screen.getByLabelText("Password"), "safe-password");
-    await actor.click(screen.getByRole("button", { name: "Sign in securely" }));
+    await actor.click(screen.getByRole("button", { name: "Sign in" }));
 
     await waitFor(() => expect(onAuthenticated).toHaveBeenCalledOnce());
     expect(loginSpy).toHaveBeenCalledWith("team.leader", "safe-password");
