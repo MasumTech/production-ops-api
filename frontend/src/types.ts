@@ -249,6 +249,7 @@ export interface ManagerWorkspaceData {
   updates: LineUpdate[];
   materials: MaterialReadiness[];
   escalations: Escalation[];
+  planBlocks?: DailyPlanBlock[];
   shifts: ShiftRecord[];
   downtimeEvents: DowntimeEvent[];
   summary: DashboardSummary;
