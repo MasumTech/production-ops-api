@@ -60,6 +60,8 @@ export function DailyRiskBriefingPanel({
     void load();
   }, [load]);
 
+  const priorities = briefing ? [...briefing.lines].sort((left, right) => right.risk_score - left.risk_score).slice(0, 3) : [];
+
   return (
     <section className="manager-board" aria-labelledby="risk-briefing-title">
       <div className="manager-section-heading">
@@ -67,9 +69,7 @@ export function DailyRiskBriefingPanel({
           <span className="eyebrow">Explainable evidence</span>
           <h2 id="risk-briefing-title">Daily risk briefing</h2>
         </div>
-        <button className="button button--ghost" onClick={() => void load()} disabled={busy}>
-          {busy ? "Loading…" : "Refresh briefing"}
-        </button>
+        <div className="risk-briefing-actions"><small>Generated {briefing ? formatDateTime(briefing.summary.generated_at) : "—"}</small><button className="button button--ghost" onClick={() => void load()} disabled={busy}>{busy ? "Loading…" : "Refresh briefing"}</button></div>
       </div>
 
       {error ? (
@@ -119,6 +119,8 @@ export function DailyRiskBriefingPanel({
             </article>
           </div>
 
+          {priorities.length ? <section className="risk-priority-grid" aria-label="Actionable priorities"><h3>Priority actions</h3><div>{priorities.map((line, index) => <article key={line.production_line_id}><span className="priority-number">{index + 1}</span><div><strong>{line.production_line_code}: {line.risk_factors[0]?.reason ?? "Review line evidence"}</strong><small>{line.risk_score} / 100 risk score</small></div><button className="button button--primary" onClick={() => { window.location.hash = `line-${line.production_line_id}`; }}>View line</button></article>)}</div></section> : null}
+
           {briefing.lines.length ? (
             <div className="risk-line-grid">
               {briefing.lines.map((line) => (
@@ -133,7 +135,7 @@ export function DailyRiskBriefingPanel({
                     </div>
                     <div className="risk-line-card__score">
                       <RiskBadge level={line.risk_level} />
-                      <strong>{line.risk_score} / 100</strong>
+                      <strong>{line.risk_score} / 100</strong><small>Contributions: {line.risk_factors.reduce((total, factor) => total + factor.score, 0)} / 100</small>
                       <small>{line.confidence_percent}% data complete</small>
                     </div>
                   </header>
