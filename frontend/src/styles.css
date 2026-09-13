@@ -4130,3 +4130,26 @@ td span {
 .risk-priorities li > button { display: flex; width: 100%; gap: 10px; align-items: center; padding: 8px; border: 0; color: inherit; background: transparent; text-align: left; }
 .risk-priorities li > button:hover, .risk-priorities li > button:focus-visible { border-radius: 8px; background: #f0f7fd; }
 @media (max-width: 760px) { .manager-attention-strip { grid-template-columns: 1fr; } }
+
+
+/* Proposed Team Leaders concept: filter-preserving line details drawer. */
+.manager-row { cursor: pointer; }
+.manager-row:focus-visible { outline: 3px solid #2b83c9; outline-offset: -3px; }
+.line-detail-drawer { position: fixed; z-index: 30; top: 72px; right: 0; bottom: 0; display: flex; width: min(440px, 100vw); flex-direction: column; gap: 20px; overflow-y: auto; padding: 28px; border-left: 1px solid var(--line); background: #fff; box-shadow: -18px 0 40px rgb(10 45 80 / 16%); }
+.line-detail-drawer > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.line-detail-drawer h2 { margin: 4px 0; }
+.line-detail-drawer h3 { margin: 0 0 12px; font-size: 1rem; }
+.line-detail-drawer header p { margin: 0; color: var(--muted); }
+.drawer-close { min-width: 44px; min-height: 44px; border: 0; border-radius: 8px; color: var(--ink); background: #edf3f8; font-size: 1.5rem; }
+.drawer-status-card { display: grid; gap: 7px; padding: 18px; border: 1px solid #dfe9f2; border-radius: 10px; background: #f7fbff; }
+.drawer-status-card > span:last-child { color: var(--muted); }
+.drawer-facts { display: grid; gap: 10px; margin: 0; }
+.drawer-facts div { display: grid; grid-template-columns: 92px 1fr; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.drawer-facts dt { color: var(--muted); }
+.drawer-facts dd { margin: 0; font-weight: 600; }
+.drawer-event-history { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.drawer-event-history li { display: grid; gap: 3px; padding: 10px 12px; border-left: 3px solid #2b83c9; background: #f4f8fc; }
+.drawer-event-history span { font-weight: 600; }
+.drawer-event-history small { color: var(--muted); }
+.drawer-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: auto; }
+@media (max-width: 760px) { .line-detail-drawer { top: 0; width: 100vw; padding: 20px; } .drawer-actions { grid-template-columns: 1fr; } }
