@@ -4153,3 +4153,23 @@ td span {
 .drawer-event-history small { color: var(--muted); }
 .drawer-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: auto; }
 @media (max-width: 760px) { .line-detail-drawer { top: 0; width: 100vw; padding: 20px; } .drawer-actions { grid-template-columns: 1fr; } }
+
+
+/* Proposed Daily plans concept: shared time axis and database-backed blocks. */
+.daily-plan-timeline-board, .daily-plan-output-table { margin-top: 24px; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.daily-plan-timeline-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.daily-plan-timeline-header div:first-child { display: grid; gap: 4px; }
+.daily-plan-timeline-header span { color: var(--muted); }
+.daily-plan-legend { display: flex; gap: 14px; font-size: .82rem; }
+.daily-plan-legend span::before { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 3px; content: ""; }
+.legend-production::before { background: #2680c2; }.legend-break::before { background: #c8d0d8; }
+.daily-plan-axis, .daily-plan-track { display: grid; grid-template-columns: repeat(11, minmax(42px, 1fr)); gap: 4px; }
+.daily-plan-axis { margin: 20px 0 8px 176px; color: var(--muted); font-size: .75rem; }
+.daily-plan-row { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 16px; align-items: center; margin-top: 8px; }
+.daily-plan-row-label { display: grid; gap: 3px; }.daily-plan-row-label span { color: var(--muted); font-size: .82rem; }
+.daily-plan-track { min-height: 58px; align-items: stretch; padding: 4px; border-radius: 8px; background: #f1f4f7; }
+.daily-plan-block { min-width: 0; border-radius: 7px; color: #fff; background: #2680c2; overflow: hidden; }.daily-plan-block--break { color: #263746; background: #cbd2d9; }
+.daily-plan-block summary { display: grid; gap: 3px; height: 100%; min-height: 48px; padding: 8px; cursor: pointer; list-style: none; }.daily-plan-block summary::-webkit-details-marker { display: none; }.daily-plan-block summary span { font-size: .72rem; opacity: .9; }
+.daily-plan-block > div { display: grid; gap: 4px; padding: 8px; color: var(--ink); background: #fff; font-size: .78rem; }.daily-plan-empty { grid-column: 1 / -1; align-self: center; padding: 10px; color: var(--muted); }
+.daily-plan-output-table h2 { margin-top: 0; }
+@media (max-width: 760px) { .daily-plan-axis { margin-left: 0; overflow-x: auto; }.daily-plan-row { grid-template-columns: 1fr; }.daily-plan-track { min-width: 620px; }.daily-plan-timeline-board { overflow-x: auto; } }
