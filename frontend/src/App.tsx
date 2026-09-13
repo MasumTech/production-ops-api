@@ -129,6 +129,7 @@ function useOnlineStatus(): boolean {
 async function loadWorkspaceData(operationalDate: string): Promise<WorkspaceData> {
   const [
     assignments,
+    planBlocks,
     updates,
     materials,
     escalations,
@@ -183,6 +184,7 @@ async function loadManagerData(operationalDate: string): Promise<ManagerWorkspac
     summary,
   ] = await Promise.all([
     apiList<Assignment>(`/team-leader-assignments/?date=${operationalDate}`),
+    apiList<DailyPlanBlock>(`/daily-plan-blocks/?date=${operationalDate}&ordering=sequence_number`),
     apiList<LineUpdate>(`/hourly-line-updates/latest-status/?date=${operationalDate}`),
     apiList<MaterialReadiness>(
       `/product-material-readiness/?date=${operationalDate}&ordering=sequence_number`,
