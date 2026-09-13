@@ -12,19 +12,20 @@ for (const viewport of viewports) {
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
     await expect(page.getByLabel("Username")).toBeVisible();
-    await expect(page.getByLabel("Password")).toBeVisible();
+    await expect(page.locator('input[autocomplete="current-password"]')).toBeVisible();
     await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
-
-    if (viewport.name === "desktop" || viewport.name === "tablet") {
-      await expect(page.getByRole("heading", { name: "Operations Control Board" })).toBeVisible();
-    } else {
-      await expect(page.getByLabel("Operations Control Board")).toBeHidden();
-    }
 
     await page.screenshot({
       path: testInfo.outputPath(`login-${viewport.name}.png`),
       fullPage: true,
       animations: "disabled",
     });
+
+    if (viewport.name === "desktop" || viewport.name === "tablet") {
+      await expect(page.getByRole("heading", { name: "Operations Control Board" })).toBeVisible();
+    } else {
+      await expect(page.locator(".login-brand-panel")).toBeHidden();
+    }
+
   });
 }
