@@ -25,6 +25,9 @@ export function MaterialsPanel({
   onSaved: (message: string) => Promise<void>;
 }) {
   const [showForm, setShowForm] = useState(false);
+  const [filter, setFilter] = useState<MaterialReadiness["status"] | "all">("all");
+  const [activeTab, setActiveTab] = useState<"materials" | "actions">("materials");
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [assignment, setAssignment] = useState("");
   const [sequence, setSequence] = useState("1");
   const [productCode, setProductCode] = useState("");
@@ -90,6 +93,13 @@ export function MaterialsPanel({
         }
       />
       {error ? <ErrorBanner message={error} /> : null}
+      <div className="materials-tabs" role="tablist" aria-label="Materials workspace">
+        <button className={activeTab === "materials" ? "is-active" : ""} onClick={() => setActiveTab("materials")} role="tab">Materials <strong>{materials.length}</strong></button>
+        <button className={activeTab === "actions" ? "is-active" : ""} onClick={() => setActiveTab("actions")} role="tab">Open actions</button>
+      </div>
+      {activeTab === "materials" ? <div className="material-status-cards" aria-label="Filter by material status">
+        {([["all", "All", materials.length], ["ready", "Ready", materials.filter((item) => item.status === "ready").length], ["in_process", "In process", materials.filter((item) => item.status === "in_process").length], ["short", "Short", materials.filter((item) => item.status === "short").length], ["held", "Held", materials.filter((item) => item.status === "held").length]] as const).map(([key, label, count]) => <button key={key} className={filter === key ? "is-selected" : ""} onClick={() => setFilter(key)}><span>{label}</span><strong>{count}</strong></button>)}
+      </div> : <div className="materials-action-note">Open actions are grouped from Short and Held records. Select a material to review the next action.</div>}
 
       {showForm ? (
         <form className="form-card form-grid form-card--spaced" onSubmit={save}>
@@ -212,8 +222,8 @@ export function MaterialsPanel({
                 </tr>
               </thead>
               <tbody>
-                {materials.map((item) => (
-                  <tr key={item.id}>
+                {materials.filter((item) => filter === "all" || item.status === filter).map((item) => (
+                  <tr key={item.id} onClick={() => setSelectedId(item.id)} className={selectedId === item.id ? "is-selected" : ""} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter") setSelectedId(item.id); }}>
                     <td data-label="Seq">{item.sequence_number}</td>
                     <td data-label="Line">{item.production_line_code}</td>
                     <td data-label="Product">
@@ -234,6 +244,7 @@ export function MaterialsPanel({
             </table>
           </div>
         </div>
+        {selectedId !== null ? (() => { const item = materials.find((candidate) => candidate.id === selectedId); return item ? <aside className="material-detail-card" aria-label="Selected material details"><div><span className="eyebrow">Selected item</span><h2>{item.product_name} · {item.production_line_code}</h2><StatusPill value={item.status} /></div><dl><div><dt>Needed by</dt><dd>{formatDateTime(item.expected_available_at)}</dd></div><div><dt>Shortage</dt><dd>{item.shortage_quantity ? `${item.shortage_quantity} units` : "None recorded"}</dd></div><div><dt>Responsible</dt><dd>{item.owner_username || "Unassigned"}</dd></div><div><dt>Held reason</dt><dd>{item.hold_reason || "—"}</dd></div></dl><div className="form-actions"><button className="button button--primary" onClick={() => setShowForm(true)}>Update status</button><button className="button button--ghost" onClick={() => setShowForm(true)}>Raise issue</button></div></aside> : null; })() : null}
       )}
     </section>
   );
