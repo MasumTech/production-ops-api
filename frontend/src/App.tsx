@@ -240,79 +240,103 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: () => void }
 
   return (
     <main className="login-shell">
-      <section className="login-brand-panel" aria-label="Production workspace summary">
-        <div className="brand-mark brand-mark--large" aria-hidden="true">
-          ML
+      <section className="login-brand-panel" aria-label="Operations Control Board">
+        <div className="login-brand-copy">
+          <h1>Operations<br />Control Board</h1>
+          <p className="login-brand-tagline">Keep production moving safely</p>
+          <p className="login-brand-workspace">Manager and Team Leader workspace</p>
         </div>
-        <span className="eyebrow">Operations Control Board</span>
-        <h1>Multi-Line Team Leader Digital Solution</h1>
-        <p>
-          Live line status, daily plans, material risks, break recovery and AI briefing
-          in one production-floor workspace.
-        </p>
-        <div className="login-brand-metrics" aria-hidden="true">
-          <span>07:00-18:00 shift</span>
-          <span>2 x 40 min breaks</span>
-          <span>Manager + Team Leader views</span>
-        </div>
+
         <div className="production-illustration" aria-hidden="true">
-          <svg viewBox="0 0 520 220" role="presentation">
-            <path d="M20 190h480" fill="none" stroke="currentColor" strokeWidth="3" />
-            <path d="M55 190V105l55-36 45 28 55-42 62 38v97" fill="none" stroke="currentColor" strokeWidth="3" />
-            <path d="M80 135h28v20H80zm48 0h28v20h-28zm48 0h28v20h-28z" fill="currentColor" opacity=".24" />
-            <path d="M34 170h450M55 181h420" fill="none" stroke="currentColor" strokeWidth="8" opacity=".24" />
-            <circle cx="90" cy="181" r="8" fill="currentColor" /><circle cx="160" cy="181" r="8" fill="currentColor" /><circle cx="230" cy="181" r="8" fill="currentColor" /><circle cx="300" cy="181" r="8" fill="currentColor" /><circle cx="370" cy="181" r="8" fill="currentColor" />
-            <path d="M320 65h115v58H320zM342 65V38h24v27m18 0V28h24v37" fill="none" stroke="currentColor" strokeWidth="3" />
+          <svg viewBox="0 0 640 310" role="presentation">
+            <path d="M1 287H632" />
+            <path d="M27 287V118l68-44v42l68-44v44l72-48v219" />
+            <path d="M70 143h29v22H70zm46 0h29v22h-29zm46 0h29v22h-29" />
+            <path d="M113 203h34v45h-34zm104 28h56v56h-56m74-56h56v56h-56m74-56h56v56h-56" />
+            <path d="M188 287h344M73 256h442" />
+            <path d="M276 203l72-82h74v18h-61l-61 72" />
+            <circle cx="280" cy="212" r="21" />
+            <circle cx="280" cy="212" r="8" />
+            <path d="M408 138v39m-9 0h18v20l-11 13-11-13v-20h13" />
+            <path d="M475 153h116v73H475zm20 18h30v36h-30m46-37h32m-32 14h32m-32 14h21M502 226v61m64-61v61" />
+            <path d="M501 201v-11m9 11v-20m9 20v-30" />
+            <circle cx="72" cy="256" r="9" /><circle cx="140" cy="256" r="9" />
+            <circle cx="208" cy="256" r="9" /><circle cx="276" cy="256" r="9" />
+            <circle cx="344" cy="256" r="9" /><circle cx="412" cy="256" r="9" />
+            <circle cx="480" cy="256" r="9" />
           </svg>
         </div>
-      </section>
-      <section className="login-card" aria-labelledby="login-title">
-        <div className="brand-mark" aria-hidden="true">
-          ML
+
+        <div className="login-brand-values" aria-label="People, process, a safer tomorrow">
+          <span>People</span><i aria-hidden="true" /><span>Process</span><i aria-hidden="true" /><span>A safer tomorrow</span>
         </div>
-        <span className="eyebrow">Production operations workspace</span>
-        <h1 id="login-title">Welcome back</h1>
-        <p>Sign in to open the correct Manager or Team Leader workspace for your account.</p>
-        {error ? <ErrorBanner message={error} /> : null}
-        <form onSubmit={submit} className="stack-form">
-          <label>
-            Username
-            <input
-              autoComplete="username"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              required
-            />
-          </label>
-          <label>
-            Password
-            <span className="password-field">
-              <input
-                type={showPassword ? "text" : "password"}
-                aria-label="Password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-              <button
-                type="button"
-                className="password-toggle"
-                onClick={() => setShowPassword((value) => !value)}
-                aria-label={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? "Hide" : "Show"}
-              </button>
+      </section>
+
+      <section className="login-form-panel">
+        <div className="login-card" aria-labelledby="login-title">
+          <header className="login-card-header">
+            <svg className="login-factory-logo" viewBox="0 0 88 78" aria-hidden="true">
+              <path fill="currentColor" d="M8 70V35l23-16v16l22-16v16l17-12V5h10l2 65H8Zm14-18v10h11V52H22Zm20 0v10h11V52H42Zm20 0v10h11V52H62Z" />
+            </svg>
+            <h1 id="login-title">Welcome back</h1>
+            <p>Sign in to your production workspace</p>
+          </header>
+
+          {error ? <ErrorBanner message={error} /> : null}
+
+          <form onSubmit={submit} className="stack-form login-form">
+            <label>
+              Username
+              <span className="login-input-shell">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M5 21v-2a7 7 0 0 1 14 0v2" /></svg>
+                <input
+                  autoComplete="username"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  required
+                />
+              </span>
+            </label>
+            <label>
+              Password
+              <span className="login-input-shell">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  aria-label="Password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowPassword((value) => !value)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                >
+                  {showPassword ? (
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 4.3A10.7 10.7 0 0 1 12 4c5.5 0 9 8 9 8a17.8 17.8 0 0 1-2.1 3.3M6.6 6.6C4.3 8.1 3 12 3 12s3.5 8 9 8c1.1 0 2.1-.3 3-.7" /></svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.5-8 9-8 9 8 9 8-3.5 8-9 8-9-8-9-8Z" /><circle cx="12" cy="12" r="3" /></svg>
+                  )}
+                </button>
+              </span>
+            </label>
+            <button className="button button--primary login-submit" disabled={busy}>
+              {busy ? <><span className="login-button-spinner" aria-hidden="true" />Signing in…</> : <>Sign in<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" /></svg></>}
+            </button>
+          </form>
+
+          <footer className="login-card-footer">
+            <p>Need access? Contact your administrator.</p>
+            <span className="demo-environment">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3M8 15h8" /></svg>
+              Demo environment
             </span>
-          </label>
-          <button className="button button--primary button--large" disabled={busy}>
-            {busy ? "Signing in..." : "Sign in"}
-          </button>
-        </form>
-        <p className="safety-note">
-          Follow approved safety, food-safety, quality, engineering, and escalation procedures
-          before entering a software update.
-        </p>
+          </footer>
+        </div>
       </section>
     </main>
   );
