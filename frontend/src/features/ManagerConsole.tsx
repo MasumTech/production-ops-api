@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { DailyRiskBriefingPanel } from "./DailyRiskBriefingPanel";
 import { LossAnalyticsPanel } from "./LossAnalyticsPanel";
 import { EmptyState, ErrorBanner, StatusPill } from "../components";
-import { formatDateTime, titleCase } from "../format";
+import { formatDateTime, localDate, titleCase } from "../format";
 import { escalationRole } from "../operationalRoles";
 import { NotificationCentre } from "../NotificationCentre";
 import { AppIcon, type AppIconName } from "../AppIcon";
@@ -267,6 +267,7 @@ export function ManagerConsole({
   const [filter, setFilter] = useState<BoardFilter>("all");
   const [selectedDowntimeLine, setSelectedDowntimeLine] = useState<number | null>(null);
   const rows = useMemo(() => buildManagerRows(data), [data]);
+  const isHistorical = operationalDate !== localDate();
   const visibleRows = useMemo(
     () => rows.filter((row) => matchesFilter(row, filter)),
     [filter, rows],
@@ -291,6 +292,7 @@ export function ManagerConsole({
   const downtimeRisk = Math.min(100, Math.round((summary.total_downtime_minutes / 66) * 100));
   const materialRisk = Math.min(100, materialRisks.length * 21);
   const highestRiskLine = rows.find((row) => row.update?.status === "red") ?? rows[0];
+  const criticalRows = rows.filter((row) => row.update?.status === "red" || row.attentionLevel === "urgent");
   const stableLineLabels = rows
     .filter((row) => row.update?.status === "green")
     .map((row) => displayLine(row.assignment.production_line_code))
@@ -359,6 +361,7 @@ export function ManagerConsole({
                 <div>
                   <h1 id="manager-title">Before-shift and live overview</h1>
                   <p>Shift 07:00 – 18:00&nbsp;&nbsp; | &nbsp;&nbsp;{liveState === "live" ? "Live data" : "Snapshot data"}</p>
+                  {isHistorical ? <span className="historical-badge">Historical view</span> : null}
                 </div>
               </section>
 
@@ -379,6 +382,21 @@ export function ManagerConsole({
                   <span className="control-kpi__icon control-kpi__icon--orange"><AppIcon name="clock" size={31} /></span>
                   <div><strong>{NUMBER.format(summary.total_downtime_minutes)} min</strong><span>downtime</span><small>Total today</small></div>
                 </article>
+              </section>
+
+              <section className="manager-attention-strip" aria-label="Attention summary">
+                <button type="button" className="attention-action attention-action--critical" onClick={() => setView("lines")}>
+                  <strong>{criticalRows.length} critical issue{criticalRows.length === 1 ? "" : "s"}</strong>
+                  <span>Open line control</span>
+                </button>
+                <button type="button" className="attention-action attention-action--material" onClick={() => setView("actions")}>
+                  <strong>{materialRisks.length} material risk{materialRisks.length === 1 ? "" : "s"}</strong>
+                  <span>Review materials</span>
+                </button>
+                <button type="button" className="attention-action" onClick={() => setView("actions")}>
+                  <strong>{openActions.length} open action{openActions.length === 1 ? "" : "s"}</strong>
+                  <span>Open action centre</span>
+                </button>
               </section>
 
               <section className="manager-overview-board" aria-labelledby="coverage-board-title">
@@ -417,7 +435,7 @@ export function ManagerConsole({
                         return <div className="leader-line" key={line.id}>
                           <strong>{displayLine(line.production_line_code)}</strong>
                           <span>{row?.update?.current_product || "Planned production"}</span>
-                          <span className={`status-dot status-dot--${row?.update?.status || "missing"}`} aria-label={row?.update?.status || "missing"} />
+                          <span className={`status-dot status-text status-dot--${row?.update?.status || "missing"}`} aria-label={`Status: ${row?.update?.status || "missing"}`}>{titleCase(row?.update?.status || "missing")}</span>
                           <span>{percent === null ? "—" : `${percent}%`}</span>
                           <button
                             type="button"
@@ -448,9 +466,9 @@ export function ManagerConsole({
                   <div className="risk-priorities">
                     <h3>Suggested priorities (advisory only)</h3>
                     <ol>
-                      <li><span>1</span>Focus on {highestRiskLine ? displayLine(highestRiskLine.assignment.production_line_code) : "the highest-risk line"} – investigate downtime and restore output.</li>
-                      <li><span>2</span>{materialRisks[0] ? `Check material supply for ${materialRisks[0].product_name}.` : "Maintain confirmed material availability."}</li>
-                      <li><span>3</span>{stableLineLabels ? `Maintain current performance on ${stableLineLabels}.` : "Confirm the next hourly line updates."}</li>
+                      <li><button type="button" onClick={() => setView("lines")}><span>1</span>Focus on {highestRiskLine ? displayLine(highestRiskLine.assignment.production_line_code) : "the highest-risk line"} – investigate downtime and restore output.</button></li>
+                      <li><button type="button" onClick={() => setView("actions")}><span>2</span>{materialRisks[0] ? `Check material supply for ${materialRisks[0].product_name}.` : "Maintain confirmed material availability."}</button></li>
+                      <li><button type="button" onClick={() => setView("lines")}><span>3</span>{stableLineLabels ? `Maintain current performance on ${stableLineLabels}.` : "Confirm the next hourly line updates."}</button></li>
                     </ol>
                     <p className="advisory-note"><AppIcon name="info" size={20} />AI suggestions are advisory only. Operational decisions remain with you.</p>
                   </div>
