@@ -682,7 +682,7 @@ export function ManagerConsole({
               <ManagerViewIntro
                 eyebrow="Today&apos;s schedule"
                 title="Daily plans"
-                body="Compare each line&apos;s planned output with the live recorded position for this shift."
+                body="Compare the approved schedule with recorded output. Production blocks are blue; planned breaks are grey."
               />
               <section className="daily-plan-summary" aria-label="Daily production plans">
                 {rows.map((row) => (
@@ -694,6 +694,35 @@ export function ManagerConsole({
                     <small>{planPercent(row.shift) ?? 0}% complete</small>
                   </article>
                 ))}
+              </section>
+              <section className="daily-plan-timeline-board" aria-label="Daily schedule timeline">
+                <header className="daily-plan-timeline-header">
+                  <div><strong>Shift schedule</strong><span>07:00 – 18:00</span></div>
+                  <div className="daily-plan-legend"><span className="legend-production">Production</span><span className="legend-break">Planned break</span></div>
+                </header>
+                <div className="daily-plan-axis" aria-hidden="true">{Array.from({ length: 12 }, (_, index) => <span key={index}>{String(7 + index).padStart(2, "0")}:00</span>)}</div>
+                <div className="daily-plan-rows">
+                  {rows.map((row) => {
+                    const blocks = (data.planBlocks ?? []).filter((block) => block.assignment === row.assignment.id).sort((left, right) => left.sequence_number - right.sequence_number);
+                    return <article className="daily-plan-row" key={row.assignment.id}>
+                      <div className="daily-plan-row-label"><strong>{displayLine(row.assignment.production_line_code)}</strong><span>{row.update?.current_product || "Planned production"}</span></div>
+                      <div className="daily-plan-track">
+                        {blocks.length ? blocks.map((block) => {
+                          const hours = Math.max(1, Math.round((new Date(block.planned_end_at).getTime() - new Date(block.planned_start_at).getTime()) / 3600000));
+                          const materials = data.materials.filter((item) => item.assignment === block.assignment && item.sequence_number === block.sequence_number);
+                          return <details className={`daily-plan-block daily-plan-block--${block.block_type}`} style={{ gridColumn: `span ${hours}` }} key={block.id}>
+                            <summary><strong>{block.block_type === "break" ? `Break ${block.break_number ?? ""}` : block.product_name}</strong><span>{shortTime(block.planned_start_at)} – {shortTime(block.planned_end_at)}</span></summary>
+                            <div><span>Target: {block.target_units_per_hour ?? "—"} units/hour</span><span>Planned quantity: {NUMBER.format(block.planned_units)}</span><span>Materials: {materials.length ? materials.map((item) => item.product_name).join(", ") : "No material record"}</span></div>
+                          </details>;
+                        }) : <span className="daily-plan-empty">No plan blocks recorded</span>}
+                      </div>
+                    </article>;
+                  })}
+                </div>
+              </section>
+              <section className="daily-plan-output-table" aria-label="Daily plan output table">
+                <h2>Output by line</h2>
+                <div className="responsive-table"><table><thead><tr><th>Line</th><th>Planned</th><th>Actual</th><th>Completion</th></tr></thead><tbody>{rows.map((row) => <tr key={row.assignment.id}><td>{displayLine(row.assignment.production_line_code)}</td><td>{NUMBER.format(row.shift?.planned_output ?? 0)}</td><td>{NUMBER.format(row.shift?.actual_output ?? 0)}</td><td>{planPercent(row.shift) ?? 0}%</td></tr>)}</tbody></table></div>
               </section>
             </>
           ) : null}

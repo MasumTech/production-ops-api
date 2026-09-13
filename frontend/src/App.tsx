@@ -139,23 +139,23 @@ async function loadWorkspaceData(operationalDate: string): Promise<WorkspaceData
     shifts,
     downtimeEvents,
   ] = await Promise.all([
-      apiList<Assignment>(
-        `/team-leader-assignments/my-lines/?date=${operationalDate}`,
-      ),
-      apiList<LineUpdate>(
-        `/hourly-line-updates/latest-status/?date=${operationalDate}`,
-      ),
-      apiList<MaterialReadiness>(
-        `/product-material-readiness/?date=${operationalDate}&ordering=sequence_number`,
-      ),
-      apiList<Escalation>("/operational-escalations/?ordering=-raised_at"),
-      apiList<DailyPlanBlock>(`/daily-plan-blocks/?date=${operationalDate}`),
-      apiList<BreakOpportunity>(`/break-opportunities/?date=${operationalDate}`),
-      apiList<ShiftHandover>("/shift-handovers/?ordering=-handed_over_at"),
-      apiList<UserChoice>("/active-users/"),
-      apiList<ShiftRecord>(`/shifts/?date=${operationalDate}`),
-      apiList<DowntimeEvent>(`/downtime-events/?date=${operationalDate}&ordering=started_at`),
-    ]);
+    apiList<Assignment>(
+      `/team-leader-assignments/my-lines/?date=${operationalDate}`,
+    ),
+    apiList<LineUpdate>(
+      `/hourly-line-updates/latest-status/?date=${operationalDate}`,
+    ),
+    apiList<MaterialReadiness>(
+      `/product-material-readiness/?date=${operationalDate}&ordering=sequence_number`,
+    ),
+    apiList<Escalation>("/operational-escalations/?ordering=-raised_at"),
+    apiList<DailyPlanBlock>(`/daily-plan-blocks/?date=${operationalDate}`),
+    apiList<BreakOpportunity>(`/break-opportunities/?date=${operationalDate}`),
+    apiList<ShiftHandover>("/shift-handovers/?ordering=-handed_over_at"),
+    apiList<UserChoice>("/active-users/"),
+    apiList<ShiftRecord>(`/shifts/?date=${operationalDate}`),
+    apiList<DowntimeEvent>(`/downtime-events/?date=${operationalDate}&ordering=started_at`),
+  ]);
 
   return {
     assignments,
@@ -175,6 +175,7 @@ async function loadWorkspaceData(operationalDate: string): Promise<WorkspaceData
 async function loadManagerData(operationalDate: string): Promise<ManagerWorkspaceData> {
   const [
     assignments,
+    planBlocks,
     updates,
     materials,
     escalations,
@@ -183,6 +184,7 @@ async function loadManagerData(operationalDate: string): Promise<ManagerWorkspac
     summary,
   ] = await Promise.all([
     apiList<Assignment>(`/team-leader-assignments/?date=${operationalDate}`),
+    apiList<DailyPlanBlock>(`/daily-plan-blocks/?date=${operationalDate}&ordering=sequence_number`),
     apiList<LineUpdate>(`/hourly-line-updates/latest-status/?date=${operationalDate}`),
     apiList<MaterialReadiness>(
       `/product-material-readiness/?date=${operationalDate}&ordering=sequence_number`,
@@ -199,6 +201,7 @@ async function loadManagerData(operationalDate: string): Promise<ManagerWorkspac
 
   return {
     assignments,
+    planBlocks,
     updates,
     materials,
     escalations,
