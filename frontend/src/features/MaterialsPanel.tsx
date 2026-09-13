@@ -245,6 +245,7 @@ export function MaterialsPanel({
           </div>
         </div>
         {selectedId !== null ? (() => { const item = materials.find((candidate) => candidate.id === selectedId); return item ? <aside className="material-detail-card" aria-label="Selected material details"><div><span className="eyebrow">Selected item</span><h2>{item.product_name} · {item.production_line_code}</h2><StatusPill value={item.status} /></div><dl><div><dt>Needed by</dt><dd>{formatDateTime(item.expected_available_at)}</dd></div><div><dt>Shortage</dt><dd>{item.shortage_quantity ? `${item.shortage_quantity} units` : "None recorded"}</dd></div><div><dt>Responsible</dt><dd>{item.owner_username || "Unassigned"}</dd></div><div><dt>Held reason</dt><dd>{item.hold_reason || "—"}</dd></div></dl><div className="form-actions"><button className="button button--primary" onClick={() => setShowForm(true)}>Update status</button><button className="button button--ghost" onClick={() => setShowForm(true)}>Raise issue</button></div></aside> : null; })() : null}
+      )}
     </section>
   );
 }
