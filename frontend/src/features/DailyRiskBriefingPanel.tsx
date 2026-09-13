@@ -105,7 +105,7 @@ export function DailyRiskBriefingPanel({
               <small>Highest evidence-based line score</small>
             </article>
             <article>
-              <span>Average confidence</span>
+              <span>Data completeness</span>
               <strong>{briefing.summary.average_confidence_percent}%</strong>
               <small>Based on source-data completeness</small>
             </article>
@@ -134,7 +134,7 @@ export function DailyRiskBriefingPanel({
                     <div className="risk-line-card__score">
                       <RiskBadge level={line.risk_level} />
                       <strong>{line.risk_score} / 100</strong>
-                      <small>{line.confidence_percent}% confidence</small>
+                      <small>{line.confidence_percent}% data complete</small>
                     </div>
                   </header>
 
@@ -162,8 +162,11 @@ export function DailyRiskBriefingPanel({
                     </div>
                   </dl>
 
-                  <div className="risk-evidence">
-                    <h4>Ranked evidence</h4>
+                  <details className="risk-evidence" open={line.risk_level === "critical"}>
+                    <summary>
+                      View evidence
+                      <span>{line.risk_factors.length} factor{line.risk_factors.length === 1 ? "" : "s"}</span>
+                    </summary>
                     {line.risk_factors.length ? (
                       <ol>
                         {line.risk_factors.map((factor) => (
@@ -183,22 +186,22 @@ export function DailyRiskBriefingPanel({
                     ) : (
                       <p className="risk-evidence__empty">No scored risk factors.</p>
                     )}
-                  </div>
 
-                  {line.missing_data_warnings.length ? (
-                    <aside className="risk-data-warnings" aria-label={`${line.production_line_code} data warnings`}>
-                      <strong>Missing evidence lowers confidence</strong>
-                      <ul>
-                        {line.missing_data_warnings.map((warning) => (
-                          <li key={warning.code}>
-                            {warning.message} <span>Source: {titleCase(warning.source)}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </aside>
-                  ) : (
-                    <p className="risk-data-complete">No missing-data warnings.</p>
-                  )}
+                    {line.missing_data_warnings.length ? (
+                      <aside className="risk-data-warnings" aria-label={`${line.production_line_code} data warnings`}>
+                        <strong>Missing evidence lowers data completeness</strong>
+                        <ul>
+                          {line.missing_data_warnings.map((warning) => (
+                            <li key={warning.code}>
+                              {warning.message} <span>Source: {titleCase(warning.source)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </aside>
+                    ) : (
+                      <p className="risk-data-complete">No missing-data warnings.</p>
+                    )}
+                  </details>
                 </article>
               ))}
             </div>

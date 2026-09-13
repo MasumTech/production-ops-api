@@ -33,6 +33,9 @@ export function BreakRecoveryPanel({
   const [error, setError] = useState("");
   const visibleAssignmentIds = new Set(assignments.slice(0, 2).map((item) => item.id));
   const visible = opportunities.filter((item) => visibleAssignmentIds.has(item.assignment));
+  const confirmedCount = visible.filter((item) => item.confirmed_at).length;
+  const resumedCount = visible.filter((item) => item.run_resumed_at).length;
+  const pendingCount = visible.filter((item) => !item.run_resumed_at).length;
 
   const transition = async (
     item: BreakOpportunity,
@@ -88,6 +91,25 @@ export function BreakRecoveryPanel({
         body="When a Red stop is close to an approved break, review the opportunity and capture the complete fault-to-restart timeline."
       />
       {error ? <ErrorBanner message={error} /> : null}
+
+      <div className="break-recovery-summary" aria-label="Break recovery summary">
+        <article>
+          <span>Suggested</span>
+          <strong>{visible.length}</strong>
+        </article>
+        <article>
+          <span>Confirmed full break</span>
+          <strong>{confirmedCount}</strong>
+        </article>
+        <article>
+          <span>Run resumed</span>
+          <strong>{resumedCount}</strong>
+        </article>
+        <article>
+          <span>Needs action</span>
+          <strong>{pendingCount}</strong>
+        </article>
+      </div>
 
       <div className="break-policy-banner">
         <strong>Team Leader confirms every decision.</strong>

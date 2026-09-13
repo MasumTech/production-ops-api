@@ -217,6 +217,7 @@ async function loadSupportData(operationalDate: string): Promise<SupportCompanio
 export function LoginScreen({ onAuthenticated }: { onAuthenticated: () => void }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -236,13 +237,29 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: () => void }
 
   return (
     <main className="login-shell">
+      <section className="login-brand-panel" aria-label="Production workspace summary">
+        <div className="brand-mark brand-mark--large" aria-hidden="true">
+          ML
+        </div>
+        <span className="eyebrow">Operations Control Board</span>
+        <h1>Multi-Line Team Leader Digital Solution</h1>
+        <p>
+          Live line status, daily plans, material risks, break recovery and AI briefing
+          in one production-floor workspace.
+        </p>
+        <div className="login-brand-metrics" aria-hidden="true">
+          <span>07:00-18:00 shift</span>
+          <span>2 x 40 min breaks</span>
+          <span>Manager + Team Leader views</span>
+        </div>
+      </section>
       <section className="login-card" aria-labelledby="login-title">
         <div className="brand-mark" aria-hidden="true">
           ML
         </div>
         <span className="eyebrow">Production operations workspace</span>
-        <h1 id="login-title">Multi-Line Control</h1>
-        <p>Team Leaders control assigned lines. Managers see the full Live Floor priority board.</p>
+        <h1 id="login-title">Welcome back</h1>
+        <p>Sign in to open the correct Manager or Team Leader workspace for your account.</p>
         {error ? <ErrorBanner message={error} /> : null}
         <form onSubmit={submit} className="stack-form">
           <label>
@@ -256,16 +273,27 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: () => void }
           </label>
           <label>
             Password
-            <input
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-            />
+            <span className="password-field">
+              <input
+                type={showPassword ? "text" : "password"}
+                aria-label="Password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPassword((value) => !value)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </span>
           </label>
           <button className="button button--primary button--large" disabled={busy}>
-            {busy ? "Signing in…" : "Sign in securely"}
+            {busy ? "Signing in..." : "Sign in"}
           </button>
         </form>
         <p className="safety-note">
