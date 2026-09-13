@@ -276,6 +276,7 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: () => void }
             <span className="password-field">
               <input
                 type={showPassword ? "text" : "password"}
+                aria-label="Password"
                 autoComplete="current-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
