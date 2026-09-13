@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 const viewports = [
   { name: "desktop", width: 1536, height: 1024 },
+  { name: "wide-desktop", width: 1887, height: 852 },
   { name: "tablet", width: 1024, height: 768 },
   { name: "phone", width: 390, height: 844 },
 ] as const;
@@ -21,8 +22,16 @@ for (const viewport of viewports) {
       animations: "disabled",
     });
 
-    if (viewport.name === "desktop" || viewport.name === "tablet") {
+    if (viewport.name !== "phone") {
       await expect(page.getByRole("heading", { name: "Operations Control Board" })).toBeVisible();
+      const copyBox = await page.locator(".login-brand-copy").boundingBox();
+      const illustrationBox = await page.locator(".production-illustration").boundingBox();
+      expect(copyBox).not.toBeNull();
+      expect(illustrationBox).not.toBeNull();
+      expect(illustrationBox!.y).toBeGreaterThanOrEqual(copyBox!.y + copyBox!.height + 20);
+      expect(illustrationBox!.width / illustrationBox!.height).toBeCloseTo(417 / 237, 2);
+      expect(illustrationBox!.x).toBeGreaterThanOrEqual(0);
+      expect(illustrationBox!.x + illustrationBox!.width).toBeLessThanOrEqual(viewport.width);
     } else {
       await expect(page.locator(".login-brand-panel")).toBeHidden();
     }

@@ -13,6 +13,7 @@ import {
   subscribeToOutbox,
 } from "./api";
 import { ErrorBanner } from "./components";
+import productionLineIllustration from "./assets/production-line-illustration.png";
 import { NotificationCentre } from "./NotificationCentre";
 import { BreakRecoveryPanel } from "./features/BreakRecoveryPanel";
 import { DailyPlanPanel } from "./features/DailyPlanPanel";
@@ -248,23 +249,7 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: () => void }
         </div>
 
         <div className="production-illustration" aria-hidden="true">
-          <svg viewBox="0 0 640 310" role="presentation">
-            <path d="M1 287H632" />
-            <path d="M27 287V118l68-44v42l68-44v44l72-48v219" />
-            <path d="M70 143h29v22H70zm46 0h29v22h-29zm46 0h29v22h-29" />
-            <path d="M113 203h34v45h-34zm104 28h56v56h-56m74-56h56v56h-56m74-56h56v56h-56" />
-            <path d="M188 287h344M73 256h442" />
-            <path d="M276 203l72-82h74v18h-61l-61 72" />
-            <circle cx="280" cy="212" r="21" />
-            <circle cx="280" cy="212" r="8" />
-            <path d="M408 138v39m-9 0h18v20l-11 13-11-13v-20h13" />
-            <path d="M475 153h116v73H475zm20 18h30v36h-30m46-37h32m-32 14h32m-32 14h21M502 226v61m64-61v61" />
-            <path d="M501 201v-11m9 11v-20m9 20v-30" />
-            <circle cx="72" cy="256" r="9" /><circle cx="140" cy="256" r="9" />
-            <circle cx="208" cy="256" r="9" /><circle cx="276" cy="256" r="9" />
-            <circle cx="344" cy="256" r="9" /><circle cx="412" cy="256" r="9" />
-            <circle cx="480" cy="256" r="9" />
-          </svg>
+          <img src={productionLineIllustration} alt="" />
         </div>
 
         <div className="login-brand-values" aria-label="People, process, a safer tomorrow">

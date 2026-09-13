@@ -4201,7 +4201,7 @@ td span {
   padding: 0;
   overflow: hidden;
   color: #fff;
-  background: radial-gradient(circle at 42% 45%, #174873 0%, var(--login-navy) 56%, #123b63 100%);
+  background: #16406a;
 }
 
 .login-brand-copy {
@@ -4696,5 +4696,95 @@ td span {
 @media (prefers-reduced-motion: reduce) {
   .login-button-spinner {
     animation-duration: 1.4s;
+  }
+}
+
+
+/* Keep the approved factory artwork in document flow so it can never cover copy. */
+@media (min-width: 821px) {
+  .login-brand-panel {
+    display: flex;
+    min-height: 100svh;
+    padding: clamp(4.5rem, 13.9vh, 8.9rem) 6.5% clamp(3rem, 12.2vh, 7.8rem) 9.8%;
+    flex-direction: column;
+    justify-content: flex-start;
+    overflow: hidden;
+  }
+
+  .login-brand-copy {
+    position: static;
+    width: 100%;
+    flex: 0 0 auto;
+  }
+
+  .login-brand-panel .production-illustration {
+    position: static;
+    align-self: center;
+    width: min(calc(100% + 3rem), 630px);
+    margin: clamp(2rem, 5.5vh, 3.6rem) auto 0;
+    flex: 0 1 auto;
+    color: #91badd;
+    transform: none;
+  }
+
+  .login-brand-panel .production-illustration img {
+    display: block;
+    width: 100%;
+    max-width: none;
+    height: auto;
+    aspect-ratio: 417 / 237;
+    object-fit: contain;
+    mix-blend-mode: lighten;
+  }
+
+  .login-brand-values {
+    position: static;
+    width: 100%;
+    margin: auto 0 0;
+    padding-top: 1.75rem;
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 1180px) and (min-width: 821px) {
+  .login-brand-panel {
+    padding: clamp(3.5rem, 11vh, 6rem) 5% clamp(2.5rem, 8vh, 4rem) 8%;
+  }
+
+  .login-brand-panel .production-illustration {
+    width: min(calc(100% + 1.5rem), 440px);
+    margin-top: clamp(1.75rem, 4.5vh, 2.75rem);
+  }
+}
+
+@media (max-height: 760px) and (min-width: 821px) {
+  .login-brand-panel {
+    min-height: 760px;
+    padding-top: 3.5rem;
+    padding-bottom: 2.5rem;
+    overflow-y: auto;
+  }
+
+  .login-brand-panel .login-brand-copy h1 {
+    font-size: clamp(2.5rem, 4vw, 3.45rem);
+  }
+
+  .login-brand-panel .login-brand-tagline {
+    margin-top: 1rem;
+    font-size: clamp(1.35rem, 2.2vw, 1.8rem);
+  }
+
+  .login-brand-panel .login-brand-workspace {
+    margin-top: 1rem;
+    font-size: 1rem;
+  }
+
+  .login-brand-panel .production-illustration {
+    width: min(88%, 390px);
+    margin-top: 1.5rem;
+  }
+
+  .login-brand-values {
+    padding-top: 1.5rem;
   }
 }
