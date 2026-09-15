@@ -35,7 +35,7 @@ test("manager can open the daily risk briefing after secure sign-in", async ({ p
   await workspace.getByRole("button", { name: "Daily plans" }).click();
   await expect(page.getByRole("heading", { name: "Daily plans" })).toBeVisible();
   await workspace.getByRole("button", { name: "Materials" }).click();
-  await expect(page.getByRole("heading", { name: "Actions and materials" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Materials & actions" })).toBeVisible();
   await workspace.getByRole("button", { name: "Break recovery" }).click();
   await expect(
     page.getByRole("heading", { name: "Break recovery and loss history" }),
