@@ -309,10 +309,10 @@ describe("manager console", () => {
     const navigation = screen.getByRole("navigation", { name: "Manager sections" });
 
     await actor.click(within(navigation).getByRole("button", { name: "Team Leaders" }));
-    expect(screen.getByRole("heading", { name: "Line Control" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Team Leaders & line control" })).toBeInTheDocument();
     const table = screen.getByRole("table");
-    expect(within(table).getAllByText("Owner: Team Leader")).toHaveLength(2);
-    expect(within(table).getAllByText("Filler stopped")).toHaveLength(2);
+    expect(within(table).getByText("Stopped")).toBeInTheDocument();
+    expect(within(table).getByText("64%")).toBeInTheDocument();
 
     await actor.click(within(navigation).getByRole("button", { name: "Daily plans" }));
     expect(screen.getByRole("heading", { name: "Daily plans" })).toBeInTheDocument();
@@ -329,6 +329,42 @@ describe("manager console", () => {
     await actor.click(within(navigation).getByRole("button", { name: "Break recovery" }));
     expect(screen.getByRole("heading", { name: "Break recovery and loss history" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Loss and asset history" })).toBeInTheDocument();
+  });
+
+  it("lets a manager edit downtime evidence and add a comment from the line drawer", async () => {
+    const actor = userEvent.setup();
+    const onRefresh = vi.fn();
+    const request = vi.mocked(api.apiRequest);
+    request.mockResolvedValue({} as never);
+
+    render(
+      <ManagerConsole
+        profile={profile}
+        data={data}
+        operationalDate="2026-09-01"
+        lastUpdatedAt="2026-09-01T10:00:00Z"
+        online
+        liveState="live"
+        busy={false}
+        error=""
+        onDateChange={vi.fn()}
+        onRefresh={onRefresh}
+        onSignOut={vi.fn()}
+      />,
+    );
+
+    await actor.click(within(screen.getByRole("navigation", { name: "Manager sections" })).getByRole("button", { name: "Team Leaders" }));
+    await actor.click(screen.getByLabelText("Open details for LINE-02"));
+    await actor.click(screen.getByRole("button", { name: /Filler sensor reset/ }));
+
+    const dialog = screen.getByRole("dialog", { name: "Edit downtime & description" });
+    await actor.clear(within(dialog).getByLabelText("Description"));
+    await actor.type(within(dialog).getByLabelText("Description"), "Verified filler sensor reset");
+    await actor.type(within(dialog).getByLabelText("Manager comment"), "Checked against engineering log");
+    await actor.click(within(dialog).getByRole("button", { name: "Review & save" }));
+
+    expect(request).toHaveBeenCalledWith("/downtime-events/1/", expect.objectContaining({ method: "PATCH" }));
+    expect(onRefresh).toHaveBeenCalled();
   });
 
   it("filters the board to late or missing updates", async () => {
@@ -369,13 +405,13 @@ describe("manager console", () => {
 
     await actor.click(
       screen.getByRole("button", {
-        name: "Late",
+        name: /Needs attention/,
       }),
     );
 
     const priorityBoard = screen
       .getByRole("heading", {
-        name: "All-line control view",
+        name: "Team Leaders and line control table",
       })
       .closest("section");
 
@@ -386,11 +422,11 @@ describe("manager console", () => {
     ).getByRole("table");
 
     expect(
-      within(table).getByText("LINE-02"),
+      within(table).getByText("Line 2"),
     ).toBeInTheDocument();
 
     expect(
-      within(table).queryByText("LINE-01"),
+      within(table).queryByText("Line 1"),
     ).not.toBeInTheDocument();
   });
 });

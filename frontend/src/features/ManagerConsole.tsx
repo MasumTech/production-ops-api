@@ -23,7 +23,7 @@ import type {
 } from "../types";
 
 type AttentionLevel = "urgent" | "warning" | "stable";
-type BoardFilter = "all" | "attention" | "red" | "late" | "materials";
+type BoardFilter = "all" | "attention" | "red" | "materials";
 type ManagerWorkspaceView =
   | "overview"
   | "lines"
@@ -133,19 +133,8 @@ export function buildManagerRows(
 function matchesFilter(row: ManagerLineRow, filter: BoardFilter): boolean {
   if (filter === "attention") return row.attentionLevel !== "stable";
   if (filter === "red") return row.update?.status === "red";
-  if (filter === "late") return row.isLate || !row.update;
   if (filter === "materials") return row.materialRisks.length > 0;
   return true;
-}
-
-function outputCopy(shift: ShiftRecord | null): string {
-  if (!shift) return "No shift output recorded";
-  return `${NUMBER.format(shift.actual_output)} / ${NUMBER.format(shift.planned_output)}`;
-}
-
-function performanceCopy(shift: ShiftRecord | null): string {
-  if (!shift || shift.performance_percentage === null) return "—";
-  return `${shift.performance_percentage.toFixed(1)}%`;
 }
 
 function planPercent(shift: ShiftRecord | null): number | null {
@@ -294,6 +283,7 @@ export function ManagerConsole({
     operationalDate === localDate() ? "live" : "historical",
   );
   const [navigationOpen, setNavigationOpen] = useState(false);
+  const [lineFilter, setLineFilter] = useState("all");
   const [selectedDowntimeEventId, setSelectedDowntimeEventId] = useState<number | null>(null);
   const [downtimeEditorOpen, setDowntimeEditorOpen] = useState(false);
   const [downtimeDescription, setDowntimeDescription] = useState("");
@@ -304,8 +294,8 @@ export function ManagerConsole({
   const rows = useMemo(() => buildManagerRows(data), [data]);
   const isHistorical = operationalDate !== localDate();
   const visibleRows = useMemo(
-    () => rows.filter((row) => matchesFilter(row, filter)),
-    [filter, rows],
+    () => rows.filter((row) => matchesFilter(row, filter) && (lineFilter === "all" || String(row.assignment.production_line) === lineFilter)),
+    [filter, lineFilter, rows],
   );
   const selectedLine = rows.find((row) => row.assignment.id === selectedLineId) ?? null;
   const openActions = data.escalations
@@ -669,25 +659,23 @@ export function ManagerConsole({
 
           {view === "lines" ? (
             <>
-              <ManagerViewIntro
-                eyebrow="Live line control"
-                title="Line Control"
-                body="Review every active assignment in priority order and focus the board by operational condition."
-              />
+              <header className="team-control-heading">
+                <h1>Team Leaders &amp; line control</h1>
+              </header>
               <section className="manager-board" aria-labelledby="priority-board-title">
-          <div className="manager-section-heading">
-            <div>
-              <span className="eyebrow">Priority order</span>
-              <h2 id="priority-board-title">All-line control view</h2>
-            </div>
+          <div className="team-control-selects">
+            <label>Group by<select aria-label="Group by"><option>Team Leader</option></select></label>
+            <label>Line<select aria-label="Line" value={lineFilter} onChange={(event) => setLineFilter(event.target.value)}><option value="all">All lines ({rows.length} selected)</option>{rows.map((row) => <option key={row.assignment.production_line} value={row.assignment.production_line}>{displayLine(row.assignment.production_line_code)}</option>)}</select></label>
+          </div>
+          <div className="manager-section-heading team-control-filter-row">
+            <h2 id="priority-board-title" className="sr-only">Team Leaders and line control table</h2>
             <div className="manager-filters" aria-label="Filter priority board">
               {(
                 [
-                  ["all", "All"],
-                  ["attention", "Attention"],
-                  ["red", "Red"],
-                  ["late", "Late"],
-                  ["materials", "Materials"],
+                  ["all", `All (${rows.length})`],
+                  ["attention", `Needs attention (${rows.filter((row) => row.attentionLevel !== "stable").length})`],
+                  ["red", `Stopped (${rows.filter((row) => row.update?.status === "red").length})`],
+                  ["materials", `Materials (${rows.filter((row) => row.materialRisks.length).length})`],
                 ] as Array<[BoardFilter, string]>
               ).map(([value, label]) => (
                 <button
@@ -708,12 +696,13 @@ export function ManagerConsole({
                 <table>
                   <thead>
                     <tr>
-                      <th>Priority / line</th>
-                      <th>Latest position</th>
-                      <th>Update control</th>
-                      <th>Output</th>
-                      <th>Open actions</th>
-                      <th>Materials</th>
+                      <th>Line &amp; product</th>
+                      <th>Team Leader</th>
+                      <th>Status</th>
+                      <th>Plan complete</th>
+                      <th>Downtime</th>
+                      <th>Issues</th>
+                      <th><span className="sr-only">Open</span></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -731,54 +720,18 @@ export function ManagerConsole({
                           }
                         }}
                       >
-                        <td data-label="Line">
-                          <span className={`priority-flag priority-flag--${row.attentionLevel}`}>
-                            {titleCase(row.attentionLevel)}
-                          </span>
-                          <strong>{row.assignment.production_line_code}</strong>
-                          <span>
-                            {row.assignment.production_line_name} · {titleCase(row.assignment.shift_type)}
-                          </span>
-                          <span>Owner: Team Leader</span>
+                        <td data-label="Line & product">
+                          <strong>{displayLine(row.assignment.production_line_code)}</strong>
+                          <span>{row.update?.current_product || row.assignment.production_line_name}</span>
                         </td>
+                        <td data-label="Team Leader"><strong>{row.assignment.team_leader_username || `TL${row.assignment.team_leader}`}</strong></td>
                         <td data-label="Status">
-                          {row.update ? <StatusPill value={row.update.status} /> : <StatusPill value="missing" />}
-                          <strong>{row.update?.current_product || "No product update"}</strong>
-                          <span>{row.update?.issue_summary || "No issue recorded"}</span>
+                          <span className={`status-dot status-text status-dot--${row.update?.status || "missing"}`}>{row.update?.status === "green" ? "Running" : row.update?.status === "amber" ? "Behind" : row.update?.status === "red" ? "Stopped" : "No update"}</span>
                         </td>
-                        <td data-label="Update">
-                          <strong>
-                            {!row.update ? "Missing" : row.isLate ? "Late" : "Current"}
-                          </strong>
-                          <span>
-                            {row.update ? `Recorded ${formatDateTime(row.update.recorded_at)}` : "No status received"}
-                          </span>
-                          <span>
-                            Due {row.update ? formatDateTime(row.update.next_update_due_at) : "now"}
-                          </span>
-                        </td>
-                        <td data-label="Output">
-                          <strong>{outputCopy(row.shift)}</strong>
-                          <span>{performanceCopy(row.shift)} performance</span>
-                          <span>{row.shift?.downtime_minutes ?? 0} min downtime</span>
-                        </td>
-                        <td data-label="Actions">
-                          <strong>{row.openActions.length}</strong>
-                          <span>
-                            {row.openActions.filter((item) => item.is_overdue).length} overdue
-                          </span>
-                          <span>
-                            {row.openActions[0]?.summary || "No unresolved escalation"}
-                          </span>
-                        </td>
-                        <td data-label="Materials">
-                          <strong>{row.materialRisks.length}</strong>
-                          <span>
-                            {row.materialRisks[0]
-                              ? `${row.materialRisks[0].product_code} · ${titleCase(row.materialRisks[0].status)}`
-                              : "No short or held material"}
-                          </span>
-                        </td>
+                        <td data-label="Plan complete"><div className="team-plan-cell"><strong>{planPercent(row.shift) ?? 0}%</strong><progress value={planPercent(row.shift) ?? 0} max="100" /></div></td>
+                        <td data-label="Downtime"><strong>{lineDowntime(data.downtimeEvents, row.assignment.production_line)} min</strong></td>
+                        <td data-label="Issues"><strong className={row.openActions.length ? "issue-count" : ""}>{row.openActions.length}</strong></td>
+                        <td className="team-row-chevron" aria-hidden="true">›</td>
                       </tr>
                     ))}
                   </tbody>
@@ -797,30 +750,33 @@ export function ManagerConsole({
                 <aside className="line-detail-drawer" aria-label={`${displayLine(selectedLine.assignment.production_line_code)} details`}>
                   <header>
                     <div>
-                      <span className="eyebrow">Selected line</span>
                       <h2>{displayLine(selectedLine.assignment.production_line_code)}</h2>
-                      <p>{selectedLine.assignment.production_line_name}</p>
+                      <p>{selectedLine.update?.current_product || selectedLine.assignment.production_line_name}</p>
                     </div>
-                    <button type="button" className="drawer-close" aria-label="Close line details" onClick={() => setSelectedLineId(null)}>×</button>
+                    <button type="button" className="drawer-close" aria-label="Back to line list" onClick={() => setSelectedLineId(null)}><span className="drawer-back-label">Back</span><span aria-hidden="true">×</span></button>
                   </header>
                   <div className="drawer-status-card">
-                    <StatusPill value={selectedLine.update?.status ?? "missing"} />
-                    <strong>{selectedLine.update?.current_product || "No current product"}</strong>
-                    <span>{selectedLine.shift?.downtime_minutes ?? 0} min recorded downtime</span>
+                    <span className={`status-dot status-text status-dot--${selectedLine.update?.status ?? "missing"}`}>{selectedLine.update?.status === "green" ? "Running" : selectedLine.update?.status === "amber" ? "Behind" : selectedLine.update?.status === "red" ? "Stopped" : "No update"}</span>
+                    <strong>{lineDowntime(data.downtimeEvents, selectedLine.assignment.production_line)} min</strong>
+                    <span>downtime</span>
                   </div>
                   <section>
-                    <h3>Issue severity & next action</h3>
+                    <h3>Last recorded status</h3>
                     <dl className="drawer-facts">
-                      <div><dt>Severity</dt><dd>{selectedLine.openActions[0]?.priority ? titleCase(selectedLine.openActions[0].priority) : "No open issue"}</dd></div>
-                      <div><dt>Issue</dt><dd>{selectedLine.update?.issue_summary || selectedLine.openActions[0]?.summary || "No issue recorded"}</dd></div>
-                      <div><dt>Next action</dt><dd>{selectedLine.openActions[0]?.immediate_action || "Continue scheduled monitoring"}</dd></div>
+                      <div><dt>Time</dt><dd>{shortTime(selectedLine.update?.recorded_at ?? null)}</dd></div>
+                      <div><dt>Status</dt><dd>{selectedLine.update?.status ? titleCase(selectedLine.update.status) : "No update"}</dd></div>
+                      <div><dt>Action</dt><dd>{selectedLine.update?.action_taken || "Continue scheduled monitoring"}</dd></div>
                     </dl>
                   </section>
                   <section>
-                    <h3>Event history</h3>
+                    <h3>Issue details</h3>
+                    <dl className="drawer-facts"><div><dt>Severity</dt><dd>{selectedLine.openActions[0]?.priority ? titleCase(selectedLine.openActions[0].priority) : "No open issue"}</dd></div><div><dt>Issue</dt><dd>{selectedLine.update?.issue_summary || selectedLine.openActions[0]?.summary || "No issue recorded"}</dd></div><div><dt>Next action</dt><dd>{selectedLine.openActions[0]?.immediate_action || "Continue scheduled monitoring"}</dd></div></dl>
+                  </section>
+                  <section>
+                    <h3>Status timeline</h3>
                     <ol className="drawer-event-history">
                       {data.downtimeEvents.filter((event) => event.production_line === selectedLine.assignment.production_line).slice(-4).map((event) => (
-                        <li key={event.id}><strong>{formatDateTime(event.started_at)}</strong><span>{event.description || event.reason_category}</span><small>{event.duration_minutes} min · {titleCase(event.status)}</small></li>
+                        <li key={event.id}><button type="button" onClick={() => openDowntimeEvent(event.id)}><strong>{shortTime(event.started_at)}</strong><span>{event.description || event.reason_category}</span><small>{event.duration_minutes} min · {titleCase(event.status)} · Edit/comment</small></button></li>
                       ))}
                       {selectedLine.update ? <li><strong>{formatDateTime(selectedLine.update.recorded_at)}</strong><span>Latest status: {titleCase(selectedLine.update.status)}</span><small>{selectedLine.update.action_taken || "Status recorded"}</small></li> : null}
                     </ol>
@@ -831,6 +787,8 @@ export function ManagerConsole({
                   </div>
                 </aside>
               ) : null}
+
+              {selectedDowntimeEventId && selectedDowntimeEvent ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="line-downtime-editor-title"><header><div><span className="eyebrow">Manager event review</span><h2 id="line-downtime-editor-title">Edit downtime &amp; description</h2></div><button type="button" aria-label="Close downtime editor" onClick={() => setSelectedDowntimeEventId(null)}>×</button></header><div className="downtime-editor__summary"><strong>{displayLine(selectedLine?.assignment.production_line_code ?? selectedDowntimeEvent.production_line_code)}</strong><span>Started {formatDateTime(selectedDowntimeEvent.started_at)} · Current {selectedDowntimeEvent.duration_minutes} min</span></div><label>Description<textarea rows={3} value={downtimeDescription} onChange={(event) => setDowntimeDescription(event.target.value)} required /></label><label>Downtime end<input type="datetime-local" value={downtimeEndedAt} min={selectedDowntimeEvent.started_at.slice(0, 16)} onChange={(event) => setDowntimeEndedAt(event.target.value)} /></label><label>Manager comment<textarea rows={3} value={managerComment} onChange={(event) => setManagerComment(event.target.value)} /></label>{downtimeMessage ? <p className="downtime-editor__message" role="status">{downtimeMessage}</p> : null}<footer><button type="button" className="button button--ghost" onClick={() => setSelectedDowntimeEventId(null)}>Cancel</button><button type="button" className="button button--primary" disabled={downtimeSaving || !downtimeDescription.trim()} onClick={saveDowntimeEvent}>{downtimeSaving ? "Saving…" : "Review & save"}</button></footer></section></div> : null}
             </>
           ) : null}
 

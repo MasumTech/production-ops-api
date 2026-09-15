@@ -4268,6 +4268,65 @@ td span {
   .downtime-bars button { min-width: 32px; }
 }
 
+/* Team Leaders reference alignment: compact table and contextual drawer. */
+.team-control-heading { margin-bottom: 18px; }
+.team-control-heading h1 { margin: 0; font-size: clamp(2rem, 3vw, 2.7rem); letter-spacing: -.045em; }
+.manager-board:has(.team-control-selects) { padding: 0; border: 0; background: transparent; box-shadow: none; }
+.team-control-selects { display: grid; grid-template-columns: minmax(220px, 360px) minmax(220px, 330px); gap: 24px; margin-bottom: 14px; padding: 14px 16px; border: 1px solid #d4e0ea; border-radius: 10px; background: #fff; }
+.team-control-selects label { display: grid; gap: 6px; color: #526984; font-size: .8rem; }
+.team-control-selects select { min-height: 46px; padding: 0 38px 0 12px; border: 1px solid #bdcddb; border-radius: 8px; color: #0b1d3d; background: #fff; font: inherit; font-size: .95rem; }
+.team-control-filter-row { justify-content: flex-start; margin-bottom: 14px; }
+.team-control-filter-row .manager-filters { gap: 10px; padding: 0; border: 0; background: transparent; }
+.team-control-filter-row .manager-filters button { min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; color: #31465f; background: #eaf0f5; }
+.team-control-filter-row .manager-filters button.is-active { color: #fff; background: #0878dc; }
+.manager-board:has(.team-control-selects) .manager-table-card { overflow: hidden; border-radius: 10px; background: #fff; }
+.manager-board:has(.team-control-selects) table { table-layout: fixed; }
+.manager-board:has(.team-control-selects) th { height: 58px; color: #233c58; font-size: .76rem; }
+.manager-board:has(.team-control-selects) th:nth-child(1) { width: 20%; }
+.manager-board:has(.team-control-selects) th:nth-child(2) { width: 15%; }
+.manager-board:has(.team-control-selects) th:nth-child(3) { width: 15%; }
+.manager-board:has(.team-control-selects) th:nth-child(4) { width: 19%; }
+.manager-board:has(.team-control-selects) th:nth-child(5) { width: 13%; }
+.manager-board:has(.team-control-selects) th:nth-child(6) { width: 10%; }
+.manager-board:has(.team-control-selects) th:nth-child(7) { width: 8%; }
+.manager-board:has(.team-control-selects) .manager-row { height: 78px; background: #fff; }
+.manager-board:has(.team-control-selects) .manager-row:hover,
+.manager-board:has(.team-control-selects) .manager-row:focus { background: #edf7ff; }
+.manager-board:has(.team-control-selects) .manager-row--urgent { box-shadow: none; }
+.manager-board:has(.team-control-selects) td { padding-block: 12px; vertical-align: middle; }
+.manager-board:has(.team-control-selects) td > strong,
+.manager-board:has(.team-control-selects) td > span { display: block; }
+.manager-board:has(.team-control-selects) td > span:not(.status-text) { overflow: hidden; color: #526984; font-size: .76rem; text-overflow: ellipsis; white-space: nowrap; }
+.team-plan-cell { display: grid; grid-template-columns: 42px 1fr; align-items: center; gap: 8px; }
+.team-plan-cell progress { width: 100%; height: 9px; border-radius: 999px; accent-color: #168ee0; }
+.issue-count { color: #d32334; }
+.team-row-chevron { color: #12334f; font-size: 1.8rem; text-align: right; }
+.line-detail-drawer { width: min(420px, 100vw); gap: 16px; padding: 22px 20px; }
+.line-detail-drawer > header { border-bottom: 1px solid #e0e7ee; padding-bottom: 12px; }
+.drawer-back-label { display: none; }
+.drawer-status-card { grid-template-columns: 1fr auto; align-items: center; background: #fff0f2; border-color: #efbac2; }
+.drawer-status-card > .status-text { justify-self: start; }
+.drawer-status-card > strong { color: #a91727; font-size: 1.35rem; }
+.drawer-status-card > span:last-child { grid-column: 2; text-align: right; }
+.line-detail-drawer > section { padding: 14px; border: 1px solid #dce5ed; border-radius: 10px; }
+.line-detail-drawer .drawer-facts div { padding: 7px 0; }
+.drawer-event-history li { padding: 0; border-left: 0; background: transparent; }
+.drawer-event-history li > button { display: grid; width: 100%; grid-template-columns: 56px 1fr; gap: 3px 10px; min-height: 58px; padding: 8px; border: 0; border-left: 3px solid #1685d1; color: inherit; background: #f3f8fc; text-align: left; }
+.drawer-event-history li > button span { font-weight: 700; }
+.drawer-event-history li > button small { grid-column: 2; }
+
+@media (max-width: 900px) {
+  .team-control-selects { grid-template-columns: 1fr 1fr; }
+  .manager-board:has(.team-control-selects) table { min-width: 760px; }
+}
+@media (max-width: 760px) {
+  .team-control-selects { grid-template-columns: 1fr; gap: 12px; }
+  .team-control-filter-row .manager-filters { display: grid; width: 100%; grid-template-columns: 1fr 1fr; }
+  .line-detail-drawer { z-index: 80; }
+  .drawer-close { display: flex; align-items: center; gap: 8px; width: auto; padding-inline: 12px; font-size: 1rem; }
+  .drawer-back-label { display: inline; }
+}
+
 
 /* Proposed Daily plans concept: shared time axis and database-backed blocks. */
 .daily-plan-timeline-board, .daily-plan-output-table { margin-top: 24px; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
