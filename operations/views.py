@@ -2050,7 +2050,21 @@ class BreakOpportunityViewSet(viewsets.ReadOnlyModelViewSet):
         input_serializer = BreakOpportunityResumeSerializer(data=request.data)
         input_serializer.is_valid(raise_exception=True)
         opportunity.status = BreakOpportunity.Status.RECOVERED
-        opportunity.run_resumed_at = timezone.now()
+        resumed_at = input_serializer.validated_data.get(
+            "run_resumed_at", timezone.now()
+        )
+        if resumed_at > timezone.now():
+            raise ValidationError(
+                {"run_resumed_at": "Recovery time cannot be in the future."}
+            )
+        if (
+            opportunity.checks_completed_at
+            and resumed_at < opportunity.checks_completed_at
+        ):
+            raise ValidationError(
+                {"run_resumed_at": "Recovery time must follow completed checks."}
+            )
+        opportunity.run_resumed_at = resumed_at
         opportunity.recovery_notes = input_serializer.validated_data["recovery_notes"]
         return self._save_transition(
             opportunity,
