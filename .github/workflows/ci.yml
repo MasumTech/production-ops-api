@@ -173,12 +173,14 @@ jobs:
           E2E_BASE_URL: http://127.0.0.1:3000
         run: npm run --prefix frontend e2e
 
-      - name: Upload responsive login screenshots
+      - name: Upload responsive UI screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: responsive-login-preview
-          path: frontend/test-results/**/login-*.png
+          name: responsive-ui-preview
+          path: |
+            frontend/test-results/**/login-*.png
+            frontend/test-results/**/manager-shell-*.png
           if-no-files-found: error
           retention-days: 7
 

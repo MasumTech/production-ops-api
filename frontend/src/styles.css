@@ -2816,7 +2816,7 @@ td span {
   background: rgb(255 255 255 / 28%);
 }
 
-.manager-topbar .notification-trigger--icon {
+.manager-topbar .notification-centre .notification-trigger--icon {
   position: relative;
   min-width: 44px;
   min-height: 44px;
@@ -4786,5 +4786,543 @@ td span {
 
   .login-brand-values {
     padding-top: 1.5rem;
+  }
+}
+
+/* Manager common shell: one navigation and control system across every manager view. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.manager-topbar {
+  min-height: 76px;
+  padding: 0 24px;
+}
+
+.manager-topbar__brand {
+  display: flex;
+  min-width: 280px;
+  align-items: center;
+  gap: 12px;
+}
+
+.manager-topbar__brand > div > span {
+  display: block;
+  margin-top: 3px;
+  color: #c5dcf0;
+  font-size: .72rem;
+  letter-spacing: .035em;
+}
+
+.manager-brand {
+  display: block;
+  font-size: clamp(1.2rem, 1.65vw, 1.58rem);
+  font-weight: 750;
+  letter-spacing: -.02em;
+}
+
+.manager-menu-button {
+  display: none;
+  width: 46px;
+  min-width: 46px;
+  height: 46px;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 10px;
+  place-items: center;
+  color: #fff;
+  background: transparent;
+}
+
+.manager-header-meta {
+  min-width: 0;
+  gap: 10px;
+}
+
+.manager-header-controls {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.manager-header-date,
+.manager-shift-control,
+.manager-refresh,
+.manager-view-mode,
+.manager-profile > summary {
+  min-height: 46px;
+}
+
+.manager-header-date,
+.manager-shift-control {
+  padding: 0 10px;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 10px;
+  color: #fff;
+  background: rgb(255 255 255 / 6%);
+  white-space: nowrap;
+}
+
+.manager-header-date span {
+  color: #fff;
+  font-size: .82rem;
+}
+
+.manager-shift-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.manager-shift-control select {
+  width: auto;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 26px 0 0;
+  border: 0;
+  color: #fff;
+  background-color: transparent;
+  font-size: .82rem;
+  font-weight: 650;
+}
+
+.manager-shift-control select option {
+  color: #10233d;
+  background: #fff;
+}
+
+.manager-view-mode {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 6%);
+}
+
+.manager-view-mode button {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  color: #d7e7f5;
+  background: transparent;
+  font-size: .78rem;
+  font-weight: 700;
+}
+
+.manager-view-mode button.is-active {
+  color: #fff;
+  background: #167342;
+}
+
+.manager-view-mode button:last-child.is-active {
+  background: #2168a6;
+}
+
+.manager-live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #72df9f;
+}
+
+.manager-refresh {
+  display: grid;
+  min-width: 104px;
+  grid-template-columns: 22px auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 7px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 9px;
+  color: #fff;
+  background: transparent;
+  text-align: left;
+}
+
+.manager-refresh .app-icon {
+  grid-row: 1 / -1;
+}
+
+.manager-refresh span {
+  font-size: .82rem;
+  font-weight: 700;
+}
+
+.manager-refresh small {
+  margin: 0;
+  color: #bad2e6;
+  font-size: .61rem;
+  white-space: nowrap;
+}
+
+.manager-refresh:disabled {
+  opacity: .62;
+}
+
+.manager-profile {
+  position: relative;
+}
+
+.manager-profile > summary {
+  display: flex;
+  cursor: pointer;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  white-space: nowrap;
+}
+
+.manager-profile > summary::-webkit-details-marker {
+  display: none;
+}
+
+.manager-profile__avatar {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border: 2px solid rgb(255 255 255 / 45%);
+  border-radius: 50%;
+  place-items: center;
+  color: #17436b;
+  background: #e7f1fa;
+  font-size: .8rem;
+  font-weight: 850;
+}
+
+.manager-profile__name {
+  max-width: 112px;
+  overflow: hidden;
+  color: #fff;
+  font-size: .78rem;
+  text-overflow: ellipsis;
+}
+
+.manager-profile__menu {
+  position: absolute;
+  z-index: 100;
+  top: calc(100% + 10px);
+  right: 0;
+  display: grid;
+  width: 240px;
+  gap: 5px;
+  padding: 16px;
+  border: 1px solid #d6e1eb;
+  border-radius: 12px;
+  color: #10233d;
+  background: #fff;
+  box-shadow: 0 18px 45px rgb(7 31 56 / 20%);
+}
+
+.manager-profile__menu span {
+  color: #61738a;
+  font-size: .78rem;
+}
+
+.manager-profile__menu button {
+  min-height: 44px;
+  margin-top: 10px;
+  border: 1px solid #d5e1ec;
+  border-radius: 8px;
+  color: #a42f3c;
+  background: #fff;
+  font-weight: 700;
+}
+
+.manager-layout {
+  min-height: calc(100vh - 76px);
+  grid-template-columns: 224px minmax(0, 1fr);
+}
+
+.manager-sidebar {
+  top: 76px;
+  height: calc(100vh - 76px);
+  padding-top: 18px;
+}
+
+.manager-sidebar .nav-item {
+  min-height: 56px;
+}
+
+.manager-sidebar-footer span {
+  color: #88aac7;
+  font-size: .7rem;
+}
+
+.manager-navigation-backdrop {
+  display: none;
+}
+
+.manager-shell .notification-panel {
+  position: fixed;
+  top: 76px;
+  right: 0;
+  width: min(430px, 100vw);
+  max-height: calc(100dvh - 76px);
+  min-height: calc(100dvh - 76px);
+  padding: 20px;
+  border-radius: 0;
+  color: #10233d;
+  background: #fff;
+  box-shadow: -18px 20px 50px rgb(7 31 56 / 22%);
+}
+
+.manager-shell .notification-panel .eyebrow,
+.manager-shell .notification-panel h2 {
+  color: #10233d;
+}
+
+.manager-shell .notification-item {
+  background: #f8fbfd;
+}
+
+.manager-topbar .notification-trigger--icon {
+  display: grid;
+  border: 0;
+  place-items: center;
+  color: #fff;
+  background: transparent;
+}
+
+@media (min-width: 821px) and (max-width: 1240px) {
+  .manager-topbar {
+    padding-inline: 14px;
+  }
+
+  .manager-topbar__brand {
+    min-width: 205px;
+  }
+
+  .manager-topbar__brand > div > span,
+  .manager-profile__name,
+  .manager-refresh small {
+    display: none;
+  }
+
+  .manager-brand {
+    font-size: 1.05rem;
+  }
+
+  .manager-header-meta,
+  .manager-header-controls {
+    gap: 6px;
+  }
+
+  .manager-header-divider {
+    display: none;
+  }
+
+  .manager-header-date,
+  .manager-shift-control {
+    padding-inline: 8px;
+  }
+
+  .manager-header-date span,
+  .manager-shift-control select {
+    font-size: .72rem;
+  }
+
+  .manager-refresh {
+    min-width: auto;
+    grid-template-columns: 20px auto;
+    padding-inline: 7px;
+  }
+}
+
+@media (min-width: 821px) and (max-width: 1180px) {
+  .manager-layout {
+    grid-template-columns: 80px minmax(0, 1fr);
+  }
+
+  .manager-sidebar {
+    width: 80px;
+    padding-top: 14px;
+  }
+
+  .manager-sidebar .nav-item {
+    justify-content: center;
+    padding: 0;
+    border-left-width: 3px;
+  }
+
+  .manager-sidebar .nav-item__label,
+  .manager-sidebar .sidebar__boundary {
+    display: none;
+  }
+}
+
+@media (max-width: 820px) {
+  .manager-topbar {
+    position: sticky;
+    display: grid;
+    min-height: 124px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding: 8px 12px 10px;
+  }
+
+  .manager-topbar__brand {
+    min-width: 0;
+    min-height: 48px;
+    padding-right: 104px;
+  }
+
+  .manager-menu-button {
+    display: grid;
+  }
+
+  .manager-brand {
+    font-size: .98rem;
+  }
+
+  .manager-topbar__brand > div > span {
+    display: none;
+  }
+
+  .manager-header-meta {
+    width: 100%;
+    gap: 7px;
+    padding-right: 104px;
+  }
+
+  .manager-header-controls {
+    width: 100%;
+    overflow-x: auto;
+    padding: 1px 0 2px;
+    scrollbar-width: none;
+  }
+
+  .manager-header-controls::-webkit-scrollbar {
+    display: none;
+  }
+
+  .manager-header-divider {
+    display: none;
+  }
+
+  .manager-header-date,
+  .manager-shift-control,
+  .manager-view-mode,
+  .manager-refresh {
+    flex: 0 0 auto;
+  }
+
+  .manager-header-date span,
+  .manager-shift-control select,
+  .manager-view-mode button,
+  .manager-refresh span {
+    font-size: .72rem;
+  }
+
+  .manager-refresh {
+    min-width: auto;
+    grid-template-columns: 20px auto;
+  }
+
+  .manager-refresh small {
+    display: none;
+  }
+
+  .manager-header-meta > .notification-centre {
+    position: absolute;
+    top: 10px;
+    right: 62px;
+  }
+
+  .manager-topbar .notification-centre .notification-trigger--icon {
+    display: grid;
+  }
+
+  .manager-profile {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+  }
+
+  .manager-profile__name {
+    display: none;
+  }
+
+  .manager-layout {
+    min-height: calc(100vh - 124px);
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .manager-sidebar {
+    position: fixed;
+    z-index: 70;
+    top: 64px;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    width: min(300px, 86vw);
+    height: calc(100dvh - 64px);
+    transform: translateX(-102%);
+    transition: transform 180ms ease;
+  }
+
+  .manager-sidebar--open {
+    transform: translateX(0);
+  }
+
+  .manager-sidebar .nav-item__label,
+  .manager-sidebar .sidebar__boundary {
+    display: initial;
+  }
+
+  .manager-navigation-backdrop {
+    position: fixed;
+    z-index: 60;
+    inset: 64px 0 0;
+    display: block;
+    padding: 0;
+    border: 0;
+    background: rgb(3 19 38 / 52%);
+  }
+
+  .manager-workspace {
+    padding: 20px 14px 40px;
+  }
+
+  .manager-shell .notification-panel {
+    top: 64px;
+    width: min(430px, 100vw);
+    max-height: calc(100dvh - 64px);
+    min-height: calc(100dvh - 64px);
+  }
+}
+
+@media (max-width: 480px) {
+  .manager-topbar__brand {
+    padding-right: 100px;
+  }
+
+  .manager-brand {
+    font-size: .9rem;
+  }
+
+  .manager-header-date {
+    min-width: 143px;
+  }
+
+  .manager-shift-control {
+    min-width: 170px;
   }
 }
