@@ -2816,7 +2816,7 @@ td span {
   background: rgb(255 255 255 / 28%);
 }
 
-.manager-topbar .notification-trigger--icon {
+.manager-topbar .notification-centre .notification-trigger--icon {
   position: relative;
   min-width: 44px;
   min-height: 44px;
@@ -5246,7 +5246,7 @@ td span {
     right: 62px;
   }
 
-  .manager-topbar .notification-trigger--icon {
+  .manager-topbar .notification-centre .notification-trigger--icon {
     display: grid;
   }
 
