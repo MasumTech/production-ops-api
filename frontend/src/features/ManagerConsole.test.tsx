@@ -316,6 +316,11 @@ describe("manager console", () => {
 
     await actor.click(within(navigation).getByRole("button", { name: "Daily plans" }));
     expect(screen.getByRole("heading", { name: "Daily plans" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Filter daily plans by line")).toBeInTheDocument();
+    expect(screen.getByLabelText("Filter daily plans by Team Leader")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit plan" })).toBeInTheDocument();
+    expect(screen.getByText("Full-day completion")).toBeInTheDocument();
+    expect(screen.getByText("Position now")).toBeInTheDocument();
 
     await actor.click(within(navigation).getByRole("button", { name: "Materials" }));
     expect(screen.getByRole("heading", { name: "Actions and materials" })).toBeInTheDocument();
