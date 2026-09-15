@@ -13,6 +13,7 @@ import {
 } from "../WorkspaceNavigation";
 import type {
   Assignment,
+  DailyPlanBlock,
   DowntimeEvent,
   Escalation,
   LineUpdate,
@@ -174,6 +175,22 @@ function shortTime(value: string | null): string {
   }).format(new Date(value));
 }
 
+function shiftMinute(value: string): number {
+  const date = new Date(value);
+  return date.getHours() * 60 + date.getMinutes();
+}
+
+function planBlockPosition(block: DailyPlanBlock) {
+  const shiftStart = 7 * 60;
+  const shiftMinutes = 11 * 60;
+  const start = Math.max(0, shiftMinute(block.planned_start_at) - shiftStart);
+  const duration = Math.max(1, shiftMinute(block.planned_end_at) - shiftMinute(block.planned_start_at));
+  return {
+    left: `${(start / shiftMinutes) * 100}%`,
+    width: `${(Math.min(duration, shiftMinutes - start) / shiftMinutes) * 100}%`,
+  };
+}
+
 function controlBoardDate(value: string): string {
   return new Intl.DateTimeFormat("en-GB", {
     weekday: "short",
@@ -284,6 +301,10 @@ export function ManagerConsole({
   );
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [lineFilter, setLineFilter] = useState("all");
+  const [planLineFilter, setPlanLineFilter] = useState("all");
+  const [planLeaderFilter, setPlanLeaderFilter] = useState("all");
+  const [planEditorOpen, setPlanEditorOpen] = useState(false);
+  const [selectedPlanBlock, setSelectedPlanBlock] = useState<DailyPlanBlock | null>(null);
   const [selectedDowntimeEventId, setSelectedDowntimeEventId] = useState<number | null>(null);
   const [downtimeEditorOpen, setDowntimeEditorOpen] = useState(false);
   const [downtimeDescription, setDowntimeDescription] = useState("");
@@ -298,6 +319,10 @@ export function ManagerConsole({
     [filter, lineFilter, rows],
   );
   const selectedLine = rows.find((row) => row.assignment.id === selectedLineId) ?? null;
+  const planRows = rows.filter((row) =>
+    (planLineFilter === "all" || String(row.assignment.production_line) === planLineFilter) &&
+    (planLeaderFilter === "all" || String(row.assignment.team_leader) === planLeaderFilter),
+  );
   const openActions = data.escalations
     .filter((item) => item.status !== "resolved")
     .sort((left, right) => Number(right.needs_attention) - Number(left.needs_attention));
@@ -799,17 +824,11 @@ export function ManagerConsole({
                 title="Daily plans"
                 body="Compare the approved schedule with recorded output. Production blocks are blue; planned breaks are grey."
               />
-              <section className="daily-plan-summary" aria-label="Daily production plans">
-                {rows.map((row) => (
-                  <article key={row.assignment.id}>
-                    <span>{displayLine(row.assignment.production_line_code)}</span>
-                    <strong>{row.update?.current_product || "Planned production"}</strong>
-                    <div><span>{NUMBER.format(row.shift?.actual_output ?? 0)} actual</span><span>{NUMBER.format(row.shift?.planned_output ?? 0)} planned</span></div>
-                    <progress value={planPercent(row.shift) ?? 0} max="100" />
-                    <small>{planPercent(row.shift) ?? 0}% complete</small>
-                  </article>
-                ))}
-              </section>
+              <div className="daily-plan-controls">
+                <select aria-label="Filter daily plans by line" value={planLineFilter} onChange={(event) => setPlanLineFilter(event.target.value)}><option value="all">All lines</option>{rows.map((row) => <option key={row.assignment.id} value={row.assignment.production_line}>{displayLine(row.assignment.production_line_code)}</option>)}</select>
+                <select aria-label="Filter daily plans by Team Leader" value={planLeaderFilter} onChange={(event) => setPlanLeaderFilter(event.target.value)}><option value="all">All Team Leaders</option>{hierarchyGroups.map((group, index) => <option key={group.teamLeaderId} value={group.teamLeaderId}>Team Leader {index + 1}</option>)}</select>
+                {profile.is_staff ? <button type="button" className="button button--primary" onClick={() => setPlanEditorOpen(true)}><AppIcon name="edit" size={18} /> Edit plan</button> : null}
+              </div>
               <section className="daily-plan-timeline-board" aria-label="Daily schedule timeline">
                 <header className="daily-plan-timeline-header">
                   <div><strong>Shift schedule</strong><span>07:00 – 18:00</span></div>
@@ -817,18 +836,15 @@ export function ManagerConsole({
                 </header>
                 <div className="daily-plan-axis" aria-hidden="true">{Array.from({ length: 12 }, (_, index) => <span key={index}>{String(7 + index).padStart(2, "0")}:00</span>)}</div>
                 <div className="daily-plan-rows">
-                  {rows.map((row) => {
+                  {planRows.map((row) => {
                     const blocks = (data.planBlocks ?? []).filter((block) => block.assignment === row.assignment.id).sort((left, right) => left.sequence_number - right.sequence_number);
                     return <article className="daily-plan-row" key={row.assignment.id}>
                       <div className="daily-plan-row-label"><strong>{displayLine(row.assignment.production_line_code)}</strong><span>{row.update?.current_product || "Planned production"}</span></div>
                       <div className="daily-plan-track">
                         {blocks.length ? blocks.map((block) => {
-                          const hours = Math.max(1, Math.round((new Date(block.planned_end_at).getTime() - new Date(block.planned_start_at).getTime()) / 3600000));
-                          const materials = data.materials.filter((item) => item.assignment === block.assignment && item.sequence_number === block.sequence_number);
-                          return <details className={`daily-plan-block daily-plan-block--${block.block_type}`} style={{ gridColumn: `span ${hours}` }} key={block.id}>
-                            <summary><strong>{block.block_type === "break" ? `Break ${block.break_number ?? ""}` : block.product_name}</strong><span>{shortTime(block.planned_start_at)} – {shortTime(block.planned_end_at)}</span></summary>
-                            <div><span>Target: {block.target_units_per_hour ?? "—"} units/hour</span><span>Planned quantity: {NUMBER.format(block.planned_units)}</span><span>Materials: {materials.length ? materials.map((item) => item.product_name).join(", ") : "No material record"}</span></div>
-                          </details>;
+                          return <button type="button" className={`daily-plan-block daily-plan-block--${block.block_type}`} style={planBlockPosition(block)} key={block.id} onClick={() => setSelectedPlanBlock(block)}>
+                            <strong>{block.block_type === "break" ? `Break ${block.break_number ?? ""}` : block.product_name}</strong><span>{shortTime(block.planned_start_at)} – {shortTime(block.planned_end_at)}</span>
+                          </button>;
                         }) : <span className="daily-plan-empty">No plan blocks recorded</span>}
                       </div>
                     </article>;
@@ -837,8 +853,10 @@ export function ManagerConsole({
               </section>
               <section className="daily-plan-output-table" aria-label="Daily plan output table">
                 <h2>Output by line</h2>
-                <div className="responsive-table"><table><thead><tr><th>Line</th><th>Planned</th><th>Actual</th><th>Completion</th></tr></thead><tbody>{rows.map((row) => <tr key={row.assignment.id}><td>{displayLine(row.assignment.production_line_code)}</td><td>{NUMBER.format(row.shift?.planned_output ?? 0)}</td><td>{NUMBER.format(row.shift?.actual_output ?? 0)}</td><td>{planPercent(row.shift) ?? 0}%</td></tr>)}</tbody></table></div>
+                <div className="responsive-table"><table><thead><tr><th>Line</th><th>Planned</th><th>Actual</th><th>Full-day completion</th><th>Position now</th></tr></thead><tbody>{planRows.map((row) => { const delta = (row.shift?.actual_output ?? 0) - Math.round((row.shift?.planned_output ?? 0) * Math.min(1, Math.max(0, (new Date().getHours() * 60 + new Date().getMinutes() - 420) / 660))); return <tr key={row.assignment.id}><td>{displayLine(row.assignment.production_line_code)}</td><td>{NUMBER.format(row.shift?.planned_output ?? 0)}</td><td>{NUMBER.format(row.shift?.actual_output ?? 0)}</td><td>{planPercent(row.shift) ?? 0}%</td><td className={delta < 0 ? "metric-behind" : "metric-ahead"}>{delta < 0 ? `${NUMBER.format(Math.abs(delta))} behind` : `${NUMBER.format(delta)} ahead`}</td></tr>; })}</tbody></table></div>
               </section>
+              {selectedPlanBlock ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="plan-block-title"><header><div><span className="eyebrow">Schedule detail</span><h2 id="plan-block-title">{selectedPlanBlock.block_type === "break" ? `Planned break ${selectedPlanBlock.break_number ?? ""}` : selectedPlanBlock.product_name}</h2></div><button type="button" aria-label="Close plan detail" onClick={() => setSelectedPlanBlock(null)}>×</button></header><dl className="plan-block-facts"><div><dt>Start</dt><dd>{shortTime(selectedPlanBlock.planned_start_at)}</dd></div><div><dt>End</dt><dd>{shortTime(selectedPlanBlock.planned_end_at)}</dd></div><div><dt>Target</dt><dd>{selectedPlanBlock.target_units_per_hour ?? "—"} / hour</dd></div><div><dt>Quantity</dt><dd>{NUMBER.format(selectedPlanBlock.planned_units)}</dd></div><div><dt>Materials</dt><dd>{data.materials.filter((item) => item.assignment === selectedPlanBlock.assignment && item.sequence_number === selectedPlanBlock.sequence_number).map((item) => item.product_name).join(", ") || "No material record"}</dd></div></dl><footer><button type="button" className="button button--primary" onClick={() => setSelectedPlanBlock(null)}>Done</button></footer></section></div> : null}
+              {planEditorOpen ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="plan-review-title"><header><div><span className="eyebrow">Permission verified</span><h2 id="plan-review-title">Review plan changes</h2></div><button type="button" aria-label="Close plan editor" onClick={() => setPlanEditorOpen(false)}>×</button></header><p>Review line, timing, quantities and materials before saving. Existing published blocks remain unchanged until confirmation.</p><footer><button type="button" className="button button--ghost" onClick={() => setPlanEditorOpen(false)}>Cancel</button><button type="button" className="button button--primary" onClick={() => setPlanEditorOpen(false)}>Continue to edit</button></footer></section></div> : null}
             </>
           ) : null}
 
