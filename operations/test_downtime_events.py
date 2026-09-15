@@ -16,6 +16,7 @@ def downtime_user(db):
     return get_user_model().objects.create_user(
         username="downtime.manager",
         password=None,
+        is_staff=True,
     )
 
 
@@ -122,3 +123,41 @@ def test_dashboard_uses_recorded_downtime_events(downtime_user, downtime_shift):
 
     assert response.status_code == status.HTTP_200_OK
     assert response.data["total_downtime_minutes"] == 7
+
+
+@pytest.mark.django_db
+def test_only_management_staff_can_edit_downtime(downtime_shift):
+    event = DowntimeEvent.objects.create(
+        shift=downtime_shift,
+        started_at=shift_time(downtime_shift, 10),
+        ended_at=shift_time(downtime_shift, 10, 7),
+        reason_category=DowntimeEvent.ReasonCategory.EQUIPMENT,
+        description="Original description",
+        owner_group=DowntimeEvent.OwnerGroup.ENGINEERING,
+        status=DowntimeEvent.Status.RESOLVED,
+    )
+    team_leader = get_user_model().objects.create_user(
+        username="downtime.teamleader",
+        password=None,
+    )
+    client = APIClient()
+    client.force_authenticate(team_leader)
+
+    denied = client.patch(
+        reverse("downtime-event-detail", args=[event.id]),
+        {"description": "Changed without permission"},
+    )
+    assert denied.status_code == status.HTTP_403_FORBIDDEN
+
+    client.force_authenticate(downtime_shift.supervisor)
+    allowed = client.patch(
+        reverse("downtime-event-detail", args=[event.id]),
+        {
+            "description": "Verified conveyor reset",
+            "resolution_note": "Manager checked the maintenance log.",
+        },
+    )
+    assert allowed.status_code == status.HTTP_200_OK
+    event.refresh_from_db()
+    assert event.description == "Verified conveyor reset"
+    assert event.resolution_note == "Manager checked the maintenance log."

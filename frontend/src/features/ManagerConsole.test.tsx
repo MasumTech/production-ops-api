@@ -246,11 +246,11 @@ describe("manager console", () => {
     const coverage = screen.getByRole("region", { name: "Team Leaders and production lines" });
     expect(within(coverage).getByText("Team Leader 1")).toBeInTheDocument();
     expect(within(coverage).getByText("Team Leader 2")).toBeInTheDocument();
-    expect(within(coverage).getAllByText("Line 1")).toHaveLength(2);
-    expect(within(coverage).getAllByText("Line 2")).toHaveLength(2);
+    expect(within(coverage).getByText("Line 1")).toBeInTheDocument();
+    expect(within(coverage).getByText("Line 2")).toBeInTheDocument();
     expect(within(coverage).queryByText("lead.one")).not.toBeInTheDocument();
 
-    await userEvent.click(within(coverage).getByRole("button", { name: "12 min" }));
+    await userEvent.click(within(coverage).getByRole("button", { name: "12 min downtime" }));
     expect(screen.getByText("Filler sensor reset")).toBeInTheDocument();
 
     expect(

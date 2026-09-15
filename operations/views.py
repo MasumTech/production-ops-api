@@ -937,7 +937,7 @@ class ShiftViewSet(viewsets.ModelViewSet):
 
 class DowntimeEventViewSet(viewsets.ModelViewSet):
     serializer_class = DowntimeEventSerializer
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsStaffOrReadOnly,)
     filter_backends = (
         filters.SearchFilter,
         filters.OrderingFilter,
