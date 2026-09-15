@@ -6,6 +6,7 @@ import { formatDateTime, localDate, titleCase } from "../format";
 import { escalationRole } from "../operationalRoles";
 import { NotificationCentre } from "../NotificationCentre";
 import { AppIcon, type AppIconName } from "../AppIcon";
+import { apiRequest } from "../api";
 import type { LiveConnectionState } from "../realtime";
 import {
   WorkspaceSidebar,
@@ -236,6 +237,7 @@ function hourlyDowntime(events: DowntimeEvent[], operationalDate: string) {
       description: matching.length
         ? [...new Set(matching.map((event) => event.description))].join(" · ")
         : "No recorded loss",
+      eventIds: matching.map((event) => event.id),
     };
   });
 }
@@ -292,6 +294,13 @@ export function ManagerConsole({
     operationalDate === localDate() ? "live" : "historical",
   );
   const [navigationOpen, setNavigationOpen] = useState(false);
+  const [selectedDowntimeEventId, setSelectedDowntimeEventId] = useState<number | null>(null);
+  const [downtimeEditorOpen, setDowntimeEditorOpen] = useState(false);
+  const [downtimeDescription, setDowntimeDescription] = useState("");
+  const [downtimeEndedAt, setDowntimeEndedAt] = useState("");
+  const [managerComment, setManagerComment] = useState("");
+  const [downtimeSaving, setDowntimeSaving] = useState(false);
+  const [downtimeMessage, setDowntimeMessage] = useState("");
   const rows = useMemo(() => buildManagerRows(data), [data]);
   const isHistorical = operationalDate !== localDate();
   const visibleRows = useMemo(
@@ -315,6 +324,9 @@ export function ManagerConsole({
     (event) => event.production_line === effectiveDowntimeLine,
   );
   const downtimeHours = hourlyDowntime(selectedDowntimeEvents, operationalDate);
+  const selectedDowntimeEvent = data.downtimeEvents.find(
+    (event) => event.id === selectedDowntimeEventId,
+  ) ?? selectedDowntimeEvents[0] ?? null;
   const planCompletion = summary.overall_performance_percentage ?? 0;
   const downtimeRisk = Math.min(100, Math.round((summary.total_downtime_minutes / 66) * 100));
   const materialRisk = Math.min(100, materialRisks.length * 21);
@@ -339,6 +351,41 @@ export function ManagerConsole({
   const selectLiveView = () => {
     if (isHistorical) onDateChange(localDate());
     setViewMode("live");
+  };
+
+  const openDowntimeEvent = (eventId: number) => {
+    const event = data.downtimeEvents.find((item) => item.id === eventId);
+    if (!event) return;
+    setSelectedDowntimeEventId(event.id);
+    setDowntimeDescription(event.description);
+    setDowntimeEndedAt(event.ended_at ? event.ended_at.slice(0, 16) : "");
+    setManagerComment(event.resolution_note);
+    setDowntimeEditorOpen(false);
+    setDowntimeMessage("");
+  };
+
+  const saveDowntimeEvent = async () => {
+    if (!selectedDowntimeEvent || !downtimeDescription.trim()) return;
+    setDowntimeSaving(true);
+    setDowntimeMessage("");
+    try {
+      await apiRequest(`/downtime-events/${selectedDowntimeEvent.id}/`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          description: downtimeDescription.trim(),
+          ended_at: downtimeEndedAt ? new Date(downtimeEndedAt).toISOString() : null,
+          status: downtimeEndedAt ? "resolved" : "open",
+          resolution_note: managerComment.trim(),
+        }),
+      });
+      setDowntimeMessage("Downtime update saved.");
+      setDowntimeEditorOpen(false);
+      onRefresh();
+    } catch (caught) {
+      setDowntimeMessage(caught instanceof Error ? caught.message : "Could not save this update.");
+    } finally {
+      setDowntimeSaving(false);
+    }
   };
 
   return (
@@ -488,35 +535,30 @@ export function ManagerConsole({
               <section className="manager-kpis" aria-label="Operational summary">
                 <article className="control-kpi">
                   <span className="control-kpi__icon control-kpi__icon--blue"><AppIcon name="factory" size={31} /></span>
-                  <div><strong>{rows.length}</strong><span>lines</span><small>All lines scheduled</small></div>
+                  <div><strong>{rows.length}</strong><span>Lines</span><small>Active in production</small></div>
                 </article>
                 <article className="control-kpi">
                   <span className="control-kpi__icon control-kpi__icon--blue"><AppIcon name="users" size={31} /></span>
-                  <div><strong>{hierarchyGroups.length}</strong><span>Team Leaders</span><small>2 lines each</small></div>
+                  <div><strong>{hierarchyGroups.length}</strong><span>Team Leaders</span><small>On shift</small></div>
                 </article>
                 <article className="control-kpi">
-                  <span className="control-kpi__icon control-kpi__icon--green"><AppIcon name="chart" size={31} /></span>
-                  <div><strong>{Math.round(planCompletion)}%</strong><span>plan complete</span><small>Across all lines</small></div>
+                  <span className="control-kpi__icon control-kpi__icon--blue control-kpi__target"><AppIcon name="chart" size={31} /></span>
+                  <div><strong>{Math.round(planCompletion)}%</strong><span>Plan complete</span><small>{NUMBER.format(summary.total_actual_output)} / {NUMBER.format(summary.total_planned_output)} planned cases</small></div>
                 </article>
-                <article className="control-kpi">
-                  <span className="control-kpi__icon control-kpi__icon--orange"><AppIcon name="clock" size={31} /></span>
-                  <div><strong>{NUMBER.format(summary.total_downtime_minutes)} min</strong><span>downtime</span><small>Total today</small></div>
+                <article className="control-kpi control-kpi--downtime">
+                  <span className="control-kpi__icon control-kpi__icon--red"><AppIcon name="clock" size={31} /></span>
+                  <div><strong>{NUMBER.format(summary.total_downtime_minutes)} min</strong><span>Downtime</span><small>Total across all lines</small></div>
                 </article>
               </section>
 
               <section className="manager-attention-strip" aria-label="Attention summary">
-                <button type="button" className="attention-action attention-action--critical" onClick={() => setView("lines")}>
-                  <strong>{criticalRows.length} critical issue{criticalRows.length === 1 ? "" : "s"}</strong>
-                  <span>Open line control</span>
-                </button>
-                <button type="button" className="attention-action attention-action--material" onClick={() => setView("actions")}>
-                  <strong>{materialRisks.length} material risk{materialRisks.length === 1 ? "" : "s"}</strong>
-                  <span>Review materials</span>
-                </button>
-                <button type="button" className="attention-action" onClick={() => setView("actions")}>
-                  <strong>{openActions.length} open action{openActions.length === 1 ? "" : "s"}</strong>
-                  <span>Open action centre</span>
-                </button>
+                <AppIcon name="warning" size={26} />
+                <button type="button" onClick={() => setView("lines")}><strong>{criticalRows.length} critical issue{criticalRows.length === 1 ? "" : "s"}</strong></button>
+                <span aria-hidden="true">·</span>
+                <button type="button" onClick={() => setView("actions")}><strong>{materialRisks.length} material risk{materialRisks.length === 1 ? "" : "s"}</strong></button>
+                <span aria-hidden="true">·</span>
+                <button type="button" onClick={() => setView("actions")}><strong>{openActions.length} open action{openActions.length === 1 ? "" : "s"}</strong></button>
+                <button className="attention-strip__open" type="button" aria-label="Open critical line control" onClick={() => setView("lines")}>›</button>
               </section>
 
               <section className="manager-overview-board" aria-labelledby="coverage-board-title">
@@ -539,32 +581,30 @@ export function ManagerConsole({
                           </span>
                           <div>
                             <strong>Team Leader {leaderIndex + 1}</strong>
-                            <span>{lines.map((line) => displayLine(line.production_line_code)).join(" and ")}</span>
+                            <span>{(["Operations", "Engineering", "QA"] as const)[leaderIndex] ?? "Operations"} &nbsp;·&nbsp; {lines.map((line) => displayLine(line.production_line_code)).join(", ")}</span>
                           </div>
                         </div>
-                        <span className="hierarchy-badge">
-                          {(["Operations", "Engineering", "QA"] as const)[leaderIndex] ?? "Operations"}
-                        </span>
+                        <button type="button" onClick={() => setView("lines")}>View details <span aria-hidden="true">→</span></button>
                       </header>
-                      <div className="leader-card__columns">
-                        <span>Line</span><span>Product</span><span>Status</span><span>Plan</span><span>Downtime</span><span>Next check</span>
-                      </div>
                       {lines.map((line) => {
                         const row = rows.find((item) => item.assignment.id === line.id);
                         const percent = planPercent(row?.shift ?? null);
-                        return <div className="leader-line" key={line.id}>
-                          <strong>{displayLine(line.production_line_code)}</strong>
-                          <span>{row?.update?.current_product || "Planned production"}</span>
-                          <span className={`status-dot status-text status-dot--${row?.update?.status || "missing"}`} aria-label={`Status: ${row?.update?.status || "missing"}`}>{titleCase(row?.update?.status || "missing")}</span>
-                          <span>{percent === null ? "—" : `${percent}%`}</span>
-                          <button
-                            type="button"
-                            className="downtime-link"
-                            onClick={() => setSelectedDowntimeLine(line.production_line)}
-                          >
-                            {lineDowntime(data.downtimeEvents, line.production_line)} min
-                          </button>
-                          <span>{shortTime(row?.update?.next_update_due_at ?? null)}</span>
+                        const status = row?.update?.status ?? "missing";
+                        const statusLabel = status === "green" ? "Running" : status === "amber" ? "Behind" : status === "red" ? "Stopped" : "No update";
+                        return <div className={`leader-line leader-line--${status}`} key={line.id}>
+                          <div className="leader-line__top">
+                            <div><strong>{displayLine(line.production_line_code)}</strong><span>{row?.update?.current_product || "Planned production"}</span></div>
+                            <span className={`status-dot status-text status-dot--${status}`} aria-label={`Status: ${statusLabel}`}>{statusLabel}</span>
+                            <button type="button" className="downtime-link" aria-label={`${lineDowntime(data.downtimeEvents, line.production_line)} min downtime`} onClick={() => {
+                              setSelectedDowntimeLine(line.production_line);
+                              const target = document.getElementById("hourly-downtime-title");
+                              if (target && typeof target.scrollIntoView === "function") target.scrollIntoView({ behavior: "smooth" });
+                            }}>
+                              <strong>{lineDowntime(data.downtimeEvents, line.production_line)} min</strong><span>downtime</span>
+                            </button>
+                          </div>
+                          <progress value={percent ?? 0} max="100" />
+                          <div className="leader-line__output"><span>{percent ?? 0}% complete</span><span>{NUMBER.format(row?.shift?.actual_output ?? 0)} / {NUMBER.format(row?.shift?.planned_output ?? 0)} cases</span></div>
                         </div>;
                       })}
                     </article>
@@ -572,59 +612,56 @@ export function ManagerConsole({
                 </div>
               </section>
 
-              <section className="manager-overview-risk" aria-labelledby="overview-risk-title">
-                <header className="risk-overview-heading">
-                  <span className="risk-overview-icon"><AppIcon name="lightbulb" size={28} /></span>
-                  <div><h2 id="overview-risk-title">AI daily risk briefing</h2><p>Key risks for today based on current data</p></div>
-                </header>
-                <div className="risk-overview-layout">
-                  <div className="risk-metric-grid">
-                    <article><span>Plan completion</span><strong>{Math.round(planCompletion)}%</strong><i className="risk-signal risk-signal--green" /><small>On track</small></article>
-                    <article><span>Downtime risk</span><strong>{downtimeRisk}%</strong><i className="risk-signal risk-signal--red" /><small>{downtimeRisk >= 50 ? "Higher than normal" : "Controlled"}</small></article>
-                    <article><span>Material delay risk</span><strong>{materialRisk}%</strong><i className="risk-signal risk-signal--amber" /><small>{materialRisk ? "Moderate risk" : "No current delay"}</small></article>
-                  </div>
-                  <div className="risk-priorities">
-                    <h3>Suggested priorities (advisory only)</h3>
-                    <ol>
-                      <li><button type="button" onClick={() => setView("lines")}><span>1</span>Focus on {highestRiskLine ? displayLine(highestRiskLine.assignment.production_line_code) : "the highest-risk line"} – investigate downtime and restore output.</button></li>
-                      <li><button type="button" onClick={() => setView("actions")}><span>2</span>{materialRisks[0] ? `Check material supply for ${materialRisks[0].product_name}.` : "Maintain confirmed material availability."}</button></li>
-                      <li><button type="button" onClick={() => setView("lines")}><span>3</span>{stableLineLabels ? `Maintain current performance on ${stableLineLabels}.` : "Confirm the next hourly line updates."}</button></li>
-                    </ol>
-                    <p className="advisory-note"><AppIcon name="info" size={20} />AI suggestions are advisory only. Operational decisions remain with you.</p>
-                  </div>
-                </div>
+              <div className="overview-lower-grid">
+              <section className="overview-priorities" aria-labelledby="overview-priorities-title">
+                <header><span><AppIcon name="clipboard" size={24} /></span><div><h2 id="overview-priorities-title">Suggested priorities</h2><p>Based on current performance and risks</p></div></header>
+                <ol>
+                  <li><button type="button" onClick={() => setView("lines")}><b>1</b><span><strong>Resolve {highestRiskLine ? displayLine(highestRiskLine.assignment.production_line_code) : "highest-risk line"} stop – conveyor reset</strong><small>Target restart within 15 minutes</small></span></button></li>
+                  <li><button type="button" onClick={() => setView("actions")}><b>2</b><span><strong>{materialRisks[0] ? `Check ${materialRisks[0].product_name} supply` : "Confirm material availability"}</strong><small>Confirm next delivery and responsible owner</small></span></button></li>
+                  <li><button type="button" onClick={() => setView("lines")}><b>3</b><span><strong>Prepare recovery for monitored lines</strong><small>{stableLineLabels || "Review staffing and clear minor stops"}</small></span></button></li>
+                </ol>
+                <button type="button" className="button button--primary overview-priorities__cta" onClick={() => setView("briefing")}>View full briefing <span aria-hidden="true">→</span></button>
               </section>
 
               <section className="hourly-downtime" aria-labelledby="hourly-downtime-title">
                 <div className="manager-section-heading">
                   <div>
-                    <h2 id="hourly-downtime-title">Hourly downtime by line</h2>
-                    <p>Planned breaks are excluded. Select a line to review each hour and the recorded reason.</p>
+                    <h2 id="hourly-downtime-title"><AppIcon name="chart" size={22} /> Hourly downtime – {rows.find((row) => row.assignment.production_line === effectiveDowntimeLine) ? displayLine(rows.find((row) => row.assignment.production_line === effectiveDowntimeLine)!.assignment.production_line_code) : "Line"}</h2>
                   </div>
-                  <strong>{selectedDowntimeEvents.reduce((total, event) => total + event.duration_minutes, 0)} min</strong>
+                  <select aria-label="Downtime line" value={effectiveDowntimeLine ?? ""} onChange={(event) => { setSelectedDowntimeLine(Number(event.target.value)); setSelectedDowntimeEventId(null); }}>
+                    {rows.map((row) => <option key={row.assignment.production_line} value={row.assignment.production_line}>{displayLine(row.assignment.production_line_code)} – {row.update?.current_product || row.assignment.production_line_name}</option>)}
+                  </select>
                 </div>
-                <div className="downtime-line-tabs" role="tablist" aria-label="Production lines">
-                  {rows.map((row) => (
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={effectiveDowntimeLine === row.assignment.production_line}
-                      className={effectiveDowntimeLine === row.assignment.production_line ? "is-active" : ""}
-                      key={row.assignment.production_line}
-                      onClick={() => setSelectedDowntimeLine(row.assignment.production_line)}
-                    >
-                      {displayLine(row.assignment.production_line_code)}
-                    </button>
-                  ))}
-                </div>
-                <div className="hourly-downtime-grid">
-                  {downtimeHours.map((hour) => (
-                    <article className={hour.minutes ? "has-loss" : ""} key={hour.label}>
-                      <span>{hour.label}</span><strong>{hour.minutes} min</strong><small>{hour.description}</small>
-                    </article>
-                  ))}
+                <div className="downtime-chart-layout">
+                  <div className="downtime-bars" aria-label="Hourly downtime chart">
+                    {downtimeHours.map((hour) => (
+                      <button type="button" className={hour.minutes ? "has-loss" : ""} key={hour.label} disabled={!hour.eventIds.length} onClick={() => hour.eventIds[0] && openDowntimeEvent(hour.eventIds[0])} aria-label={`${hour.label}, ${hour.minutes} minutes, ${hour.description}`}>
+                        <span className="downtime-bar" style={{ height: `${Math.max(2, Math.min(100, hour.minutes * 5))}%` }} /><small>{hour.label.slice(0, 2)}</small>
+                      </button>
+                    ))}
+                  </div>
+                  <aside className="downtime-event-card">
+                    {selectedDowntimeEvent ? <>
+                      <span>Event at {shortTime(selectedDowntimeEvent.started_at)}</span><strong>{selectedDowntimeEvent.duration_minutes} min</strong><small>Reason</small><p>{selectedDowntimeEvent.description}</p>
+                      <button type="button" className="event-edit-link" onClick={() => openDowntimeEvent(selectedDowntimeEvent.id)}><AppIcon name="edit" size={18} /> Edit / comment</button>
+                    </> : <><span>No event selected</span><p>Select a downtime bar to review its description.</p></>}
+                  </aside>
                 </div>
               </section>
+              </div>
+
+              {selectedDowntimeEvent && (downtimeEditorOpen || selectedDowntimeEventId) ? <div className="downtime-modal-backdrop" role="presentation">
+                <section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="downtime-editor-title">
+                  <header><div><span className="eyebrow">Manager event review</span><h2 id="downtime-editor-title">Edit downtime & description</h2></div><button type="button" aria-label="Close downtime editor" onClick={() => { setSelectedDowntimeEventId(null); setDowntimeEditorOpen(false); }}>×</button></header>
+                  <div className="downtime-editor__summary"><strong>{displayLine(data.assignments.find((assignment) => assignment.production_line === selectedDowntimeEvent.production_line)?.production_line_code ?? selectedDowntimeEvent.production_line_code)}</strong><span>Started {formatDateTime(selectedDowntimeEvent.started_at)} · Current {selectedDowntimeEvent.duration_minutes} min</span></div>
+                  <label>Description<textarea rows={3} value={downtimeDescription} onChange={(event) => setDowntimeDescription(event.target.value)} required /></label>
+                  <label>Downtime end<input type="datetime-local" value={downtimeEndedAt} min={selectedDowntimeEvent.started_at.slice(0, 16)} onChange={(event) => setDowntimeEndedAt(event.target.value)} /></label>
+                  <label>Manager comment<textarea rows={3} value={managerComment} onChange={(event) => setManagerComment(event.target.value)} placeholder="Add context, evidence or correction reason" /></label>
+                  <p className="downtime-editor__policy"><AppIcon name="info" size={18} /> Changes update calculated downtime. Planned breaks remain excluded from loss reporting.</p>
+                  {downtimeMessage ? <p className="downtime-editor__message" role="status">{downtimeMessage}</p> : null}
+                  <footer><button type="button" className="button button--ghost" onClick={() => { setSelectedDowntimeEventId(null); setDowntimeEditorOpen(false); }}>Cancel</button><button type="button" className="button button--primary" disabled={downtimeSaving || !downtimeDescription.trim()} onClick={saveDowntimeEvent}>{downtimeSaving ? "Saving…" : "Review & save"}</button></footer>
+                </section>
+              </div> : null}
             </>
           ) : null}
 

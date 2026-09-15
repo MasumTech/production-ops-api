@@ -4,7 +4,7 @@ from .access import is_operational_support
 
 
 class IsStaffOrReadOnly(BasePermission):
-    message = "Only management staff can change line assignments."
+    message = "Only management staff can change this operational record."
 
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
