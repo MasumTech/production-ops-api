@@ -28,7 +28,7 @@ test("manager can open the daily risk briefing after secure sign-in", async ({ p
   await expect(page.locator(".control-kpi")).toHaveCount(4);
   await expect(page.locator(".leader-card")).toHaveCount(3);
   await expect(page.locator(".leader-line")).toHaveCount(6);
-  await expect(page.locator(".hourly-downtime-grid article")).toHaveCount(11);
+  await expect(page.locator(".downtime-bars article")).toHaveCount(11);
 
   await workspace.getByRole("button", { name: "Team Leaders" }).click();
   await expect(page.locator(".manager-view-intro").getByRole("heading", { name: "Line Control" })).toBeVisible();

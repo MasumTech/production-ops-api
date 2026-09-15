@@ -635,9 +635,11 @@ export function ManagerConsole({
                 <div className="downtime-chart-layout">
                   <div className="downtime-bars" aria-label="Hourly downtime chart">
                     {downtimeHours.map((hour) => (
-                      <button type="button" className={hour.minutes ? "has-loss" : ""} key={hour.label} disabled={!hour.eventIds.length} onClick={() => hour.eventIds[0] && openDowntimeEvent(hour.eventIds[0])} aria-label={`${hour.label}, ${hour.minutes} minutes, ${hour.description}`}>
-                        <span className="downtime-bar" style={{ height: `${Math.max(2, Math.min(100, hour.minutes * 5))}%` }} /><small>{hour.label.slice(0, 2)}</small>
-                      </button>
+                      <article className={hour.minutes ? "has-loss" : ""} key={hour.label}>
+                        <button type="button" disabled={!hour.eventIds.length} onClick={() => hour.eventIds[0] && openDowntimeEvent(hour.eventIds[0])} aria-label={`${hour.label}, ${hour.minutes} minutes, ${hour.description}`}>
+                          <span className="downtime-bar" style={{ height: `${Math.max(2, Math.min(100, hour.minutes * 5))}%` }} /><small>{hour.label.slice(0, 2)}</small>
+                        </button>
+                      </article>
                     ))}
                   </div>
                   <aside className="downtime-event-card">

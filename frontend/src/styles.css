@@ -4223,10 +4223,11 @@ td span {
 .hourly-downtime select { min-height: 42px; max-width: 230px; padding: 0 36px 0 12px; border: 1px solid #bfcfdd; border-radius: 8px; background: #fff; font-weight: 700; }
 .downtime-chart-layout { display: grid; grid-template-columns: 1fr 132px; gap: 12px; min-height: 154px; }
 .downtime-bars { display: grid; grid-template-columns: repeat(11, minmax(28px, 1fr)); align-items: end; gap: 5px; padding: 12px 8px 0; border-bottom: 1px solid #aebdcc; background: repeating-linear-gradient(to top, #eaf0f5 0 1px, transparent 1px 38px); }
+.downtime-bars article { display: contents; }
 .downtime-bars button { display: grid; height: 128px; grid-template-rows: 1fr 20px; align-items: end; padding: 0; border: 0; color: #526984; background: transparent; }
 .downtime-bars button:disabled { opacity: 1; }
 .downtime-bar { display: block; width: min(22px, 65%); min-height: 2px; justify-self: center; border-radius: 3px 3px 0 0; background: #26a5d7; }
-.downtime-bars button.has-loss .downtime-bar { background: #e92939; }
+.downtime-bars article.has-loss .downtime-bar { background: #e92939; }
 .downtime-bars small { font-size: .64rem; }
 .downtime-event-card { display: grid; align-content: start; gap: 3px; padding: 12px; border-radius: 8px; background: #edf5fb; }
 .downtime-event-card > span,
