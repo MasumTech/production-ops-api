@@ -4847,6 +4847,13 @@ td span {
   gap: 10px;
 }
 
+.manager-header-controls {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
 .manager-header-date,
 .manager-shift-control,
 .manager-refresh,
@@ -5105,7 +5112,8 @@ td span {
     font-size: 1.05rem;
   }
 
-  .manager-header-meta {
+  .manager-header-meta,
+  .manager-header-controls {
     gap: 6px;
   }
 
@@ -5183,12 +5191,17 @@ td span {
   .manager-header-meta {
     width: 100%;
     gap: 7px;
+    padding-right: 104px;
+  }
+
+  .manager-header-controls {
+    width: 100%;
     overflow-x: auto;
-    padding: 1px 104px 2px 0;
+    padding: 1px 0 2px;
     scrollbar-width: none;
   }
 
-  .manager-header-meta::-webkit-scrollbar {
+  .manager-header-controls::-webkit-scrollbar {
     display: none;
   }
 

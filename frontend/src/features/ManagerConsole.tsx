@@ -366,7 +366,8 @@ export function ManagerConsole({
           </div>
         </div>
         <div className="manager-header-meta" aria-label="Workspace controls">
-          <label className="manager-header-date">
+          <div className="manager-header-controls">
+            <label className="manager-header-date">
             <AppIcon name="calendar" size={22} />
             <span>{controlBoardDate(operationalDate)}</span>
             <input
@@ -378,9 +379,9 @@ export function ManagerConsole({
                 setViewMode(event.target.value === localDate() ? "live" : "historical");
               }}
             />
-          </label>
-          <span className="manager-header-divider" aria-hidden="true" />
-          <label className="manager-shift-control">
+            </label>
+            <span className="manager-header-divider" aria-hidden="true" />
+            <label className="manager-shift-control">
             <AppIcon name="clock" size={22} />
             <span className="sr-only">Shift pattern</span>
             <select
@@ -391,9 +392,9 @@ export function ManagerConsole({
               <option value="day">Day · 07:00–18:00</option>
               <option value="night">Night · 23:00–07:00</option>
             </select>
-          </label>
-          <span className="manager-header-divider" aria-hidden="true" />
-          <div className="manager-view-mode" role="group" aria-label="Data view">
+            </label>
+            <span className="manager-header-divider" aria-hidden="true" />
+            <div className="manager-view-mode" role="group" aria-label="Data view">
             <button
               type="button"
               className={liveView ? "is-active" : ""}
@@ -410,18 +411,19 @@ export function ManagerConsole({
             >
               Historical
             </button>
+            </div>
+            <button
+              type="button"
+              className="manager-refresh"
+              onClick={onRefresh}
+              disabled={busy}
+              aria-label="Refresh"
+            >
+              <AppIcon name="refresh" size={22} />
+              <span>{busy ? "Refreshing…" : "Refresh"}</span>
+              <small>{updatedTime(lastUpdatedAt)}</small>
+            </button>
           </div>
-          <button
-            type="button"
-            className="manager-refresh"
-            onClick={onRefresh}
-            disabled={busy}
-            aria-label="Refresh"
-          >
-            <AppIcon name="refresh" size={22} />
-            <span>{busy ? "Refreshing…" : "Refresh"}</span>
-            <small>{updatedTime(lastUpdatedAt)}</small>
-          </button>
           <NotificationCentre refreshToken={lastUpdatedAt} iconOnly />
           <details className="manager-profile">
             <summary aria-label={`Open profile menu for ${profile.display_name}`}>

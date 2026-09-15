@@ -32,7 +32,7 @@ for (const viewport of viewports) {
     await expect(page.getByLabel("Shift pattern")).toHaveValue("day");
     await expect(page.getByRole("group", { name: "Data view" })).toBeVisible();
     await expect(page.getByRole("button", { name: /Alerts/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Open profile menu/ })).toBeVisible();
+    await expect(page.getByLabel(/Open profile menu/)).toBeVisible();
 
     await page.screenshot({
       path: testInfo.outputPath(`manager-shell-${viewport.name}.png`),
