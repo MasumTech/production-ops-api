@@ -323,9 +323,10 @@ describe("manager console", () => {
     expect(screen.getByText("Position now")).toBeInTheDocument();
 
     await actor.click(within(navigation).getByRole("button", { name: "Materials" }));
-    expect(screen.getByRole("heading", { name: "Actions and materials" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Materials & actions" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Materials/ })).toBeInTheDocument();
+    await actor.click(screen.getByRole("tab", { name: /Open actions/ }));
     expect(screen.getByRole("heading", { name: "Open actions" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Material risks" })).toBeInTheDocument();
 
     await actor.click(within(navigation).getByRole("button", { name: "Risk briefing" }));
     expect(screen.getByRole("heading", { name: "AI Daily Risk Briefing" })).toBeInTheDocument();
