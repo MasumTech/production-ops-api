@@ -5093,6 +5093,14 @@ td span {
   background: #f8fbfd;
 }
 
+.manager-topbar .notification-trigger--icon {
+  display: grid;
+  border: 0;
+  place-items: center;
+  color: #fff;
+  background: transparent;
+}
+
 @media (min-width: 821px) and (max-width: 1240px) {
   .manager-topbar {
     padding-inline: 14px;
@@ -5236,6 +5244,10 @@ td span {
     position: absolute;
     top: 10px;
     right: 62px;
+  }
+
+  .manager-topbar .notification-trigger--icon {
+    display: grid;
   }
 
   .manager-profile {
