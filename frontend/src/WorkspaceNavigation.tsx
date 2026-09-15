@@ -43,13 +43,14 @@ export function WorkspaceSidebar<Id extends string>({
             className={activeItem === item.id ? "nav-item nav-item--active" : "nav-item"}
             onClick={() => onSelect(item.id)}
             aria-current={activeItem === item.id ? "page" : undefined}
+            title={item.label}
           >
             {item.icon ? (
               <span className="nav-item__icon"><AppIcon name={item.icon} size={22} /></span>
             ) : (
               <span className="nav-item__dot" aria-hidden="true" />
             )}
-            {item.label}
+            <span className="nav-item__label">{item.label}</span>
           </button>
         ))}
       </nav>

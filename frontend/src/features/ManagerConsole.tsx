@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DailyRiskBriefingPanel } from "./DailyRiskBriefingPanel";
 import { LossAnalyticsPanel } from "./LossAnalyticsPanel";
 import { EmptyState, ErrorBanner, StatusPill } from "../components";
@@ -8,7 +8,6 @@ import { NotificationCentre } from "../NotificationCentre";
 import { AppIcon, type AppIconName } from "../AppIcon";
 import type { LiveConnectionState } from "../realtime";
 import {
-  WorkspaceBottomNavigation,
   WorkspaceSidebar,
 } from "../WorkspaceNavigation";
 import type {
@@ -31,6 +30,8 @@ type ManagerWorkspaceView =
   | "actions"
   | "briefing"
   | "recovery";
+type ManagerShiftPattern = "day" | "night";
+type ManagerViewMode = "live" | "historical";
 
 const MANAGER_NAV_ITEMS: Array<{
   id: ManagerWorkspaceView;
@@ -192,6 +193,25 @@ function controlBoardDate(value: string): string {
   }).format(new Date(`${value}T12:00:00`));
 }
 
+function profileInitials(value: string): string {
+  const initials = value
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+  return initials || "OM";
+}
+
+function updatedTime(value: string | null): string {
+  if (!value) return "Not updated";
+  return `Updated ${new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(value))}`;
+}
+
 function hourlyDowntime(events: DowntimeEvent[], operationalDate: string) {
   return Array.from({ length: 11 }, (_, offset) => {
     const hour = 7 + offset;
@@ -267,6 +287,11 @@ export function ManagerConsole({
   const [filter, setFilter] = useState<BoardFilter>("all");
   const [selectedDowntimeLine, setSelectedDowntimeLine] = useState<number | null>(null);
   const [selectedLineId, setSelectedLineId] = useState<number | null>(null);
+  const [shiftPattern, setShiftPattern] = useState<ManagerShiftPattern>("day");
+  const [viewMode, setViewMode] = useState<ManagerViewMode>(
+    operationalDate === localDate() ? "live" : "historical",
+  );
+  const [navigationOpen, setNavigationOpen] = useState(false);
   const rows = useMemo(() => buildManagerRows(data), [data]);
   const isHistorical = operationalDate !== localDate();
   const visibleRows = useMemo(
@@ -299,6 +324,22 @@ export function ManagerConsole({
     .filter((row) => row.update?.status === "green")
     .map((row) => displayLine(row.assignment.production_line_code))
     .join(", ");
+  const shiftLabel = shiftPattern === "day" ? "07:00–18:00" : "23:00–07:00";
+  const liveView = viewMode === "live" && !isHistorical;
+
+  useEffect(() => {
+    if (isHistorical) setViewMode("historical");
+  }, [isHistorical]);
+
+  const selectView = (nextView: ManagerWorkspaceView) => {
+    setView(nextView);
+    setNavigationOpen(false);
+  };
+
+  const selectLiveView = () => {
+    if (isHistorical) onDateChange(localDate());
+    setViewMode("live");
+  };
 
   return (
     <div className="manager-shell">
@@ -309,22 +350,91 @@ export function ManagerConsole({
       ) : null}
 
       <header className="manager-topbar">
-        <strong className="manager-brand">OPERATIONS CONTROL BOARD</strong>
-        <div className="manager-header-meta">
+        <div className="manager-topbar__brand">
+          <button
+            type="button"
+            className="manager-menu-button"
+            aria-label={navigationOpen ? "Close navigation" : "Open navigation"}
+            aria-expanded={navigationOpen}
+            onClick={() => setNavigationOpen((current) => !current)}
+          >
+            <AppIcon name="menu" size={24} />
+          </button>
+          <div>
+            <strong className="manager-brand">Operations Control Board</strong>
+            <span>People&nbsp; · &nbsp;Product&nbsp; · &nbsp;Progress</span>
+          </div>
+        </div>
+        <div className="manager-header-meta" aria-label="Workspace controls">
           <label className="manager-header-date">
-            <AppIcon name="clock" size={25} />
+            <AppIcon name="calendar" size={22} />
             <span>{controlBoardDate(operationalDate)}</span>
             <input
               aria-label="Operational date"
               type="date"
               value={operationalDate}
-              onChange={(event) => onDateChange(event.target.value)}
+              onChange={(event) => {
+                onDateChange(event.target.value);
+                setViewMode(event.target.value === localDate() ? "live" : "historical");
+              }}
             />
           </label>
           <span className="manager-header-divider" aria-hidden="true" />
-          <span>Shift&nbsp; 07:00 – 18:00</span>
+          <label className="manager-shift-control">
+            <AppIcon name="clock" size={22} />
+            <span className="sr-only">Shift pattern</span>
+            <select
+              aria-label="Shift pattern"
+              value={shiftPattern}
+              onChange={(event) => setShiftPattern(event.target.value as ManagerShiftPattern)}
+            >
+              <option value="day">Day · 07:00–18:00</option>
+              <option value="night">Night · 23:00–07:00</option>
+            </select>
+          </label>
           <span className="manager-header-divider" aria-hidden="true" />
+          <div className="manager-view-mode" role="group" aria-label="Data view">
+            <button
+              type="button"
+              className={liveView ? "is-active" : ""}
+              aria-pressed={liveView}
+              onClick={selectLiveView}
+            >
+              <span className="manager-live-dot" aria-hidden="true" />Live
+            </button>
+            <button
+              type="button"
+              className={!liveView ? "is-active" : ""}
+              aria-pressed={!liveView}
+              onClick={() => setViewMode("historical")}
+            >
+              Historical
+            </button>
+          </div>
+          <button
+            type="button"
+            className="manager-refresh"
+            onClick={onRefresh}
+            disabled={busy}
+            aria-label="Refresh"
+          >
+            <AppIcon name="refresh" size={22} />
+            <span>{busy ? "Refreshing…" : "Refresh"}</span>
+            <small>{updatedTime(lastUpdatedAt)}</small>
+          </button>
           <NotificationCentre refreshToken={lastUpdatedAt} iconOnly />
+          <details className="manager-profile">
+            <summary aria-label={`Open profile menu for ${profile.display_name}`}>
+              <span className="manager-profile__avatar">{profileInitials(profile.display_name)}</span>
+              <span className="manager-profile__name">{profile.display_name}</span>
+            </summary>
+            <div className="manager-profile__menu">
+              <strong>{profile.display_name}</strong>
+              <span>{profile.username}</span>
+              <span>Operations Manager</span>
+              <button type="button" onClick={onSignOut}>Sign out</button>
+            </div>
+          </details>
         </div>
       </header>
 
@@ -332,10 +442,10 @@ export function ManagerConsole({
         <WorkspaceSidebar
           ariaLabel="Operations Manager workspace"
           navigationLabel="Manager sections"
-          className="manager-sidebar"
+          className={`manager-sidebar${navigationOpen ? " manager-sidebar--open" : ""}`}
           items={MANAGER_NAV_ITEMS}
           activeItem={view}
-          onSelect={setView}
+          onSelect={selectView}
           summary={
             <>
               <span className="manager-live-dot" aria-hidden="true" />
@@ -346,13 +456,19 @@ export function ManagerConsole({
           boundary={
             <div className="manager-sidebar-footer">
               <p>Keep production<br />moving safely</p>
-              <button type="button" onClick={onRefresh} disabled={busy}>
-                {busy ? "Refreshing…" : "Refresh data"}
-              </button>
-              <button type="button" onClick={onSignOut}>Sign out {profile.display_name}</button>
+              <span>Version 1.4.0</span>
             </div>
           }
         />
+
+        {navigationOpen ? (
+          <button
+            type="button"
+            className="manager-navigation-backdrop"
+            aria-label="Close navigation"
+            onClick={() => setNavigationOpen(false)}
+          />
+        ) : null}
 
         <main className="manager-workspace">
           {error ? <ErrorBanner message={error} /> : null}
@@ -362,7 +478,7 @@ export function ManagerConsole({
               <section className="manager-hero" aria-labelledby="manager-title">
                 <div>
                   <h1 id="manager-title">Before-shift and live overview</h1>
-                  <p>Shift 07:00 – 18:00&nbsp;&nbsp; | &nbsp;&nbsp;{liveState === "live" ? "Live data" : "Snapshot data"}</p>
+                  <p>{shiftPattern === "day" ? "Day" : "Night"} shift {shiftLabel}&nbsp;&nbsp; | &nbsp;&nbsp;{liveView && liveState === "live" ? "Live data" : "Historical data"}</p>
                   {isHistorical ? <span className="historical-badge">Historical view</span> : null}
                 </div>
               </section>
@@ -821,12 +937,6 @@ export function ManagerConsole({
         </main>
       </div>
 
-      <WorkspaceBottomNavigation
-        ariaLabel="Operations Manager mobile workspace"
-        items={MANAGER_NAV_ITEMS}
-        activeItem={view}
-        onSelect={setView}
-      />
     </div>
   );
 }

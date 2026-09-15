@@ -205,7 +205,8 @@ describe("manager console", () => {
     expect(rows[1].attentionLevel).toBe("stable");
   });
 
-  it("shows the overview and matching desktop and mobile navigation", async () => {
+  it("shows the overview and the shared manager shell", async () => {
+    const actor = userEvent.setup();
     render(
       <ManagerConsole
         profile={profile}
@@ -259,11 +260,26 @@ describe("manager console", () => {
       ),
     ).toBeInTheDocument();
 
+    const controls = screen.getByLabelText("Workspace controls");
+    expect(within(controls).getByLabelText("Operational date")).toHaveValue("2026-09-01");
+    expect(within(controls).getByLabelText("Shift pattern")).toHaveValue("day");
+    expect(within(controls).getByRole("button", { name: "Historical" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(within(controls).getByRole("button", { name: "Refresh" })).toBeInTheDocument();
     expect(
-      within(
-        screen.getByRole("navigation", { name: "Operations Manager mobile workspace" }),
-      ).getAllByRole("button"),
-    ).toHaveLength(6);
+      within(controls).getByRole("button", { name: "Alerts" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open navigation" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("group", { name: "Data view" }),
+    ).toBeInTheDocument();
+
+    await actor.selectOptions(within(controls).getByLabelText("Shift pattern"), "night");
+    expect(screen.getByText(/Night shift 23:00–07:00/)).toBeInTheDocument();
 
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Daily risk briefing" })).not.toBeInTheDocument();
