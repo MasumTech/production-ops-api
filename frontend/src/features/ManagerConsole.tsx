@@ -13,6 +13,7 @@ import {
 } from "../WorkspaceNavigation";
 import type {
   Assignment,
+  BreakOpportunity,
   DailyPlanBlock,
   DowntimeEvent,
   Escalation,
@@ -317,6 +318,14 @@ export function ManagerConsole({
   const [materialNextStatus, setMaterialNextStatus] = useState<MaterialStatus>("ready");
   const [materialSaving, setMaterialSaving] = useState(false);
   const [materialMessage, setMaterialMessage] = useState("");
+  const [recoveryTab, setRecoveryTab] = useState<"shift" | "history">("shift");
+  const [recoveryLineFilter, setRecoveryLineFilter] = useState("all");
+  const [recoveryRange, setRecoveryRange] = useState("shift");
+  const [selectedRecovery, setSelectedRecovery] = useState<BreakOpportunity | null>(null);
+  const [recoveryEvidence, setRecoveryEvidence] = useState("");
+  const [recoveryTime, setRecoveryTime] = useState("");
+  const [recoverySaving, setRecoverySaving] = useState(false);
+  const [recoveryMessage, setRecoveryMessage] = useState("");
   const [selectedDowntimeEventId, setSelectedDowntimeEventId] = useState<number | null>(null);
   const [downtimeEditorOpen, setDowntimeEditorOpen] = useState(false);
   const [downtimeDescription, setDowntimeDescription] = useState("");
@@ -371,6 +380,10 @@ export function ManagerConsole({
     .join(", ");
   const shiftLabel = shiftPattern === "day" ? "07:00–18:00" : "23:00–07:00";
   const liveView = viewMode === "live" && !isHistorical;
+  const recoveryOpportunities = (data.breakOpportunities ?? []).filter((item) => recoveryLineFilter === "all" || String(item.production_line) === recoveryLineFilter);
+  const recordedDowntime = data.downtimeEvents.filter((event) => recoveryLineFilter === "all" || String(event.production_line) === recoveryLineFilter).reduce((total, event) => total + event.duration_minutes, 0);
+  const recoveredMinutes = recoveryOpportunities.filter((item) => item.status === "recovered" && item.checks_completed_at).reduce((total, item) => total + Math.max(0, Math.round((new Date(item.checks_completed_at!).getTime() - new Date(item.suggested_start_at).getTime()) / 60000)), 0);
+  const remainingLoss = Math.max(0, recordedDowntime - recoveredMinutes);
 
   useEffect(() => {
     if (isHistorical) setViewMode("historical");
@@ -456,6 +469,25 @@ export function ManagerConsole({
       setMaterialMessage(caught instanceof Error ? caught.message : "Could not raise material issue.");
     } finally {
       setMaterialSaving(false);
+    }
+  };
+
+  const recordRecovery = async () => {
+    if (!selectedRecovery || !recoveryEvidence.trim() || !recoveryTime) return;
+    setRecoverySaving(true);
+    setRecoveryMessage("");
+    try {
+      await apiRequest(`/break-opportunities/${selectedRecovery.id}/resume/`, {
+        method: "POST",
+        body: JSON.stringify({ recovery_notes: recoveryEvidence.trim(), run_resumed_at: new Date(recoveryTime).toISOString() }),
+      });
+      setRecoveryMessage("Recovery evidence recorded.");
+      setSelectedRecovery(null);
+      onRefresh();
+    } catch (caught) {
+      setRecoveryMessage(caught instanceof Error ? caught.message : "Could not record recovery.");
+    } finally {
+      setRecoverySaving(false);
     }
   };
 
@@ -949,10 +981,19 @@ export function ManagerConsole({
             <>
               <ManagerViewIntro
                 eyebrow="Recorded recovery evidence"
-                title="Break recovery and loss history"
+                title="Break recovery & loss history"
                 body="Review confirmed downtime, recovered production time and recurring mapped-asset evidence."
               />
-              <LossAnalyticsPanel assignments={data.assignments} />
+              <div className="break-recovery-tabs" role="tablist" aria-label="Recovery views"><button type="button" role="tab" aria-selected={recoveryTab === "shift"} className={recoveryTab === "shift" ? "is-active" : ""} onClick={() => setRecoveryTab("shift")}>Shift recovery</button><button type="button" role="tab" aria-selected={recoveryTab === "history"} className={recoveryTab === "history" ? "is-active" : ""} onClick={() => setRecoveryTab("history")}>Loss & asset history</button></div>
+              {recoveryTab === "history" ? <LossAnalyticsPanel assignments={data.assignments} /> : <>
+                <div className="break-recovery-filters"><label>Date<input type="date" value={operationalDate} onChange={(event) => onDateChange(event.target.value)} /></label><label>Production line<select value={recoveryLineFilter} onChange={(event) => setRecoveryLineFilter(event.target.value)}><option value="all">All lines</option>{rows.map((row) => <option key={row.assignment.id} value={row.assignment.production_line}>{displayLine(row.assignment.production_line_code)}</option>)}</select></label><label>Time range<select value={recoveryRange} onChange={(event) => setRecoveryRange(event.target.value)}><option value="shift">This shift</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option></select></label><button type="button" className="button button--primary" onClick={onRefresh}>Apply filters</button></div>
+                <section className="recovery-kpis" aria-label="Recovery summary"><article><span>Recorded downtime</span><strong>{recordedDowntime} min</strong></article><article><span>Recovered time</span><strong>{recoveredMinutes} min</strong></article><article><span>Remaining loss</span><strong>{remainingLoss} min</strong></article><article><span>Opportunities</span><strong>{recoveryOpportunities.length}</strong></article></section>
+                <section className="recovery-activity"><header><h2>Recovery activity</h2><button type="button" className="button button--primary" disabled={!recoveryOpportunities.length} onClick={() => { const item = recoveryOpportunities.find((candidate) => candidate.status === "checks_complete") ?? recoveryOpportunities[0]; if (item) { setSelectedRecovery(item); setRecoveryTime(new Date().toISOString().slice(0, 16)); setRecoveryEvidence(item.recovery_notes); } }}>Record recovery</button></header>{recoveryOpportunities.length ? recoveryOpportunities.map((item) => <details key={item.id} open={item === recoveryOpportunities[0]}><summary><strong>{displayLine(item.production_line_code)}</strong><span>{item.issue_summary}</span><small>{titleCase(item.status)}</small></summary><ol className="recovery-timeline"><li><time>{shortTime(item.fault_at)}</time><strong>Fault recorded</strong><span>{item.issue_summary}</span></li><li><time>{shortTime(item.suggested_start_at)}</time><strong>Planned break starts</strong><span>Approved recovery window</span></li><li><time>{shortTime(item.checks_completed_at)}</time><strong>Repair complete</strong><span>Checks and evidence recorded</span></li><li><time>{shortTime(item.run_resumed_at)}</time><strong>Production resumes</strong><span>{item.recovery_notes || "Awaiting resume evidence"}</span></li></ol></details>) : <EmptyState title="No recovery activity" body="No linked break opportunity is recorded for this selection." />}</section>
+                <section className="hourly-recovery-history"><h2>Hourly event history</h2><div className="responsive-table"><table><thead><tr><th>Hour</th><th>Line</th><th>Duration</th><th>Description</th></tr></thead><tbody>{data.downtimeEvents.filter((event) => recoveryLineFilter === "all" || String(event.production_line) === recoveryLineFilter).map((event) => <tr key={event.id}><td>{shortTime(event.started_at)} – {shortTime(event.ended_at)}</td><td>{displayLine(event.production_line_code)}</td><td>{event.duration_minutes} min</td><td>{event.description}</td></tr>)}</tbody></table></div></section>
+                <p className="recovery-rule"><AppIcon name="info" size={18} /> Planned breaks are excluded from recorded downtime. Eligible recovered minutes are counted once; remaining loss never falls below zero.</p>
+                {recoveryMessage ? <p role="status">{recoveryMessage}</p> : null}
+              </>}
+              {selectedRecovery ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="recovery-form-title"><header><div><span className="eyebrow">Linked event #{selectedRecovery.id}</span><h2 id="recovery-form-title">Record recovery</h2></div><button type="button" aria-label="Close recovery form" onClick={() => setSelectedRecovery(null)}>×</button></header><label>Recovery time<input type="datetime-local" required value={recoveryTime} onChange={(event) => setRecoveryTime(event.target.value)} /></label><label>Recovery evidence<textarea rows={4} required value={recoveryEvidence} onChange={(event) => setRecoveryEvidence(event.target.value)} placeholder="Repair check, output evidence or verified restart note" /></label><footer><button type="button" className="button button--ghost" onClick={() => setSelectedRecovery(null)}>Cancel</button><button type="button" className="button button--primary" disabled={recoverySaving || !recoveryTime || !recoveryEvidence.trim()} onClick={recordRecovery}>{recoverySaving ? "Saving…" : "Record recovery"}</button></footer></section></div> : null}
             </>
           ) : null}
 

@@ -333,7 +333,9 @@ describe("manager console", () => {
     expect(screen.getByRole("heading", { name: "Daily risk briefing" })).toBeInTheDocument();
 
     await actor.click(within(navigation).getByRole("button", { name: "Break recovery" }));
-    expect(screen.getByRole("heading", { name: "Break recovery and loss history" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Break recovery & loss history" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Recovery activity" })).toBeInTheDocument();
+    await actor.click(screen.getByRole("tab", { name: "Loss & asset history" }));
     expect(screen.getByRole("heading", { name: "Loss and asset history" })).toBeInTheDocument();
   });
 

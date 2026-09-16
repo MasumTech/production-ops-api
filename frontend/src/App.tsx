@@ -33,6 +33,7 @@ import type { WorkspaceNavigationItem } from "./WorkspaceNavigation";
 import type {
   Assignment,
   BreakOpportunity,
+  BreakRecovery,
   DailyPlanBlock,
   DowntimeEvent,
   Escalation,
@@ -70,6 +71,8 @@ const EMPTY_DATA: WorkspaceData = {
 
 const EMPTY_MANAGER_DATA: ManagerWorkspaceData = {
   assignments: [],
+  breakOpportunities: [],
+  breaks: [],
   updates: [],
   materials: [],
   escalations: [],
@@ -177,6 +180,8 @@ async function loadManagerData(operationalDate: string): Promise<ManagerWorkspac
   const [
     assignments,
     planBlocks,
+    breakOpportunities,
+    breaks,
     updates,
     materials,
     escalations,
@@ -186,6 +191,8 @@ async function loadManagerData(operationalDate: string): Promise<ManagerWorkspac
   ] = await Promise.all([
     apiList<Assignment>(`/team-leader-assignments/?date=${operationalDate}`),
     apiList<DailyPlanBlock>(`/daily-plan-blocks/?date=${operationalDate}&ordering=sequence_number`),
+    apiList<BreakOpportunity>(`/break-opportunities/?date=${operationalDate}`),
+    apiList<BreakRecovery>(`/break-recoveries/?date=${operationalDate}`),
     apiList<LineUpdate>(`/hourly-line-updates/latest-status/?date=${operationalDate}`),
     apiList<MaterialReadiness>(
       `/product-material-readiness/?date=${operationalDate}&ordering=sequence_number`,
@@ -203,6 +210,8 @@ async function loadManagerData(operationalDate: string): Promise<ManagerWorkspac
   return {
     assignments,
     planBlocks,
+    breakOpportunities,
+    breaks,
     updates,
     materials,
     escalations,

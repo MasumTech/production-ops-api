@@ -1400,6 +1400,7 @@ class BreakOpportunityDeclineSerializer(serializers.Serializer):
 
 class BreakOpportunityResumeSerializer(serializers.Serializer):
     recovery_notes = serializers.CharField(allow_blank=False, trim_whitespace=True)
+    run_resumed_at = serializers.DateTimeField(required=False)
 
 
 class BreakRecoverySerializer(serializers.ModelSerializer):

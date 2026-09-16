@@ -250,6 +250,8 @@ export interface ManagerWorkspaceData {
   materials: MaterialReadiness[];
   escalations: Escalation[];
   planBlocks?: DailyPlanBlock[];
+  breakOpportunities?: BreakOpportunity[];
+  breaks?: BreakRecovery[];
   shifts: ShiftRecord[];
   downtimeEvents: DowntimeEvent[];
   summary: DashboardSummary;

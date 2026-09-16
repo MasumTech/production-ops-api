@@ -2461,9 +2461,13 @@ def test_team_leader_can_complete_break_recovery_timeline(
     checks = authenticated_client.post(
         reverse("break-opportunity-complete-checks", args=(api_break_opportunity.id,))
     )
+    recorded_resume_time = timezone.now()
     resumed = authenticated_client.post(
         reverse("break-opportunity-resume", args=(api_break_opportunity.id,)),
-        {"recovery_notes": "Safety, quality and technical checks passed."},
+        {
+            "recovery_notes": "Safety, quality and technical checks passed.",
+            "run_resumed_at": recorded_resume_time.isoformat(),
+        },
         format="json",
     )
 
@@ -2472,6 +2476,9 @@ def test_team_leader_can_complete_break_recovery_timeline(
     assert resumed.status_code == status.HTTP_200_OK
     assert resumed.data["status"] == BreakOpportunity.Status.RECOVERED
     assert resumed.data["run_resumed_at"] is not None
+    assert resumed.data["run_resumed_at"] == recorded_resume_time.isoformat().replace(
+        "+00:00", "Z"
+    )
 
 
 @pytest.fixture
