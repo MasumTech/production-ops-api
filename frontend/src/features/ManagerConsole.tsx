@@ -973,7 +973,13 @@ export function ManagerConsole({
                 title="AI Daily Risk Briefing"
                 body="Review deterministic line risk, confidence, ranked source evidence, and missing-data warnings."
               />
-              <DailyRiskBriefingPanel operationalDate={operationalDate} />
+              <DailyRiskBriefingPanel operationalDate={operationalDate} onOpenLine={(lineId) => {
+                const row = rows.find((candidate) => candidate.assignment.production_line === lineId);
+                if (row) {
+                  setSelectedLineId(row.assignment.id);
+                  setView("lines");
+                }
+              }} />
             </>
           ) : null}
 
