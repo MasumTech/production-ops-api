@@ -26,8 +26,10 @@ function RiskBadge({ level }: { level: RiskLevel }) {
 
 export function DailyRiskBriefingPanel({
   operationalDate,
+  onOpenLine,
 }: {
   operationalDate: string;
+  onOpenLine?: (lineId: number) => void;
 }) {
   const [briefing, setBriefing] = useState<DailyRiskBriefing | null>(null);
   const [error, setError] = useState("");
@@ -60,7 +62,8 @@ export function DailyRiskBriefingPanel({
     void load();
   }, [load]);
 
-  const priorities = briefing ? [...briefing.lines].sort((left, right) => right.risk_score - left.risk_score).slice(0, 3) : [];
+  const rankedLines = briefing ? [...briefing.lines].sort((left, right) => right.risk_score - left.risk_score || left.production_line_code.localeCompare(right.production_line_code)) : [];
+  const priorities = rankedLines.slice(0, 3);
 
   return (
     <section className="manager-board" aria-labelledby="risk-briefing-title">
@@ -119,11 +122,11 @@ export function DailyRiskBriefingPanel({
             </article>
           </div>
 
-          {priorities.length ? <section className="risk-priority-grid" aria-label="Actionable priorities"><h3>Priority actions</h3><div>{priorities.map((line, index) => <article key={line.production_line_id}><span className="priority-number">{index + 1}</span><div><strong>{line.production_line_code}: {line.risk_factors[0]?.reason ?? "Review line evidence"}</strong><small>{line.risk_score} / 100 risk score</small></div><button className="button button--primary" onClick={() => { window.location.hash = `line-${line.production_line_id}`; }}>View line</button></article>)}</div></section> : null}
+          {priorities.length ? <section className="risk-priority-grid" aria-label="Actionable priorities"><h3>Priority actions</h3><div>{priorities.map((line, index) => <article key={line.production_line_id}><span className="priority-number">{index + 1}</span><div><strong>{line.production_line_code}: {line.risk_factors[0]?.reason ?? "Review line evidence"}</strong><small>{line.risk_score} / 100 risk score</small></div><button className="button button--primary" onClick={() => onOpenLine?.(line.production_line_id)}>View line</button></article>)}</div></section> : null}
 
-          {briefing.lines.length ? (
+          {rankedLines.length ? (
             <div className="risk-line-grid">
-              {briefing.lines.map((line) => (
+              {rankedLines.map((line) => (
                 <article
                   className={`risk-line-card risk-line-card--${line.risk_level}`}
                   key={line.production_line_id}
