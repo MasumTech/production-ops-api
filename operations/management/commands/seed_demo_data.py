@@ -201,7 +201,9 @@ class Command(BaseCommand):
         get_user_model().objects.filter(username__startswith=DEMO_USER_PREFIX).delete()
 
     def _seed(self, operational_date, password):
-        now = timezone.now()
+        now = timezone.make_aware(
+            datetime.combine(operational_date, time(16, 30))
+        )
         users = self._seed_users(password)
         lines = self._seed_lines()
         assets = self._seed_assets(lines)
@@ -477,6 +479,7 @@ class Command(BaseCommand):
 
     @staticmethod
     def _seed_shifts(operational_date, users, lines):
+        day_start = time(7, 0) if operational_date.weekday() >= 5 else time(6, 45)
         definitions = {
             key: (lines[key], planned, actual, downtime)
             for key, planned, actual, downtime in (
@@ -497,7 +500,7 @@ class Command(BaseCommand):
                 shift_type=Shift.ShiftType.DAY,
                 defaults={
                     "supervisor": users["manager"],
-                    "start_time": time(7, 0),
+                    "start_time": day_start,
                     "end_time": time(18, 0),
                     "planned_output": planned,
                     "actual_output": actual,
@@ -589,6 +592,8 @@ class Command(BaseCommand):
 
     @staticmethod
     def _seed_daily_plan(operational_date, users, assignments):
+        first_start = (7, 0) if operational_date.weekday() >= 5 else (6, 45)
+
         def planned_time(hour, minute=0):
             return timezone.make_aware(
                 datetime.combine(operational_date, time(hour, minute))
@@ -596,7 +601,7 @@ class Command(BaseCommand):
 
         schedules = {
             "line_1": (
-                ("production", 7, 0, 9, 0, "SPC-01", "Salt & Pepper Chicken", 24, None),
+                ("production", first_start[0], first_start[1], 9, 0, "SPC-01", "Salt & Pepper Chicken", 24, None),
                 ("break", 9, 0, 9, 40, "", "", None, 1),
                 (
                     "production",
@@ -623,7 +628,7 @@ class Command(BaseCommand):
                 ),
             ),
             "line_2": (
-                ("production", 7, 0, 10, 0, "ODM-01", "Oat Drink 1L", 20, None),
+                ("production", first_start[0], first_start[1], 10, 0, "ODM-01", "Oat Drink 1L", 20, None),
                 ("break", 10, 0, 10, 40, "", "", None, 1),
                 ("production", 10, 40, 14, 0, "BBQ-02", "BBQ Chicken Bites", 28, None),
                 ("break", 14, 0, 14, 40, "", "", None, 2),
@@ -643,7 +648,17 @@ class Command(BaseCommand):
         schedules.update(
             {
                 key: (
-                    ("production", 7, 0, 11, 0, code, name, target, None),
+                    (
+                        "production",
+                        first_start[0],
+                        first_start[1],
+                        11,
+                        0,
+                        code,
+                        name,
+                        target,
+                        None,
+                    ),
                     ("break", 11, 0, 11, 40, "", "", None, 1),
                     ("production", 11, 40, 15, 0, code, name, target, None),
                     ("break", 15, 0, 15, 40, "", "", None, 2),
@@ -1090,6 +1105,10 @@ class Command(BaseCommand):
 
     @staticmethod
     def _seed_handover(users, assignments, escalations):
+        operational_date = assignments["line_1"].date
+        handed_over_at = timezone.make_aware(
+            datetime.combine(operational_date, time(16, 25))
+        )
         handover, _ = ShiftHandover.objects.update_or_create(
             outgoing_assignment=assignments["line_1"],
             incoming_assignment=assignments["incoming"],
@@ -1100,6 +1119,7 @@ class Command(BaseCommand):
                 ),
                 "notes": "Confirm stable pressure before increasing speed.",
                 "handed_over_by": users["leader"],
+                "handed_over_at": handed_over_at,
                 "accepted_at": None,
                 "accepted_by": None,
             },

@@ -257,6 +257,44 @@ describe("Team Leader My Lines reference board", () => {
       .toBeInTheDocument();
   });
 
+  it("shows a legitimate third assigned line instead of hiding it", () => {
+    const thirdAssignment: Assignment = {
+      ...assignments[1],
+      id: 3,
+      production_line: 103,
+      production_line_code: "DEMO-LINE-03",
+      production_line_name: "Third Line",
+    };
+    const thirdLineData: WorkspaceData = {
+      ...data,
+      assignments: [...assignments, thirdAssignment],
+      shifts: [
+        ...data.shifts,
+        {
+          ...data.shifts[1],
+          id: 22,
+          production_line: 103,
+          production_line_code: "DEMO-LINE-03",
+        },
+      ],
+      planBlocks: [
+        ...data.planBlocks,
+        ...linePlan(thirdAssignment, "Tea Packs", [10, 0], [14, 0]),
+      ],
+    };
+
+    render(
+      <MyLinesPanel
+        data={thirdLineData}
+        onRaiseIssue={vi.fn()}
+        onNavigate={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Line 3" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("routes all four quick actions through the existing workflows", async () => {
     const onRaiseIssue = vi.fn();
     const onNavigate = vi.fn();
@@ -274,8 +312,8 @@ describe("Team Leader My Lines reference board", () => {
     await actor.click(screen.getByRole("button", { name: "Material problem" }));
     await actor.click(screen.getByRole("button", { name: "Handover" }));
 
-    expect(onRaiseIssue).toHaveBeenNthCalledWith(1, assignments[0].id);
-    expect(onRaiseIssue).toHaveBeenNthCalledWith(2, assignments[1].id);
+    expect(onRaiseIssue).toHaveBeenNthCalledWith(1, assignments[0].id, "update");
+    expect(onRaiseIssue).toHaveBeenNthCalledWith(2, assignments[1].id, "escalation");
     expect(onNavigate).toHaveBeenNthCalledWith(1, "materials");
     expect(onNavigate).toHaveBeenNthCalledWith(2, "handover");
   });
