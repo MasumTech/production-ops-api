@@ -137,7 +137,7 @@ describe("tablet workspace", () => {
     expect(screen.getByText("AMBER")).toBeInTheDocument();
     expect(screen.getByText("Running with issues")).toBeInTheDocument();
     expect(screen.getByText("Chicken Curry")).toBeInTheDocument();
-    expect(screen.getByText("6,000")).toBeInTheDocument();
+    expect(screen.getByText("46% complete")).toBeInTheDocument();
     expect(screen.getByText("Film delivery is late.")).toBeInTheDocument();
     expect(screen.getByText("Stores contacted.")).toBeInTheDocument();
     expect(screen.getByText("Materials · Line contact")).toBeInTheDocument();
