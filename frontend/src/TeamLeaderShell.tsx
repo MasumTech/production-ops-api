@@ -79,7 +79,7 @@ export function TeamLeaderShell({
   onSignOut: () => void;
 }) {
   const [navigationOpen, setNavigationOpen] = useState(false);
-  const activeNavigation =
+  const activeNavigation: Exclude<WorkspaceTab, "issues"> =
     activeTab === "issues" ? "lines" : activeTab;
   const shiftWindow = getShiftWindow(operationalDate, shifts, shiftPattern);
   const dayWindow = getShiftWindow(operationalDate, shifts, "day");
