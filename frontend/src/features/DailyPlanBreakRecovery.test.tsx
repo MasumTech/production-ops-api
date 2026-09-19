@@ -3,7 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../api";
-import type { Assignment, BreakOpportunity, DailyPlanBlock } from "../types";
+import type {
+  Assignment,
+  BreakOpportunity,
+  DailyPlanBlock,
+  LineUpdate,
+  ShiftRecord,
+} from "../types";
 import { BreakRecoveryPanel } from "./BreakRecoveryPanel";
 import { DailyPlanPanel } from "./DailyPlanPanel";
 
@@ -54,6 +60,40 @@ const planBlocks: DailyPlanBlock[] = [
   },
 ];
 
+const shift: ShiftRecord = {
+  id: 90,
+  production_line: assignment.production_line,
+  production_line_code: assignment.production_line_code,
+  supervisor: 1,
+  supervisor_username: "operations.manager",
+  date: assignment.date,
+  shift_type: "day",
+  start_time: "07:00:00",
+  end_time: "18:00:00",
+  planned_output: 8400,
+  actual_output: 6888,
+  downtime_minutes: 4,
+  performance_percentage: 82,
+};
+
+const update: LineUpdate = {
+  id: 20,
+  assignment: assignment.id,
+  production_line: assignment.production_line,
+  production_line_code: assignment.production_line_code,
+  production_line_name: assignment.production_line_name,
+  status: "green",
+  current_product: "Salt & Pepper Chicken",
+  issue_summary: "",
+  action_taken: "Running to plan",
+  action_owner: null,
+  action_owner_username: null,
+  support_required: "",
+  requires_follow_up: false,
+  recorded_at: "2026-09-04T10:12:00Z",
+  next_update_due_at: "2026-09-04T11:12:00Z",
+};
+
 const opportunity: BreakOpportunity = {
   id: 13,
   assignment: assignment.id,
@@ -79,43 +119,131 @@ const opportunity: BreakOpportunity = {
 afterEach(() => vi.restoreAllMocks());
 
 describe("daily plan and break opportunity workspace", () => {
-  it("uses the configured weekday shift time in the plan heading", () => {
+  it("uses the configured shift time in the timeline board", () => {
     render(
       <DailyPlanPanel
         assignments={[{ ...assignment, date: "2026-09-14" }]}
         planBlocks={planBlocks}
         shifts={[
           {
-            id: 90,
-            production_line: assignment.production_line,
-            production_line_code: assignment.production_line_code,
-            supervisor: 1,
-            supervisor_username: "operations.manager",
+            ...shift,
             date: "2026-09-14",
-            shift_type: "day",
             start_time: "06:45:00",
             end_time: "18:00:00",
-            planned_output: 0,
-            actual_output: 0,
-            downtime_minutes: 0,
-            performance_percentage: null,
           },
         ]}
       />,
     );
 
-    expect(screen.getByText("06:45-18:00 day shift")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Daily plan summary")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        name: "Shift schedule · 06:45–18:00",
+      }),
+    ).toBeInTheDocument();
   });
 
-  it("shows the time-based product target and approved break without an edit form", () => {
-    render(<DailyPlanPanel assignments={[assignment]} planBlocks={planBlocks} />);
+  it("matches the read-only timeline and output-table reference", () => {
+    render(
+      <DailyPlanPanel
+        assignments={[assignment]}
+        planBlocks={planBlocks}
+        shifts={[shift]}
+        updates={[update]}
+      />,
+    );
 
-    expect(screen.getByRole("heading", { name: "Daily production plan" })).toBeInTheDocument();
-    expect(screen.getByText("Salt & Pepper Chicken")).toBeInTheDocument();
-    expect(screen.getByText(/SPC-01 · 24\/hour · 48 units/)).toBeInTheDocument();
-    expect(screen.getByText("Break 1 · 40 minutes")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /create|publish|edit/i })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Daily Plan" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Assigned-line product schedule, targets and planned breaks",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Filter Daily Plan by assigned line"),
+    ).toHaveDisplayValue("All assigned lines");
+    expect(
+      screen.getByLabelText("Daily Plan sequence view"),
+    ).toHaveDisplayValue("Product sequence");
+    expect(screen.getByText("1 line assigned")).toBeInTheDocument();
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Shift schedule · 07:00–18:00",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Production")).toBeInTheDocument();
+    expect(screen.getByText("Planned break")).toBeInTheDocument();
+    expect(screen.getAllByText("Salt & Pepper Chicken").length).toBeGreaterThan(0);
+    expect(screen.getByText("Break 1")).toBeInTheDocument();
+
+    const output = screen.getByLabelText("Output by assigned line");
+    expect(output).toHaveTextContent("Current product");
+    expect(output).toHaveTextContent("8,400");
+    expect(output).toHaveTextContent("6,888");
+    expect(output).toHaveTextContent("82%");
+    expect(output).toHaveTextContent(/ahead|behind/);
+    expect(
+      screen.getByText(
+        /Published plans are read-only\. Request a change for Operations Manager review\./i,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("routes a plan-change request for the selected assignment", async () => {
+    const onRequestPlanChange = vi.fn();
+    const actor = userEvent.setup();
+
+    render(
+      <DailyPlanPanel
+        assignments={[assignment]}
+        planBlocks={planBlocks}
+        shifts={[shift]}
+        updates={[update]}
+        onRequestPlanChange={onRequestPlanChange}
+      />,
+    );
+
+    await actor.click(
+      screen.getByRole("button", { name: "Request plan change" }),
+    );
+
+    expect(onRequestPlanChange).toHaveBeenCalledWith(assignment.id);
+  });
+
+  it("supports a legitimate third assigned line", () => {
+    const assignments = [
+      assignment,
+      {
+        ...assignment,
+        id: 8,
+        production_line: 4,
+        production_line_code: "DEMO-LINE-04",
+        production_line_name: "Secondary Filling",
+      },
+      {
+        ...assignment,
+        id: 9,
+        production_line: 5,
+        production_line_code: "DEMO-LINE-05",
+        production_line_name: "Final Packing",
+      },
+    ];
+
+    render(
+      <DailyPlanPanel
+        assignments={assignments}
+        planBlocks={planBlocks}
+      />,
+    );
+
+    expect(screen.getByText("3 lines assigned")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Team Leader shift schedule").querySelectorAll(
+        ".tl-plan-v2__row",
+      ),
+    ).toHaveLength(3);
   });
 
   it("lets the Team Leader confirm a suggested full break", async () => {
@@ -131,12 +259,21 @@ describe("daily plan and break opportunity workspace", () => {
       />,
     );
 
-    expect(screen.queryByRole("button", { name: "Plan break" })).not.toBeInTheDocument();
-    expect(screen.getByText("Team Leader confirms every decision.")).toBeInTheDocument();
-    await actor.click(screen.getByRole("button", { name: "Confirm full break" }));
+    expect(
+      screen.queryByRole("button", { name: "Plan break" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Team Leader confirms every decision."),
+    ).toBeInTheDocument();
+    await actor.click(
+      screen.getByRole("button", { name: "Confirm full break" }),
+    );
 
     await waitFor(() => expect(postSpy).toHaveBeenCalledOnce());
-    expect(postSpy).toHaveBeenCalledWith("/break-opportunities/13/confirm/", undefined);
+    expect(postSpy).toHaveBeenCalledWith(
+      "/break-opportunities/13/confirm/",
+      undefined,
+    );
     expect(onSaved).toHaveBeenCalledWith(
       "Break confirmed. The full 40-minute return time is protected.",
     );

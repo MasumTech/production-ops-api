@@ -499,6 +499,23 @@ export default function App() {
     setTab("issues");
   };
 
+
+  const openPlanChangeRequest = (assignmentId: number) => {
+    const assignment = data.assignments.find(
+      (item) => item.id === assignmentId,
+    );
+    setSelectedAssignment(assignmentId);
+    setCaptureMode("escalation");
+    setCapturePrefill({
+      category: "other",
+      summary: "Daily plan change request",
+      details: assignment
+        ? `Request a reviewed schedule change for ${assignment.production_line_code}. Published plan remains unchanged until Operations Manager approval.`
+        : "Request a reviewed schedule change. Published plan remains unchanged until Operations Manager approval.",
+    });
+    setTab("issues");
+  };
+
   if (!profile && !loading) return <LoginScreen onAuthenticated={() => void load()} />;
 
   if (loading && !profile) {
@@ -650,6 +667,9 @@ export default function App() {
             assignments={data.assignments}
             planBlocks={data.planBlocks}
             shifts={data.shifts}
+            updates={data.updates}
+            live={teamViewMode === "live"}
+            onRequestPlanChange={openPlanChangeRequest}
           />
         ) : null}
         {tab === "materials" && profile ? (

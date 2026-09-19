@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, time
 from io import StringIO
 from uuid import uuid4
 
@@ -115,6 +115,25 @@ def test_seed_demo_data_creates_complete_dataset():
         date=date(2026, 9, 2),
         shift_type=Shift.ShiftType.DAY,
     ).exists()
+    weekday_shift = Shift.objects.get(
+        production_line__code="DEMO-LINE-01",
+        date=date(2026, 9, 2),
+        shift_type=Shift.ShiftType.DAY,
+    )
+    assert weekday_shift.start_time == time(6, 45)
+    assert weekday_shift.end_time == time(18, 0)
+    weekday_first_block = (
+        DailyPlanBlock.objects.filter(
+            assignment__production_line__code="DEMO-LINE-01",
+            assignment__date=date(2026, 9, 2),
+        )
+        .order_by("sequence_number")
+        .first()
+    )
+    assert weekday_first_block is not None
+    assert weekday_first_block.planned_start_at.astimezone().time().replace(
+        tzinfo=None
+    ) == time(6, 45)
     assert (
         DailyPlanBlock.objects.filter(
             assignment__production_line__code="DEMO-LINE-01",
@@ -191,6 +210,49 @@ def test_seed_demo_data_creates_complete_dataset():
     assert "Demo dataset is ready." in output
     assert "Operational date: 2026-09-02" in output
     assert DEMO_PASSWORD not in output
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("operational_date", "expected_start"),
+    [
+        ("2026-09-04", time(6, 45)),
+        ("2026-09-05", time(7, 0)),
+        ("2026-09-06", time(7, 0)),
+    ],
+)
+@override_settings(DEBUG=True)
+def test_seed_demo_day_shift_start_follows_weekday_weekend_rule(
+    operational_date,
+    expected_start,
+):
+    run_seed(
+        date=operational_date,
+        password=DEMO_PASSWORD,
+        reset=True,
+    )
+
+    shift = Shift.objects.get(
+        production_line__code="DEMO-LINE-01",
+        date=date.fromisoformat(operational_date),
+        shift_type=Shift.ShiftType.DAY,
+    )
+    assert shift.start_time == expected_start
+    assert shift.end_time == time(18, 0)
+
+    first_block = (
+        DailyPlanBlock.objects.filter(
+            assignment__production_line__code="DEMO-LINE-01",
+            assignment__date=date.fromisoformat(operational_date),
+        )
+        .order_by("sequence_number")
+        .first()
+    )
+    assert first_block is not None
+    assert (
+        first_block.planned_start_at.astimezone().time().replace(tzinfo=None)
+        == expected_start
+    )
 
 
 @pytest.mark.django_db

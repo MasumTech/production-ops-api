@@ -28,7 +28,9 @@ test("manager can open the daily risk briefing after secure sign-in", async ({ p
   await expect(page.locator(".control-kpi")).toHaveCount(4);
   await expect(page.locator(".leader-card")).toHaveCount(3);
   await expect(page.locator(".leader-line")).toHaveCount(6);
-  await expect(page.locator(".downtime-bars article")).toHaveCount(11);
+  // The deterministic fixture is Friday, so the configured day shift starts
+  // at 06:45 and produces a 15-minute opening bucket plus 11 hourly buckets.
+  await expect(page.locator(".downtime-bars article")).toHaveCount(12);
 
   await workspace.getByRole("button", { name: "Team Leaders" }).click();
   await expect(page.getByRole("heading", { name: "Team Leaders & line control" })).toBeVisible();
@@ -67,9 +69,10 @@ test("team leader is routed to the assigned-line workspace", async ({ page }) =>
   await expect(workspace.getByRole("button")).toHaveCount(5);
   await workspace.getByRole("button", { name: "Daily Plan" }).click();
   await expect(
-    page.getByRole("heading", { name: "Daily production plan" }),
+    page.getByRole("heading", { name: "Daily Plan" }),
   ).toBeVisible();
-  await expect(page.locator(".daily-plan-card")).toHaveCount(2);
+  await expect(page.locator(".tl-plan-v2__row")).toHaveCount(2);
+  await expect(page.getByLabel("Output by assigned line")).toBeVisible();
 
   await workspace.getByRole("button", { name: "Materials" }).click();
   await expect(

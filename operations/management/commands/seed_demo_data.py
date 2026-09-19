@@ -477,6 +477,7 @@ class Command(BaseCommand):
 
     @staticmethod
     def _seed_shifts(operational_date, users, lines):
+        day_start = time(7, 0) if operational_date.weekday() >= 5 else time(6, 45)
         definitions = {
             key: (lines[key], planned, actual, downtime)
             for key, planned, actual, downtime in (
@@ -497,7 +498,7 @@ class Command(BaseCommand):
                 shift_type=Shift.ShiftType.DAY,
                 defaults={
                     "supervisor": users["manager"],
-                    "start_time": time(7, 0),
+                    "start_time": day_start,
                     "end_time": time(18, 0),
                     "planned_output": planned,
                     "actual_output": actual,
@@ -589,6 +590,10 @@ class Command(BaseCommand):
 
     @staticmethod
     def _seed_daily_plan(operational_date, users, assignments):
+        day_start_hour, day_start_minute = (
+            (7, 0) if operational_date.weekday() >= 5 else (6, 45)
+        )
+
         def planned_time(hour, minute=0):
             return timezone.make_aware(
                 datetime.combine(operational_date, time(hour, minute))
@@ -596,7 +601,17 @@ class Command(BaseCommand):
 
         schedules = {
             "line_1": (
-                ("production", 7, 0, 9, 0, "SPC-01", "Salt & Pepper Chicken", 24, None),
+                (
+                    "production",
+                    day_start_hour,
+                    day_start_minute,
+                    9,
+                    0,
+                    "SPC-01",
+                    "Salt & Pepper Chicken",
+                    24,
+                    None,
+                ),
                 ("break", 9, 0, 9, 40, "", "", None, 1),
                 (
                     "production",
@@ -623,7 +638,17 @@ class Command(BaseCommand):
                 ),
             ),
             "line_2": (
-                ("production", 7, 0, 10, 0, "ODM-01", "Oat Drink 1L", 20, None),
+                (
+                    "production",
+                    day_start_hour,
+                    day_start_minute,
+                    10,
+                    0,
+                    "ODM-01",
+                    "Oat Drink 1L",
+                    20,
+                    None,
+                ),
                 ("break", 10, 0, 10, 40, "", "", None, 1),
                 ("production", 10, 40, 14, 0, "BBQ-02", "BBQ Chicken Bites", 28, None),
                 ("break", 14, 0, 14, 40, "", "", None, 2),
@@ -643,7 +668,17 @@ class Command(BaseCommand):
         schedules.update(
             {
                 key: (
-                    ("production", 7, 0, 11, 0, code, name, target, None),
+                    (
+                        "production",
+                        day_start_hour,
+                        day_start_minute,
+                        11,
+                        0,
+                        code,
+                        name,
+                        target,
+                        None,
+                    ),
                     ("break", 11, 0, 11, 40, "", "", None, 1),
                     ("production", 11, 40, 15, 0, code, name, target, None),
                     ("break", 15, 0, 15, 40, "", "", None, 2),

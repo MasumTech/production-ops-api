@@ -6741,3 +6741,641 @@ td span {
     flex: 1 1 100%;
   }
 }
+
+
+/* Team Leader Daily Plan v2 — approved reference hierarchy. */
+.daily-plan-page {
+  color: #08214a;
+}
+
+.daily-plan-page .page-intro {
+  margin-bottom: 22px;
+}
+
+.daily-plan-page .page-intro .eyebrow {
+  margin-bottom: 8px;
+  color: #1a67a8;
+  font-size: 0.72rem;
+  letter-spacing: 0.13em;
+}
+
+.daily-plan-page .page-intro h2 {
+  margin-bottom: 8px;
+  color: #08214a;
+  font-size: clamp(2rem, 3vw, 2.75rem);
+  font-weight: 780;
+}
+
+.daily-plan-page .page-intro p {
+  max-width: 780px;
+  color: #5f7391;
+  font-size: 0.96rem;
+  line-height: 1.55;
+}
+
+.daily-plan-page .daily-plan-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 470px), 1fr));
+  gap: 18px;
+}
+
+.daily-plan-page .daily-plan-card {
+  border: 1px solid #cfdae7;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgb(18 52 91 / 6%);
+}
+
+.daily-plan-page .daily-plan-card__header {
+  min-height: 92px;
+  align-items: center;
+  padding: 17px 20px;
+  border-bottom: 1px solid #dce5ee;
+  background: #fff;
+}
+
+.daily-plan-card__line-label {
+  display: block;
+  margin-bottom: 4px;
+  color: #1d68a8;
+  font-size: 0.71rem;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+}
+
+.daily-plan-page .daily-plan-card__header h3 {
+  margin: 0;
+  color: #0a244b;
+  font-size: 1.2rem;
+  font-weight: 760;
+  letter-spacing: -0.02em;
+}
+
+.daily-plan-page .daily-plan-card__summary {
+  min-width: 110px;
+  text-align: right;
+}
+
+.daily-plan-page .daily-plan-card__summary strong {
+  color: #0b5fa8;
+  font-size: 1.7rem;
+  font-weight: 820;
+  line-height: 1;
+}
+
+.daily-plan-page .daily-plan-card__summary span {
+  margin-top: 5px;
+  color: #6a7d98;
+  font-size: 0.7rem;
+  font-weight: 650;
+}
+
+.daily-plan-page .daily-plan-block {
+  position: static;
+  inset: auto;
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) 98px;
+  min-width: 0;
+  min-height: 72px;
+  align-items: center;
+  align-content: normal;
+  gap: 14px;
+  overflow: visible;
+  padding: 12px 20px;
+  border: 0;
+  border-bottom: 1px solid #e3eaf2;
+  border-radius: 0;
+  color: inherit;
+  background: #fff;
+  font: inherit;
+  text-align: left;
+}
+
+.daily-plan-page .daily-plan-block time {
+  color: #0e5fa6;
+  font-size: 0.78rem;
+  font-weight: 820;
+  white-space: nowrap;
+}
+
+.daily-plan-block__content {
+  min-width: 0;
+}
+
+.daily-plan-page .daily-plan-block__content strong {
+  overflow: hidden;
+  color: #102d53;
+  font-size: 0.9rem;
+  font-weight: 760;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.daily-plan-page .daily-plan-block__content > span {
+  margin-top: 4px;
+  overflow: visible;
+  color: #6a7c95;
+  font-size: 0.72rem;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.daily-plan-page .daily-plan-block__duration {
+  margin: 0;
+  color: #6b7d95;
+  font-size: 0.7rem;
+  font-weight: 650;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.daily-plan-page .daily-plan-block--break {
+  border-block-color: #cddff1;
+  background: #edf5fd;
+}
+
+.daily-plan-page .daily-plan-block--break time,
+.daily-plan-page .daily-plan-block--break strong {
+  color: #135b98;
+}
+
+.daily-plan-page .daily-plan-card__footer {
+  min-height: 48px;
+  align-items: center;
+  padding: 11px 20px;
+  border-top: 0;
+  color: #6a7c95;
+  background: #f8fafc;
+  font-size: 0.69rem;
+}
+
+.daily-plan-page .daily-plan-card__footer strong {
+  color: #294764;
+  font-weight: 800;
+}
+
+.daily-plan-page .workflow-boundary {
+  margin-top: 18px;
+  padding: 11px 14px;
+  border-color: #d7e1eb;
+  border-radius: 8px;
+  color: #657891;
+  background: #f7f9fc;
+  font-size: 0.72rem;
+}
+
+@media (max-width: 760px) {
+  .daily-plan-page .daily-plan-card__header {
+    min-height: 82px;
+    padding: 14px 15px;
+  }
+
+  .daily-plan-page .daily-plan-block {
+    grid-template-columns: 80px minmax(0, 1fr);
+    min-height: 68px;
+    padding: 11px 15px;
+  }
+
+  .daily-plan-page .daily-plan-block__duration {
+    display: none;
+  }
+
+  .daily-plan-page .daily-plan-card__footer {
+    align-items: flex-start;
+    flex-direction: column;
+    padding-inline: 15px;
+  }
+}
+
+@media (max-width: 430px) {
+  .daily-plan-page .daily-plan-card__summary {
+    min-width: 86px;
+  }
+
+  .daily-plan-page .daily-plan-card__summary strong {
+    font-size: 1.45rem;
+  }
+
+  .daily-plan-page .daily-plan-block {
+    grid-template-columns: 74px minmax(0, 1fr);
+    gap: 9px;
+  }
+
+  .daily-plan-page .daily-plan-block__content strong {
+    white-space: normal;
+  }
+}
+
+
+/* Team Leader Daily Plan v2 — timeline control-board reference. */
+.tl-plan-v2 {
+  display: grid;
+  gap: 18px;
+  color: #08214a;
+}
+
+.tl-plan-v2__hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.tl-plan-v2__hero h1 {
+  margin: 0;
+  color: #08214a;
+  font-size: clamp(2.2rem, 3vw, 3rem);
+  font-weight: 790;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.tl-plan-v2__hero p {
+  margin: 7px 0 0;
+  color: #5b7095;
+  font-size: 1.03rem;
+  font-weight: 500;
+}
+
+.tl-plan-v2__request {
+  min-height: 48px;
+  padding: 0 28px;
+  border: 1px solid #0a6ceb;
+  border-radius: 5px;
+  color: #fff;
+  background: linear-gradient(180deg, #147cf4 0%, #0967dd 100%);
+  box-shadow: 0 5px 12px rgb(13 110 241 / 15%);
+  font-weight: 760;
+  white-space: nowrap;
+}
+
+.tl-plan-v2__controls {
+  display: grid;
+  grid-template-columns: minmax(210px, 285px) minmax(210px, 285px) auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.tl-plan-v2__controls select {
+  min-height: 46px;
+  margin: 0;
+  padding: 0 42px 0 14px;
+  border: 1px solid #c7d4e2;
+  border-radius: 5px;
+  color: #17355f;
+  background: #fff;
+  font-size: 0.9rem;
+}
+
+.tl-plan-v2__controls > span {
+  color: #4e6792;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.tl-plan-v2__schedule,
+.tl-plan-v2__output {
+  overflow: hidden;
+  border: 1px solid #d2dde8;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 7px 20px rgb(10 48 86 / 5%);
+}
+
+.tl-plan-v2__schedule > header {
+  display: flex;
+  min-height: 72px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 20px 12px;
+}
+
+.tl-plan-v2__schedule > header h2,
+.tl-plan-v2__output > h2 {
+  margin: 0;
+  color: #0a234b;
+  font-size: 1.16rem;
+  font-weight: 780;
+  letter-spacing: -0.02em;
+}
+
+.tl-plan-v2__legend {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  color: #1d365f;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.tl-plan-v2__legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tl-plan-v2__legend i {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+}
+
+.tl-plan-v2__legend .is-production {
+  background: #1578ec;
+}
+
+.tl-plan-v2__legend .is-break {
+  background: #8799b3;
+}
+
+.tl-plan-v2__axis {
+  display: grid;
+  grid-template-columns: var(--tl-plan-label-width, 150px) minmax(0, 1fr);
+  align-items: end;
+  padding: 0 18px;
+}
+
+.tl-plan-v2__axis-track {
+  position: relative;
+  height: 36px;
+  margin-inline: 0;
+}
+
+.tl-plan-v2__axis-track > span:not(.tl-plan-v2__snapshot-label) {
+  position: absolute;
+  bottom: 6px;
+  color: #5d7194;
+  font-size: 0.72rem;
+  font-weight: 600;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.tl-plan-v2__axis-track > span:not(.tl-plan-v2__snapshot-label):first-child {
+  transform: translateX(0);
+}
+
+.tl-plan-v2__axis-track > span:not(.tl-plan-v2__snapshot-label):last-of-type {
+  transform: translateX(-100%);
+}
+
+.tl-plan-v2__snapshot-label {
+  position: absolute;
+  z-index: 5;
+  top: -3px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: #fff;
+  background: #ef343d;
+  font-size: 0.7rem;
+  font-weight: 760;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.tl-plan-v2__rows {
+  display: grid;
+  gap: 10px;
+  padding: 0 18px 18px;
+}
+
+.tl-plan-v2__row {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  align-items: stretch;
+  min-height: 68px;
+}
+
+.tl-plan-v2__line {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  padding-right: 12px;
+}
+
+.tl-plan-v2__line strong {
+  color: #102d54;
+  font-size: 0.92rem;
+  font-weight: 790;
+}
+
+.tl-plan-v2__line span {
+  overflow: hidden;
+  color: #536a8c;
+  font-size: 0.7rem;
+  font-weight: 580;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-plan-v2__track {
+  position: relative;
+  min-width: 0;
+  min-height: 68px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #f0f4f8;
+}
+
+.tl-plan-v2__gridline {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #d7e1eb;
+}
+
+.tl-plan-v2__block {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  display: grid;
+  min-width: 34px;
+  align-content: center;
+  gap: 3px;
+  overflow: hidden;
+  padding: 8px 12px;
+  border-right: 1px solid rgb(255 255 255 / 80%);
+  color: #fff;
+  background: linear-gradient(180deg, #2b86f5 0%, #1b74df 100%);
+}
+
+.tl-plan-v2__block--break {
+  color: #243c60;
+  background: linear-gradient(180deg, #dce3eb 0%, #c8d1dc 100%);
+}
+
+.tl-plan-v2__block strong,
+.tl-plan-v2__block span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-plan-v2__block strong {
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.tl-plan-v2__block span {
+  font-size: 0.69rem;
+  font-weight: 580;
+  opacity: 0.95;
+}
+
+.tl-plan-v2__snapshot-line {
+  position: absolute;
+  z-index: 4;
+  top: -7px;
+  bottom: -7px;
+  width: 2px;
+  border-left: 2px dashed #ef343d;
+  transform: translateX(-1px);
+}
+
+.tl-plan-v2__empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #708099;
+  font-size: 0.78rem;
+}
+
+.tl-plan-v2__output {
+  padding: 0 18px 18px;
+}
+
+.tl-plan-v2__output > h2 {
+  padding: 17px 0 13px;
+}
+
+.tl-plan-v2__output .responsive-table {
+  overflow-x: auto;
+  border: 1px solid #d5e0ea;
+  border-radius: 5px;
+}
+
+.tl-plan-v2__output table {
+  min-width: 850px;
+}
+
+.tl-plan-v2__output th {
+  padding: 12px 15px;
+  border-bottom: 1px solid #d5e0ea;
+  color: #405b80;
+  background: #eef3f8;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.tl-plan-v2__output td {
+  padding: 13px 15px;
+  color: #18355e;
+  font-size: 0.8rem;
+  vertical-align: middle;
+}
+
+.tl-plan-v2__position {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 760;
+  white-space: nowrap;
+}
+
+.tl-plan-v2__position i {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+}
+
+.tl-plan-v2__position.is-ahead {
+  color: #0d8d44;
+}
+
+.tl-plan-v2__position.is-ahead i {
+  background: #16a152;
+}
+
+.tl-plan-v2__position.is-behind {
+  color: #e78d00;
+}
+
+.tl-plan-v2__position.is-behind i {
+  background: #f2a000;
+}
+
+.tl-plan-v2__readonly {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 18px 0 0;
+  padding: 13px 16px;
+  border: 1px solid #c5dff9;
+  border-radius: 5px;
+  color: #0a65d8;
+  background: #eef7ff;
+  font-size: 0.82rem;
+  font-weight: 590;
+}
+
+.tl-plan-v2__readonly .app-icon {
+  flex: 0 0 auto;
+  color: #0b73ed;
+}
+
+@media (max-width: 1050px) {
+  .tl-plan-v2__controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tl-plan-v2__controls > span {
+    grid-column: 1 / -1;
+  }
+
+  .tl-plan-v2__axis,
+  .tl-plan-v2__rows {
+    min-width: 880px;
+  }
+
+  .tl-plan-v2__schedule {
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 700px) {
+  .tl-plan-v2__hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tl-plan-v2__request {
+    width: 100%;
+  }
+
+  .tl-plan-v2__controls {
+    grid-template-columns: 1fr;
+  }
+
+  .tl-plan-v2__controls > span {
+    grid-column: auto;
+  }
+
+  .tl-plan-v2__schedule > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .tl-plan-v2__legend {
+    gap: 16px;
+  }
+
+  .tl-plan-v2__output {
+    padding-inline: 12px;
+  }
+}
