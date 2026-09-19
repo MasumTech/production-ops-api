@@ -131,14 +131,18 @@ describe("tablet workspace", () => {
       downtimeEvents: [],
     };
 
-    render(<MyLinesPanel data={data} onRaiseIssue={vi.fn()} onNavigate={vi.fn()} />);
+    render(<MyLinesPanel data={data} onRaiseIssue={vi.fn()} />);
 
     expect(screen.getByRole("heading", { name: "Line 3" })).toBeInTheDocument();
-    expect(screen.getByText("Behind plan")).toBeInTheDocument();
-    expect(screen.getAllByText("Chicken Curry").length).toBeGreaterThan(0);
+    expect(screen.getByText("AMBER")).toBeInTheDocument();
+    expect(screen.getByText("Running with issues")).toBeInTheDocument();
+    expect(screen.getByText("Chicken Curry")).toBeInTheDocument();
     expect(screen.getByText("6,000")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Today's product timeline 06:45 – 18:00" }))
-      .toBeInTheDocument();
+    expect(screen.getByText("Film delivery is late.")).toBeInTheDocument();
+    expect(screen.getByText("Stores contacted.")).toBeInTheDocument();
+    expect(screen.getByText("Materials · Line contact")).toBeInTheDocument();
+    expect(screen.queryByText("Today's product timeline", { exact: false }))
+      .not.toBeInTheDocument();
   });
 
   it("shows up to three valid Team Leader line assignments", () => {
@@ -164,7 +168,6 @@ describe("tablet workspace", () => {
           downtimeEvents: [],
         }}
         onRaiseIssue={vi.fn()}
-        onNavigate={vi.fn()}
       />,
     );
 
@@ -172,6 +175,56 @@ describe("tablet workspace", () => {
     expect(screen.getByRole("heading", { name: "Line 4" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Line 5" })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("routes line-level update and escalation actions for the selected card", async () => {
+    const onRaiseIssue = vi.fn();
+    const actor = userEvent.setup();
+    const data: WorkspaceData = {
+      assignments: [assignment],
+      updates: [
+        {
+          id: 10,
+          assignment: assignment.id,
+          production_line: assignment.production_line,
+          production_line_code: assignment.production_line_code,
+          production_line_name: assignment.production_line_name,
+          status: "red",
+          current_product: "Vegetable Spring Rolls",
+          issue_summary: "Quality hold",
+          action_taken: "Product isolated",
+          action_owner: null,
+          action_owner_username: null,
+          support_required: "QA / Operations",
+          requires_follow_up: true,
+          recorded_at: "2026-08-31T10:12:00Z",
+          next_update_due_at: "2026-08-31T10:12:00Z",
+        },
+      ],
+      materials: [],
+      escalations: [],
+      planBlocks: [],
+      breakOpportunities: [],
+      breaks: [],
+      handovers: [],
+      users: [],
+      shifts: [],
+      downtimeEvents: [],
+    };
+
+    render(<MyLinesPanel data={data} onRaiseIssue={onRaiseIssue} />);
+
+    const card = screen.getByRole("article", { name: "" });
+    expect(card).toBeInTheDocument();
+
+    const updateButtons = screen.getAllByRole("button", { name: "Update line" });
+    const issueButtons = screen.getAllByRole("button", { name: "Raise issue" });
+
+    await actor.click(updateButtons.at(-1)!);
+    expect(onRaiseIssue).toHaveBeenLastCalledWith(assignment.id, "update");
+
+    await actor.click(issueButtons.at(-1)!);
+    expect(onRaiseIssue).toHaveBeenLastCalledWith(assignment.id, "escalation");
   });
 
   it("posts a line update through the real API contract", async () => {
