@@ -198,6 +198,8 @@ export interface ShiftRecord {
   supervisor_username: string;
   date: string;
   shift_type: "day" | "night";
+  start_time: string;
+  end_time: string;
   planned_output: number;
   actual_output: number;
   downtime_minutes: number;
