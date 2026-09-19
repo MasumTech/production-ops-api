@@ -893,6 +893,7 @@ class ShiftViewSet(viewsets.ModelViewSet):
         if self.action in {"update", "partial_update", "destroy"}:
             return [IsStaffOrReadOnly()]
         return super().get_permissions()
+
     filter_backends = (
         filters.SearchFilter,
         filters.OrderingFilter,
