@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -52,7 +53,7 @@ afterEach(() => {
 });
 
 function renderPanel(
-  overrides: Partial<React.ComponentProps<typeof RaiseIssuePanel>> = {},
+  overrides: Partial<ComponentProps<typeof RaiseIssuePanel>> = {},
 ) {
   const onSaved = vi.fn().mockResolvedValue(undefined);
   const onCancel = vi.fn();
