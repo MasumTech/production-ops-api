@@ -164,24 +164,24 @@ async function installThreeLineReferenceData(page: Page) {
     },
   ];
 
-  await page.route("**/api/team-leader-assignments/my-lines/**", (route) =>
+  await page.route(/\/api\/team-leader-assignments\/my-lines\/\?.*/, (route) =>
     json(route, assignments),
   );
-  await page.route("**/api/hourly-line-updates/latest-status/**", (route) =>
+  await page.route(/\/api\/hourly-line-updates\/latest-status\/\?.*/, (route) =>
     json(route, updates),
   );
-  await page.route("**/api/shifts/**", (route) => json(route, shifts));
-  await page.route("**/api/downtime-events/**", (route) => json(route, []));
-  await page.route("**/api/daily-plan-blocks/**", (route) => json(route, []));
-  await page.route("**/api/product-material-readiness/**", (route) =>
+  await page.route(/\/api\/shifts\/\?.*/, (route) => json(route, shifts));
+  await page.route(/\/api\/downtime-events\/\?.*/, (route) => json(route, []));
+  await page.route(/\/api\/daily-plan-blocks\/\?.*/, (route) => json(route, []));
+  await page.route(/\/api\/product-material-readiness\/\?.*/, (route) =>
     json(route, []),
   );
-  await page.route("**/api/operational-escalations/**", (route) =>
+  await page.route(/\/api\/operational-escalations\/\?.*/, (route) =>
     json(route, []),
   );
-  await page.route("**/api/break-opportunities/**", (route) => json(route, []));
-  await page.route("**/api/shift-handovers/**", (route) => json(route, []));
-  await page.route("**/api/active-users/**", (route) => json(route, []));
+  await page.route(/\/api\/break-opportunities\/\?.*/, (route) => json(route, []));
+  await page.route(/\/api\/shift-handovers\/\?.*/, (route) => json(route, []));
+  await page.route(/\/api\/active-users\/\/?(?:\?.*)?$/, (route) => json(route, []));
 }
 
 test("My Lines matches the latest three-card reference", async ({ page }, testInfo) => {
