@@ -5957,25 +5957,59 @@ td span {
 }
 
 @media (max-width: 1080px) {
-  .team-control-meta {
+  .team-control-topbar {
     gap: 8px;
+    padding-inline: 12px;
+  }
+
+  .team-control-brand {
+    min-width: 188px;
+    max-width: 188px;
+  }
+
+  .team-control-brand strong {
+    overflow: hidden;
+    font-size: 0.98rem;
+    text-overflow: ellipsis;
+  }
+
+  .team-control-meta {
+    flex: 1 1 auto;
+    gap: 6px;
   }
 
   .team-control-date,
   .team-control-shift {
     min-width: 0;
-    padding-inline: 10px;
+    padding-inline: 9px;
+  }
+
+  .team-control-date {
+    flex: 0 1 150px;
   }
 
   .team-control-date span {
-    max-width: 108px;
+    max-width: 112px;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .team-control-shift {
+    flex: 1 1 170px;
+    max-width: 190px;
+  }
+
+  .team-control-view button {
+    min-width: 66px;
   }
 
   .team-control-refresh > span:last-child,
   .team-control-profile__identity {
     display: none;
+  }
+
+  .team-control-refresh__icon {
+    width: 42px;
   }
 
   .team-control-profile {
