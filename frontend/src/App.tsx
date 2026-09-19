@@ -14,7 +14,6 @@ import {
 } from "./api";
 import { ErrorBanner } from "./components";
 import productionLineIllustration from "./assets/production-line-illustration.png";
-import { NotificationCentre } from "./NotificationCentre";
 import { BreakRecoveryPanel } from "./features/BreakRecoveryPanel";
 import { DailyPlanPanel } from "./features/DailyPlanPanel";
 import { HandoversPanel } from "./features/HandoversPanel";
@@ -25,11 +24,7 @@ import { RaiseIssuePanel } from "./features/RaiseIssuePanel";
 import { SupportCompanion } from "./features/SupportCompanion";
 import { localDate } from "./format";
 import { connectOperationalEvents, type LiveConnectionState } from "./realtime";
-import {
-  WorkspaceBottomNavigation,
-  WorkspaceSidebar,
-} from "./WorkspaceNavigation";
-import type { WorkspaceNavigationItem } from "./WorkspaceNavigation";
+import { TeamLeaderShell } from "./TeamLeaderShell";
 import type {
   Assignment,
   BreakOpportunity,
@@ -97,23 +92,6 @@ const EMPTY_SUPPORT_DATA: SupportCompanionData = {
   escalations: [],
 };
 
-const NAV_ITEMS: Array<WorkspaceNavigationItem<WorkspaceTab>> = [
-  { id: "lines", label: "My lines", shortLabel: "Lines", icon: "home" },
-  { id: "plan", label: "Daily plan", shortLabel: "Plan", icon: "calendar" },
-  { id: "materials", label: "Materials", shortLabel: "Materials", icon: "package" },
-  { id: "breaks", label: "Break & recovery", shortLabel: "Breaks", icon: "coffee" },
-  { id: "handover", label: "Handover", shortLabel: "Handover", icon: "clipboard" },
-];
-
-function formatOperationalDate(value: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(`${value}T12:00:00`));
-}
-
 function useOnlineStatus(): boolean {
   const [online, setOnline] = useState(navigator.onLine);
 
@@ -130,7 +108,10 @@ function useOnlineStatus(): boolean {
   return online;
 }
 
-async function loadWorkspaceData(operationalDate: string): Promise<WorkspaceData> {
+async function loadWorkspaceData(
+  operationalDate: string,
+  shiftType: "day" | "night",
+): Promise<WorkspaceData> {
   const [
     assignments,
     updates,
@@ -144,35 +125,46 @@ async function loadWorkspaceData(operationalDate: string): Promise<WorkspaceData
     downtimeEvents,
   ] = await Promise.all([
     apiList<Assignment>(
-      `/team-leader-assignments/my-lines/?date=${operationalDate}`,
+      `/team-leader-assignments/my-lines/?date=${operationalDate}&shift_type=${shiftType}`,
     ),
     apiList<LineUpdate>(
-      `/hourly-line-updates/latest-status/?date=${operationalDate}`,
+      `/hourly-line-updates/latest-status/?date=${operationalDate}&shift_type=${shiftType}`,
     ),
     apiList<MaterialReadiness>(
-      `/product-material-readiness/?date=${operationalDate}&ordering=sequence_number`,
+      `/product-material-readiness/?date=${operationalDate}&shift_type=${shiftType}&ordering=sequence_number`,
     ),
-    apiList<Escalation>("/operational-escalations/?ordering=-raised_at"),
+    apiList<Escalation>(
+      `/operational-escalations/?date=${operationalDate}&shift_type=${shiftType}&ordering=-raised_at`,
+    ),
     apiList<DailyPlanBlock>(`/daily-plan-blocks/?date=${operationalDate}`),
     apiList<BreakOpportunity>(`/break-opportunities/?date=${operationalDate}`),
     apiList<ShiftHandover>("/shift-handovers/?ordering=-handed_over_at"),
     apiList<UserChoice>("/active-users/"),
-    apiList<ShiftRecord>(`/shifts/?date=${operationalDate}`),
-    apiList<DowntimeEvent>(`/downtime-events/?date=${operationalDate}&ordering=started_at`),
+    apiList<ShiftRecord>(
+      `/shifts/?date=${operationalDate}&shift_type=${shiftType}`,
+    ),
+    apiList<DowntimeEvent>(
+      `/downtime-events/?date=${operationalDate}&ordering=started_at`,
+    ),
   ]);
+
+  const assignmentIds = new Set(assignments.map((item) => item.id));
+  const shiftIds = new Set(shifts.map((item) => item.id));
 
   return {
     assignments,
     updates,
     materials,
     escalations,
-    planBlocks,
-    breakOpportunities,
+    planBlocks: planBlocks.filter((item) => assignmentIds.has(item.assignment)),
+    breakOpportunities: breakOpportunities.filter((item) =>
+      assignmentIds.has(item.assignment),
+    ),
     breaks: [],
     handovers,
     users,
     shifts,
-    downtimeEvents,
+    downtimeEvents: downtimeEvents.filter((item) => shiftIds.has(item.shift)),
   };
 }
 
@@ -352,6 +344,8 @@ export default function App() {
     details: string;
   } | null>(null);
   const [operationalDate, setOperationalDate] = useState(localDate());
+  const [teamShiftPattern, setTeamShiftPattern] = useState<"day" | "night">("day");
+  const [teamViewMode, setTeamViewMode] = useState<"live" | "historical">("live");
   const [toast, setToast] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [liveState, setLiveState] = useState<LiveConnectionState>("connecting");
@@ -370,7 +364,7 @@ export default function App() {
       } else if (currentProfile.workspace === "support") {
         setSupportData(await loadSupportData(operationalDate));
       } else {
-        setData(await loadWorkspaceData(operationalDate));
+        setData(await loadWorkspaceData(operationalDate, teamShiftPattern));
       }
       setLastUpdatedAt(new Date().toISOString());
     } catch (caught) {
@@ -383,7 +377,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [operationalDate]);
+  }, [operationalDate, teamShiftPattern]);
 
   const refresh = useCallback(async (): Promise<boolean> => {
     if (!profile) return false;
@@ -395,7 +389,7 @@ export default function App() {
       } else if (profile.workspace === "support") {
         setSupportData(await loadSupportData(operationalDate));
       } else {
-        setData(await loadWorkspaceData(operationalDate));
+        setData(await loadWorkspaceData(operationalDate, teamShiftPattern));
       }
       setLastUpdatedAt(new Date().toISOString());
       return true;
@@ -410,7 +404,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [operationalDate, profile]);
+  }, [operationalDate, profile, teamShiftPattern]);
 
   useEffect(() => {
     if (hasSession()) void load();
@@ -449,6 +443,10 @@ export default function App() {
       setLiveState("offline");
       return;
     }
+    if (profile.workspace === "team_leader" && teamViewMode === "historical") {
+      setLiveState("offline");
+      return;
+    }
     let refreshTimer: number | null = null;
     const disconnect = connectOperationalEvents({
       userId: profile.id,
@@ -464,7 +462,7 @@ export default function App() {
       if (refreshTimer !== null) window.clearTimeout(refreshTimer);
       disconnect();
     };
-  }, [online, profile, refresh]);
+  }, [online, profile, refresh, teamViewMode]);
 
   useEffect(() => {
     if (
@@ -583,7 +581,7 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
+    <>
       {!online ? (
         <div className="offline-banner" role="status">
           Offline: current screen remains visible, but new submissions need a connection.
@@ -597,49 +595,31 @@ export default function App() {
           </button>
         </div>
       ) : null}
-      <header className="topbar team-leader-topbar">
-        <strong className="team-leader-brand">LINE CONTROL ASSISTANT</strong>
-        <div className="team-leader-shift-meta">
-          <span>Shift&nbsp; 07:00 – 18:00</span>
-          <span className="team-leader-header-divider" aria-hidden="true" />
-          <details className="team-leader-tools">
-            <summary aria-label="Open workspace controls">
-              {formatOperationalDate(operationalDate)}
-            </summary>
-            <div className="team-leader-tools__menu">
-              <strong>{profile?.display_name}</strong>
-              <span>{liveState === "live" ? "Live connected" : "Snapshot mode"}</span>
-              <label>
-                Operational date
-                <input
-                  aria-label="Operational date"
-                  type="date"
-                  value={operationalDate}
-                  onChange={(event) => setOperationalDate(event.target.value)}
-                />
-              </label>
-              <NotificationCentre refreshToken={lastUpdatedAt} />
-              <button className="button button--ghost" onClick={() => void refresh()}>
-                Refresh
-              </button>
-              <button className="button button--ghost" onClick={signOut}>
-                Sign out
-              </button>
-            </div>
-          </details>
-        </div>
-      </header>
 
-      <WorkspaceSidebar
-        ariaLabel="Team Leader workspace"
-        navigationLabel="Team Leader sections"
-        items={NAV_ITEMS}
-        activeItem={tab}
-        onSelect={setTab}
-        className="team-leader-sidebar"
-      />
-
-      <main className="workspace">
+      {profile ? (
+        <TeamLeaderShell
+          profile={profile}
+          activeTab={tab}
+          operationalDate={operationalDate}
+          shifts={data.shifts}
+          shiftPattern={teamShiftPattern}
+          viewMode={teamViewMode}
+          online={online}
+          lastUpdatedAt={lastUpdatedAt}
+          busy={loading}
+          onSelectTab={setTab}
+          onOperationalDateChange={(value) => {
+            setOperationalDate(value);
+            setTeamViewMode(value === localDate() ? "live" : "historical");
+          }}
+          onShiftPatternChange={setTeamShiftPattern}
+          onViewModeChange={(value) => {
+            setTeamViewMode(value);
+            if (value === "live") setOperationalDate(localDate());
+          }}
+          onRefresh={() => void refresh()}
+          onSignOut={signOut}
+        >
         {error ? <ErrorBanner message={error} /> : null}
         {tab === "lines" ? (
           <MyLinesPanel
@@ -707,19 +687,14 @@ export default function App() {
             }}
           />
         ) : null}
-      </main>
+        </TeamLeaderShell>
+      ) : null}
 
-      <WorkspaceBottomNavigation
-        ariaLabel="Team Leader mobile workspace"
-        items={NAV_ITEMS}
-        activeItem={tab}
-        onSelect={setTab}
-      />
       {toast ? (
         <div className="toast" role="status">
           {toast}
         </div>
       ) : null}
-    </div>
+    </>
   );
 }
