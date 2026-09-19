@@ -50,7 +50,7 @@ test("team leader is routed to the assigned-line workspace", async ({ page }) =>
   await signIn(page, "demo.leader");
 
   await expect(page.getByText("Operations Control Board", { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "My lines" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "My Lines" })).toBeVisible();
   await page.getByLabel("Operational date").fill(operationalDate);
   await expect(page.getByLabel("Shift pattern")).toHaveValue("day");
   await expect(page.getByRole("group", { name: "Data view" })).toBeVisible();
