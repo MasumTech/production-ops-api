@@ -802,6 +802,11 @@ class ProductMaterialReadiness(TimeStampedModel):
         blank=True,
     )
     expected_available_at = models.DateTimeField(null=True, blank=True)
+    needed_by_at = models.DateTimeField(null=True, blank=True)
+    risk_summary = models.CharField(max_length=160, blank=True)
+    responsible_role = models.CharField(max_length=80, blank=True)
+    expected_action = models.CharField(max_length=160, blank=True)
+    next_action = models.CharField(max_length=160, blank=True)
     hold_reason = models.TextField(blank=True)
     released_at = models.DateTimeField(null=True, blank=True)
     released_by = models.ForeignKey(
