@@ -26,8 +26,8 @@ async function signInAsTeamLeader(page: Page) {
 
 for (const viewport of viewports) {
   test(`Team Leader common shell matches the ${viewport.name} layout`, async ({ page }, testInfo) => {
-    await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await signInAsTeamLeader(page);
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
 
     await expect(
       page.getByText("Operations Control Board", { exact: true }),
