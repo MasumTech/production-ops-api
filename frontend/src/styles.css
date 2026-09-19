@@ -6830,11 +6830,24 @@ td span {
 }
 
 .daily-plan-page .daily-plan-block {
+  position: static;
+  inset: auto;
+  display: grid;
   grid-template-columns: 88px minmax(0, 1fr) 98px;
+  min-width: 0;
   min-height: 72px;
+  align-items: center;
+  align-content: normal;
   gap: 14px;
+  overflow: visible;
   padding: 12px 20px;
+  border: 0;
   border-bottom: 1px solid #e3eaf2;
+  border-radius: 0;
+  color: inherit;
+  background: #fff;
+  font: inherit;
+  text-align: left;
 }
 
 .daily-plan-page .daily-plan-block time {
@@ -6859,8 +6872,11 @@ td span {
 
 .daily-plan-page .daily-plan-block__content > span {
   margin-top: 4px;
+  overflow: visible;
   color: #6a7c95;
   font-size: 0.72rem;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .daily-plan-page .daily-plan-block__duration {
