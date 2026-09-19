@@ -345,6 +345,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [tab, setTab] = useState<WorkspaceTab>("lines");
   const [selectedAssignment, setSelectedAssignment] = useState<number | null>(null);
+  const [captureMode, setCaptureMode] = useState<"update" | "escalation">("update");
   const [operationalDate, setOperationalDate] = useState(localDate());
   const [toast, setToast] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
@@ -471,8 +472,12 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [liveState, online, profile, refresh]);
 
-  const openIssueFor = (assignmentId: number) => {
+  const openIssueFor = (
+    assignmentId: number,
+    mode: "update" | "escalation" = "update",
+  ) => {
     setSelectedAssignment(assignmentId);
+    setCaptureMode(mode);
     setTab("issues");
   };
 
@@ -629,9 +634,10 @@ export default function App() {
               Back to My Lines
             </button>
             <RaiseIssuePanel
-              assignments={data.assignments.slice(0, 2)}
+              assignments={data.assignments.slice(0, 3)}
               users={data.users}
               selectedAssignment={selectedAssignment}
+              initialMode={captureMode}
               onSaved={async (message) => {
                 if (online) await refresh();
                 setToast(message);
