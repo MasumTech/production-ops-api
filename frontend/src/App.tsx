@@ -24,6 +24,7 @@ import { MyLinesPanel } from "./features/MyLinesPanel";
 import { RaiseIssuePanel } from "./features/RaiseIssuePanel";
 import { SupportCompanion } from "./features/SupportCompanion";
 import { localDate } from "./format";
+import { getShiftWindow } from "./shiftTiming";
 import { connectOperationalEvents, type LiveConnectionState } from "./realtime";
 import {
   WorkspaceBottomNavigation,
@@ -582,6 +583,12 @@ export default function App() {
     );
   }
 
+  const teamLeaderShiftWindow = getShiftWindow(
+    operationalDate,
+    data.shifts,
+    "day",
+  );
+
   return (
     <div className="app-shell">
       {!online ? (
@@ -600,7 +607,9 @@ export default function App() {
       <header className="topbar team-leader-topbar">
         <strong className="team-leader-brand">LINE CONTROL ASSISTANT</strong>
         <div className="team-leader-shift-meta">
-          <span>Shift&nbsp; 07:00 – 18:00</span>
+          <span>
+            Shift&nbsp; {teamLeaderShiftWindow.startLabel} – {teamLeaderShiftWindow.endLabel}
+          </span>
           <span className="team-leader-header-divider" aria-hidden="true" />
           <details className="team-leader-tools">
             <summary aria-label="Open workspace controls">
