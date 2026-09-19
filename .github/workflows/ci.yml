@@ -181,6 +181,7 @@ jobs:
           path: |
             frontend/test-results/**/login-*.png
             frontend/test-results/**/manager-shell-*.png
+            frontend/test-results/**/team-leader-shell-*.png
           if-no-files-found: error
           retention-days: 7
 
