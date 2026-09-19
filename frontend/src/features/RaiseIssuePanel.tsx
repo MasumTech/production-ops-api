@@ -21,14 +21,16 @@ export function RaiseIssuePanel({
   assignments,
   users,
   selectedAssignment,
+  initialMode = "update",
   onSaved,
 }: {
   assignments: Assignment[];
   users: UserChoice[];
   selectedAssignment: number | null;
+  initialMode?: "update" | "escalation";
   onSaved: (message: string) => Promise<void>;
 }) {
-  const [mode, setMode] = useState<"update" | "escalation">("update");
+  const [mode, setMode] = useState<"update" | "escalation">(initialMode);
   const [assignment, setAssignment] = useState(selectedAssignment?.toString() ?? "");
   const [status, setStatus] = useState("green");
   const [currentProduct, setCurrentProduct] = useState("");
@@ -51,7 +53,8 @@ export function RaiseIssuePanel({
 
   useEffect(() => {
     if (selectedAssignment) setAssignment(String(selectedAssignment));
-  }, [selectedAssignment]);
+    setMode(initialMode);
+  }, [initialMode, selectedAssignment]);
 
   useEffect(() => {
     if (status === "red") setFollowUp(true);
