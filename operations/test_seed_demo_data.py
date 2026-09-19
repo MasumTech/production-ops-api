@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, time
 from io import StringIO
 from uuid import uuid4
 
@@ -138,9 +138,25 @@ def test_seed_demo_data_creates_complete_dataset():
         == 42
     )
     for shift in Shift.objects.filter(date=date(2026, 9, 2)):
+        assert shift.start_time == time(6, 45)
+        assert shift.end_time == time(18, 0)
         assert shift.downtime_minutes == sum(
             event.duration_minutes for event in shift.downtime_events.all()
         )
+
+    first_plan_block = DailyPlanBlock.objects.filter(
+        assignment__date=date(2026, 9, 2),
+        block_type=DailyPlanBlock.BlockType.PRODUCTION,
+    ).order_by("planned_start_at").first()
+    assert first_plan_block is not None
+    assert first_plan_block.planned_start_at.date() == date(2026, 9, 2)
+    assert first_plan_block.planned_start_at.time().replace(tzinfo=None) == time(6, 45)
+
+    material_eta = ProductMaterialReadiness.objects.exclude(
+        expected_available_at=None,
+    ).first()
+    assert material_eta is not None
+    assert material_eta.expected_available_at.date() == date(2026, 9, 2)
     assert list(
         TeamLeaderAssignment.objects.filter(
             date=date(2026, 9, 2),
@@ -184,6 +200,7 @@ def test_seed_demo_data_creates_complete_dataset():
     }
     handover = ShiftHandover.objects.get()
     assert handover.status == ShiftHandover.Status.PENDING
+    assert handover.handed_over_at.date() == date(2026, 9, 2)
     assert handover.escalations.filter(
         status=OperationalEscalation.Status.OPEN,
     ).exists()
@@ -191,6 +208,21 @@ def test_seed_demo_data_creates_complete_dataset():
     assert "Demo dataset is ready." in output
     assert "Operational date: 2026-09-02" in output
     assert DEMO_PASSWORD not in output
+
+
+@pytest.mark.django_db
+@override_settings(DEBUG=True)
+def test_seed_demo_data_uses_weekend_day_shift_start():
+    run_seed(
+        date="2026-09-05",
+        password=DEMO_PASSWORD,
+        reset=True,
+    )
+
+    shifts = Shift.objects.filter(date=date(2026, 9, 5))
+    assert shifts.count() == 6
+    assert all(shift.start_time == time(7, 0) for shift in shifts)
+    assert all(shift.end_time == time(18, 0) for shift in shifts)
 
 
 @pytest.mark.django_db

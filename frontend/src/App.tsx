@@ -24,6 +24,7 @@ import { MyLinesPanel } from "./features/MyLinesPanel";
 import { RaiseIssuePanel } from "./features/RaiseIssuePanel";
 import { SupportCompanion } from "./features/SupportCompanion";
 import { localDate } from "./format";
+import { getShiftWindow } from "./shiftTiming";
 import { connectOperationalEvents, type LiveConnectionState } from "./realtime";
 import {
   WorkspaceBottomNavigation,
@@ -345,6 +346,12 @@ export default function App() {
   const [error, setError] = useState("");
   const [tab, setTab] = useState<WorkspaceTab>("lines");
   const [selectedAssignment, setSelectedAssignment] = useState<number | null>(null);
+  const [captureMode, setCaptureMode] = useState<"update" | "escalation">("update");
+  const [capturePrefill, setCapturePrefill] = useState<{
+    category: string;
+    summary: string;
+    details: string;
+  } | null>(null);
   const [operationalDate, setOperationalDate] = useState(localDate());
   const [toast, setToast] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
@@ -471,8 +478,27 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [liveState, online, profile, refresh]);
 
-  const openIssueFor = (assignmentId: number) => {
+  const openIssueFor = (
+    assignmentId: number,
+    mode: "update" | "escalation" = "update",
+  ) => {
     setSelectedAssignment(assignmentId);
+    setCaptureMode(mode);
+    setCapturePrefill(null);
+    setTab("issues");
+  };
+
+  const openMaterialIssue = (item: MaterialReadiness) => {
+    setSelectedAssignment(item.assignment);
+    setCaptureMode("escalation");
+    setCapturePrefill({
+      category: "material",
+      summary: `${item.product_name} material risk`,
+      details:
+        item.status === "short"
+          ? `${item.shortage_quantity} units short. Needed by ${item.expected_available_at ?? "time not set"}.`
+          : item.hold_reason || item.notes || "Material requires follow-up.",
+    });
     setTab("issues");
   };
 
@@ -557,6 +583,12 @@ export default function App() {
     );
   }
 
+  const teamLeaderShiftWindow = getShiftWindow(
+    operationalDate,
+    data.shifts,
+    "day",
+  );
+
   return (
     <div className="app-shell">
       {!online ? (
@@ -575,7 +607,9 @@ export default function App() {
       <header className="topbar team-leader-topbar">
         <strong className="team-leader-brand">LINE CONTROL ASSISTANT</strong>
         <div className="team-leader-shift-meta">
-          <span>Shift&nbsp; 07:00 – 18:00</span>
+          <span>
+            Shift&nbsp; {teamLeaderShiftWindow.startLabel} – {teamLeaderShiftWindow.endLabel}
+          </span>
           <span className="team-leader-header-divider" aria-hidden="true" />
           <details className="team-leader-tools">
             <summary aria-label="Open workspace controls">
@@ -629,9 +663,11 @@ export default function App() {
               Back to My Lines
             </button>
             <RaiseIssuePanel
-              assignments={data.assignments.slice(0, 2)}
+              assignments={data.assignments.slice(0, 3)}
               users={data.users}
               selectedAssignment={selectedAssignment}
+              initialMode={captureMode}
+              initialEscalation={capturePrefill}
               onSaved={async (message) => {
                 if (online) await refresh();
                 setToast(message);
@@ -643,6 +679,7 @@ export default function App() {
           <DailyPlanPanel
             assignments={data.assignments}
             planBlocks={data.planBlocks}
+            shifts={data.shifts}
           />
         ) : null}
         {tab === "materials" && profile ? (
@@ -650,6 +687,7 @@ export default function App() {
             assignments={data.assignments}
             materials={data.materials}
             users={data.users}
+            onRaiseIssue={openMaterialIssue}
             onSaved={async (message) => {
               if (online) await refresh();
               setToast(message);
