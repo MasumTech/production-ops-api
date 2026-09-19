@@ -5816,7 +5816,7 @@ td span {
 .team-control-layout {
   display: grid;
   min-height: calc(100vh - 70px);
-  grid-template-columns: 250px minmax(0, 1fr);
+  grid-template-columns: 258px minmax(0, 1fr);
 }
 
 .team-control-sidebar.sidebar {
