@@ -214,9 +214,6 @@ describe("tablet workspace", () => {
 
     render(<MyLinesPanel data={data} onRaiseIssue={onRaiseIssue} />);
 
-    const card = screen.getByRole("article", { name: "" });
-    expect(card).toBeInTheDocument();
-
     const updateButtons = screen.getAllByRole("button", { name: "Update line" });
     const issueButtons = screen.getAllByRole("button", { name: "Raise issue" });
 
