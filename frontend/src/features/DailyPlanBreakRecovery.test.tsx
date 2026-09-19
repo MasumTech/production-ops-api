@@ -79,6 +79,35 @@ const opportunity: BreakOpportunity = {
 afterEach(() => vi.restoreAllMocks());
 
 describe("daily plan and break opportunity workspace", () => {
+  it("uses the configured weekday shift time in the plan heading", () => {
+    render(
+      <DailyPlanPanel
+        assignments={[{ ...assignment, date: "2026-09-14" }]}
+        planBlocks={planBlocks}
+        shifts={[
+          {
+            id: 90,
+            production_line: assignment.production_line,
+            production_line_code: assignment.production_line_code,
+            supervisor: 1,
+            supervisor_username: "operations.manager",
+            date: "2026-09-14",
+            shift_type: "day",
+            start_time: "06:45:00",
+            end_time: "18:00:00",
+            planned_output: 0,
+            actual_output: 0,
+            downtime_minutes: 0,
+            performance_percentage: null,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("06:45-18:00 day shift")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Daily plan summary")).not.toBeInTheDocument();
+  });
+
   it("shows the time-based product target and approved break without an edit form", () => {
     render(<DailyPlanPanel assignments={[assignment]} planBlocks={planBlocks} />);
 
@@ -103,6 +132,8 @@ describe("daily plan and break opportunity workspace", () => {
     );
 
     expect(screen.queryByRole("button", { name: "Plan break" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Apply filters" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Historical loss")).not.toBeInTheDocument();
     expect(screen.getByText("Team Leader confirms every decision.")).toBeInTheDocument();
     await actor.click(screen.getByRole("button", { name: "Confirm full break" }));
 
