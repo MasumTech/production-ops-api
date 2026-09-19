@@ -21,62 +21,99 @@ async function signInAsTeamLeader(page: Page) {
   await expect(page.locator(".team-control-card")).toHaveCount(2);
 }
 
-test("Daily Plan matches the approved Team Leader reference", async ({
+test("Daily Plan matches the approved timeline reference", async ({
   page,
 }, testInfo) => {
-  await page.setViewportSize({ width: 1904, height: 900 });
+  await page.setViewportSize({ width: 1536, height: 960 });
   await signInAsTeamLeader(page);
 
   const workspace = page.locator('aside[aria-label="Team Leader workspace"]');
   await workspace.getByRole("button", { name: "Daily Plan" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Daily production plan" }),
+    page.getByRole("heading", { name: "Daily Plan" }),
   ).toBeVisible();
-  await expect(page.getByText("07:00–18:00 day shift")).toBeVisible();
-  await expect(page.locator(".daily-plan-card")).toHaveCount(2);
+  await expect(
+    page.getByText(
+      "Assigned-line product schedule, targets and planned breaks",
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Request plan change" }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Filter Daily Plan by assigned line"),
+  ).toHaveDisplayValue("All assigned lines");
+  await expect(
+    page.getByLabel("Daily Plan sequence view"),
+  ).toHaveDisplayValue("Product sequence");
+  await expect(page.getByText("2 lines assigned")).toBeVisible();
 
-  const lineOne = page.locator(".daily-plan-card").filter({
-    hasText: "Primary Filling",
-  });
-  const lineTwo = page.locator(".daily-plan-card").filter({
-    hasText: "Secondary Packing",
-  });
+  await expect(
+    page.getByRole("heading", { name: /Shift schedule · 07:00–18:00/ }),
+  ).toBeVisible();
+  await expect(page.getByText("Production", { exact: true })).toBeVisible();
+  await expect(page.getByText("Planned break", { exact: true })).toBeVisible();
+  await expect(page.locator(".tl-plan-v2__row")).toHaveCount(2);
+  await expect(page.locator(".tl-plan-v2__block--production")).toHaveCount(6);
+  await expect(page.locator(".tl-plan-v2__block--break")).toHaveCount(4);
 
-  await expect(lineOne.getByText("LINE 1")).toBeVisible();
-  await expect(lineOne.getByText("225")).toBeVisible();
+  const lineOne = page.locator(".tl-plan-v2__row").filter({
+    hasText: "Line 1",
+  });
+  const lineTwo = page.locator(".tl-plan-v2__row").filter({
+    hasText: "Line 2",
+  });
   await expect(lineOne.getByText("Salt & Pepper Chicken")).toBeVisible();
   await expect(lineOne.getByText("Sweet & Sour Chicken")).toBeVisible();
   await expect(lineOne.getByText("Vegetable Spring Rolls")).toBeVisible();
-  await expect(lineOne.getByText("Break 1 · 40 minutes")).toBeVisible();
-  await expect(lineOne.getByText("Break 2 · 40 minutes")).toBeVisible();
-
-  await expect(lineTwo.getByText("LINE 2")).toBeVisible();
-  await expect(lineTwo.getByText("233")).toBeVisible();
   await expect(lineTwo.getByText("Oat Drink 1L")).toBeVisible();
   await expect(lineTwo.getByText("BBQ Chicken Bites")).toBeVisible();
   await expect(lineTwo.getByText("Vegetable Mix Filling")).toBeVisible();
 
-  const firstPlanRow = lineOne.locator(".daily-plan-block").first();
-  await expect(firstPlanRow).toHaveCSS("position", "static");
-  await expect(firstPlanRow).toHaveCSS("display", "grid");
-  const rowBox = await firstPlanRow.boundingBox();
-  const cardBox = await lineOne.boundingBox();
-  expect(rowBox).not.toBeNull();
-  expect(cardBox).not.toBeNull();
-  expect(rowBox!.width).toBeLessThanOrEqual(cardBox!.width);
-  expect(rowBox!.height).toBeLessThan(100);
-
+  const output = page.getByLabel("Output by assigned line");
+  await expect(output.getByRole("heading", { name: "Output by assigned line" })).toBeVisible();
+  await expect(output.getByText("8,400")).toBeVisible();
+  await expect(output.getByText("6,888")).toBeVisible();
+  await expect(output.getByText("6,000")).toBeVisible();
+  await expect(output.getByText("4,020")).toBeVisible();
+  await expect(output.getByText("82%")).toBeVisible();
+  await expect(output.getByText("67%")).toBeVisible();
   await expect(
-    page.getByText(/Approved production, food-safety, quality and escalation procedures remain authoritative/i),
+    page.getByText(
+      /Published plans are read-only\. Request a change for Operations Manager review\./i,
+    ),
   ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: /create|publish|edit plan/i }),
-  ).toHaveCount(0);
+
+  const firstProduction = page.locator(".tl-plan-v2__block--production").first();
+  await expect(firstProduction).toHaveCSS("position", "absolute");
+  const blockBox = await firstProduction.boundingBox();
+  const trackBox = await page.locator(".tl-plan-v2__track").first().boundingBox();
+  expect(blockBox).not.toBeNull();
+  expect(trackBox).not.toBeNull();
+  expect(blockBox!.width).toBeLessThan(trackBox!.width);
+  expect(blockBox!.height).toBeLessThanOrEqual(trackBox!.height);
 
   await page.screenshot({
     path: testInfo.outputPath("team-leader-daily-plan-v2-reference.png"),
     animations: "disabled",
     fullPage: false,
   });
+});
+
+test("Request plan change routes to the selected-line review workflow", async ({
+  page,
+}) => {
+  await signInAsTeamLeader(page);
+  const workspace = page.locator('aside[aria-label="Team Leader workspace"]');
+  await workspace.getByRole("button", { name: "Daily Plan" }).click();
+
+  await page.getByRole("button", { name: "Request plan change" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: /Raise issue|Operational escalation/i }),
+  ).toBeVisible();
+  await expect(
+    page.getByDisplayValue("Daily plan change request"),
+  ).toBeVisible();
 });
