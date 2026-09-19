@@ -444,7 +444,7 @@ export default function App() {
       return;
     }
     if (profile.workspace === "team_leader" && teamViewMode === "historical") {
-      setLiveState("snapshot");
+      setLiveState("offline");
       return;
     }
     let refreshTimer: number | null = null;
