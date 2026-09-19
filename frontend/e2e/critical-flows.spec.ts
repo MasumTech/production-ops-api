@@ -49,11 +49,13 @@ test("manager can open the daily risk briefing after secure sign-in", async ({ p
 test("team leader is routed to the assigned-line workspace", async ({ page }) => {
   await signIn(page, "demo.leader");
 
-  await expect(page.getByText("LINE CONTROL ASSISTANT")).toBeVisible();
+  await expect(page.getByText("Operations Control Board", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "My lines" })).toBeVisible();
-  await page.locator('summary[aria-label="Open workspace controls"]').click();
   await page.getByLabel("Operational date").fill(operationalDate);
-  await page.locator('summary[aria-label="Open workspace controls"]').click();
+  await expect(page.getByLabel("Shift pattern")).toHaveValue("day");
+  await expect(page.getByRole("group", { name: "Data view" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Alerts/ })).toBeVisible();
+  await expect(page.getByLabel(/Open profile menu/)).toBeVisible();
   await expect(page.locator(".team-line-card")).toHaveCount(2);
   await expect(
     page.getByRole("heading", { name: "Today's product timeline 07:00 – 18:00" }),
@@ -70,7 +72,7 @@ test("team leader is routed to the assigned-line workspace", async ({ page }) =>
   const workspace = page.locator('aside[aria-label="Team Leader workspace"]');
   await expect(workspace).toBeVisible();
   await expect(workspace.getByRole("button")).toHaveCount(5);
-  await workspace.getByRole("button", { name: "Daily plan" }).click();
+  await workspace.getByRole("button", { name: "Daily Plan" }).click();
   await expect(
     page.getByRole("heading", { name: "Daily production plan" }),
   ).toBeVisible();
@@ -84,12 +86,12 @@ test("team leader is routed to the assigned-line workspace", async ({ page }) =>
     await expect(page.getByText(status, { exact: true }).first()).toBeVisible();
   }
 
-  await workspace.getByRole("button", { name: "Break & recovery" }).click();
+  await workspace.getByRole("button", { name: "Break & Recovery" }).click();
   await expect(page.getByRole("heading", { name: "Break & Recovery" })).toBeVisible();
   await expect(page.getByText("Recovered", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Break recovery summary").getByText("Suggested", { exact: true })).toBeVisible();
 
-  await workspace.getByRole("button", { name: "Handover" }).click();
+  await workspace.getByRole("button", { name: "Shift Handover" }).click();
   await expect(page.getByRole("heading", { name: "Shift handover" })).toBeVisible();
   await expect(page.getByText("Pending", { exact: true })).toBeVisible();
 });
