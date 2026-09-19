@@ -132,6 +132,8 @@ describe("daily plan and break opportunity workspace", () => {
     );
 
     expect(screen.queryByRole("button", { name: "Plan break" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Apply filters" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Historical loss")).not.toBeInTheDocument();
     expect(screen.getByText("Team Leader confirms every decision.")).toBeInTheDocument();
     await actor.click(screen.getByRole("button", { name: "Confirm full break" }));
 
