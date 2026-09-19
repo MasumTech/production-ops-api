@@ -1,4 +1,4 @@
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -260,6 +260,77 @@ def test_daily_plan_production_block_calculates_planned_units(
     block.full_clean()
 
     assert block.planned_units == 60
+
+
+@pytest.mark.django_db
+def test_weekday_daily_plan_accepts_configured_0645_shift_start(
+    production_line,
+    supervisor,
+):
+    assignment_date = date(2026, 9, 4)  # Friday
+    assignment = TeamLeaderAssignment.objects.create(
+        team_leader=supervisor,
+        production_line=production_line,
+        date=assignment_date,
+        shift_type=Shift.ShiftType.DAY,
+    )
+    Shift.objects.create(
+        production_line=production_line,
+        supervisor=supervisor,
+        date=assignment_date,
+        shift_type=Shift.ShiftType.DAY,
+        start_time=time(6, 45),
+        end_time=time(18, 0),
+    )
+    block = DailyPlanBlock(
+        assignment=assignment,
+        sequence_number=1,
+        block_type=DailyPlanBlock.BlockType.PRODUCTION,
+        planned_start_at=timezone.make_aware(
+            datetime.combine(assignment_date, time(6, 45))
+        ),
+        planned_end_at=timezone.make_aware(
+            datetime.combine(assignment_date, time(8, 0))
+        ),
+        product_code="EARLY-01",
+        product_name="Early weekday product",
+        target_units_per_hour=24,
+        created_by=supervisor,
+    )
+
+    block.full_clean()
+
+
+@pytest.mark.django_db
+def test_weekend_daily_plan_defaults_to_0700_start(
+    production_line,
+    supervisor,
+):
+    assignment_date = date(2026, 9, 5)  # Saturday
+    assignment = TeamLeaderAssignment.objects.create(
+        team_leader=supervisor,
+        production_line=production_line,
+        date=assignment_date,
+        shift_type=Shift.ShiftType.DAY,
+    )
+    early_block = DailyPlanBlock(
+        assignment=assignment,
+        sequence_number=1,
+        block_type=DailyPlanBlock.BlockType.PRODUCTION,
+        planned_start_at=timezone.make_aware(
+            datetime.combine(assignment_date, time(6, 45))
+        ),
+        planned_end_at=timezone.make_aware(
+            datetime.combine(assignment_date, time(8, 0))
+        ),
+        product_code="EARLY-02",
+        product_name="Too early weekend product",
+        target_units_per_hour=24,
+        created_by=supervisor,
+    )
+
+    with pytest.raises(ValidationError, match="07:00–18:00"):
+        early_block.full_clean()
 
 
 @pytest.mark.django_db
