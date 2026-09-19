@@ -6,6 +6,7 @@ import {
   dateTimeToShiftMinutes,
   elapsedShiftFraction,
   formatClockMinutes,
+  formatScheduleClock,
   getShiftWindow,
   timelineStyle,
   timelineTicks,
@@ -22,11 +23,7 @@ const NUMBER = new Intl.NumberFormat("en-GB");
 type SequenceView = "products" | "schedule";
 
 function shortTime(value: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(value));
+  return formatScheduleClock(value);
 }
 
 function displayLine(code: string): string {
