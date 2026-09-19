@@ -346,6 +346,11 @@ export default function App() {
   const [tab, setTab] = useState<WorkspaceTab>("lines");
   const [selectedAssignment, setSelectedAssignment] = useState<number | null>(null);
   const [captureMode, setCaptureMode] = useState<"update" | "escalation">("update");
+  const [capturePrefill, setCapturePrefill] = useState<{
+    category: string;
+    summary: string;
+    details: string;
+  } | null>(null);
   const [operationalDate, setOperationalDate] = useState(localDate());
   const [toast, setToast] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
@@ -478,6 +483,21 @@ export default function App() {
   ) => {
     setSelectedAssignment(assignmentId);
     setCaptureMode(mode);
+    setCapturePrefill(null);
+    setTab("issues");
+  };
+
+  const openMaterialIssue = (item: MaterialReadiness) => {
+    setSelectedAssignment(item.assignment);
+    setCaptureMode("escalation");
+    setCapturePrefill({
+      category: "material",
+      summary: `${item.product_name} material risk`,
+      details:
+        item.status === "short"
+          ? `${item.shortage_quantity} units short. Needed by ${item.expected_available_at ?? "time not set"}.`
+          : item.hold_reason || item.notes || "Material requires follow-up.",
+    });
     setTab("issues");
   };
 
@@ -638,6 +658,7 @@ export default function App() {
               users={data.users}
               selectedAssignment={selectedAssignment}
               initialMode={captureMode}
+              initialEscalation={capturePrefill}
               onSaved={async (message) => {
                 if (online) await refresh();
                 setToast(message);
@@ -657,6 +678,7 @@ export default function App() {
             assignments={data.assignments}
             materials={data.materials}
             users={data.users}
+            onRaiseIssue={openMaterialIssue}
             onSaved={async (message) => {
               if (online) await refresh();
               setToast(message);

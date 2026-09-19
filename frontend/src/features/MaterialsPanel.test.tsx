@@ -49,6 +49,7 @@ describe("Team Leader materials reference", () => {
         assignments={[assignment]}
         materials={[material]}
         users={users}
+        onRaiseIssue={vi.fn()}
         onSaved={vi.fn()}
       />,
     );
@@ -76,6 +77,7 @@ describe("Team Leader materials reference", () => {
         assignments={[assignment]}
         materials={[material]}
         users={users}
+        onRaiseIssue={vi.fn()}
         onSaved={onSaved}
       />,
     );
@@ -118,6 +120,7 @@ describe("Team Leader materials reference", () => {
         assignments={[assignment]}
         materials={[held]}
         users={users}
+        onRaiseIssue={vi.fn()}
         onSaved={vi.fn()}
       />,
     );
@@ -128,4 +131,25 @@ describe("Team Leader materials reference", () => {
     expect(screen.getByLabelText("Status")).toBeDisabled();
     expect(screen.getByLabelText("Status")).toHaveValue("held");
   });
+  it("routes a selected material into the escalation workflow", async () => {
+    const actor = userEvent.setup();
+    const onRaiseIssue = vi.fn();
+
+    render(
+      <MaterialsPanel
+        assignments={[assignment]}
+        materials={[material]}
+        users={users}
+        onRaiseIssue={onRaiseIssue}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    await actor.click(screen.getByText("Film roll"));
+    await actor.click(screen.getByRole("button", { name: "Raise issue" }));
+
+    expect(onRaiseIssue).toHaveBeenCalledOnce();
+    expect(onRaiseIssue).toHaveBeenCalledWith(material);
+  });
+
 });
