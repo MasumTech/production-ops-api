@@ -241,6 +241,7 @@ class IssueCaptureView(APIView):
 
 
 class OperationalEvidenceViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = OperationalEvidence.objects.all()
     serializer_class = OperationalEvidenceSerializer
     permission_classes = (IsAuthenticated,)
     ordering = ("-created_at",)
