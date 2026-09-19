@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.db import transaction
 from django.db.models import (
     Avg,
     Case,
@@ -15,6 +16,7 @@ from django.db.models import (
     When,
 )
 from django.db.models.functions import Coalesce
+from django.http import FileResponse
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import filters, status, viewsets
@@ -36,6 +38,7 @@ from .models import (
     DowntimeEvent,
     HourlyLineUpdate,
     OperationalEscalation,
+    OperationalEvidence,
     OperationalEvent,
     OperationalEventReadReceipt,
     OperationalWorkerHeartbeat,
@@ -74,11 +77,14 @@ from .serializers import (
     DowntimeEventSerializer,
     HourlyLineUpdateFilterSerializer,
     HourlyLineUpdateSerializer,
+    IssueCaptureResponseSerializer,
+    IssueCaptureSerializer,
     NotificationInboxSerializer,
     ObservabilitySummarySerializer,
     OperationalEscalationFilterSerializer,
     OperationalEscalationResolveSerializer,
     OperationalEscalationSerializer,
+    OperationalEvidenceSerializer,
     OperationalEventCursorSerializer,
     OperationalEventFilterSerializer,
     OperationalEventReadReceiptSerializer,
@@ -119,6 +125,154 @@ class CurrentUserView(APIView):
     @extend_schema(responses=CurrentUserSerializer)
     def get(self, request):
         return Response(CurrentUserSerializer(request.user).data)
+
+
+class IssueCaptureView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    @extend_schema(
+        request=IssueCaptureSerializer,
+        responses={201: IssueCaptureResponseSerializer},
+    )
+    def post(self, request):
+        input_serializer = IssueCaptureSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        input_serializer.is_valid(raise_exception=True)
+        values = input_serializer.validated_data
+
+        role_labels = {
+            "engineering": "Engineering",
+            "qa": "QA",
+            "operations": "Operations",
+            "materials": "Materials",
+            "machine_minder": "Machine Minder",
+            "operative": "Operative",
+        }
+        owner_role = role_labels[values["action_owner_role"]]
+        support_role = role_labels[values["support_required"]]
+        now = timezone.now()
+        due_at = now + timedelta(minutes=int(values["next_update_minutes"]))
+        status_value = values["status"]
+        evidence_file = values.get("evidence")
+
+        with transaction.atomic():
+            update_input = HourlyLineUpdateSerializer(
+                data={
+                    "assignment": values["assignment"].id,
+                    "status": status_value,
+                    "current_product": values.get("current_product", ""),
+                    "issue_summary": values["short_problem"].strip(),
+                    "action_taken": values.get("immediate_control", "").strip(),
+                    "action_owner": None,
+                    "action_owner_role": owner_role,
+                    "support_required": support_role,
+                    "requires_follow_up": (
+                        status_value != HourlyLineUpdate.Status.GREEN
+                    ),
+                    "next_update_due_at": due_at,
+                },
+                context={"request": request},
+            )
+            update_input.is_valid(raise_exception=True)
+            line_update = update_input.save(
+                recorded_by=request.user,
+                recorded_at=now,
+            )
+            detect_break_opportunity(line_update)
+
+            escalation = None
+            if values.get("escalate", False):
+                priority = {
+                    HourlyLineUpdate.Status.AMBER: (
+                        OperationalEscalation.Priority.MEDIUM
+                    ),
+                    HourlyLineUpdate.Status.RED: OperationalEscalation.Priority.HIGH,
+                }[status_value]
+                escalation_input = OperationalEscalationSerializer(
+                    data={
+                        "assignment": values["assignment"].id,
+                        "hourly_update": line_update.id,
+                        "category": values["category"],
+                        "priority": priority,
+                        "summary": values["short_problem"].strip(),
+                        "details": f"Support requested: {support_role}.",
+                        "immediate_action": values.get(
+                            "immediate_control",
+                            "",
+                        ).strip(),
+                        "owner": None,
+                        "owner_role": owner_role,
+                        "response_due_at": due_at,
+                    },
+                    context={"request": request},
+                )
+                escalation_input.is_valid(raise_exception=True)
+                escalation = escalation_input.save(
+                    raised_by=request.user,
+                    raised_at=now,
+                )
+
+            evidence = None
+            if evidence_file is not None:
+                evidence = OperationalEvidence.objects.create(
+                    hourly_update=line_update,
+                    file=evidence_file,
+                    original_name=evidence_file.name,
+                    content_type=getattr(
+                        evidence_file,
+                        "content_type",
+                        "application/octet-stream",
+                    ),
+                    size_bytes=evidence_file.size,
+                    uploaded_by=request.user,
+                )
+
+        response_serializer = IssueCaptureResponseSerializer(
+            {
+                "line_update": line_update,
+                "escalation": escalation,
+                "evidence": evidence,
+            },
+            context={"request": request},
+        )
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+
+class OperationalEvidenceViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = OperationalEvidenceSerializer
+    permission_classes = (IsAuthenticated,)
+    ordering = ("-created_at",)
+
+    def get_queryset(self):
+        queryset = OperationalEvidence.objects.select_related(
+            "hourly_update",
+            "hourly_update__assignment",
+            "hourly_update__assignment__team_leader",
+            "uploaded_by",
+        )
+        if not self.request.user.is_staff:
+            queryset = queryset.filter(
+                hourly_update__assignment__team_leader=self.request.user,
+            )
+        hourly_update = self.request.query_params.get("hourly_update")
+        if hourly_update:
+            queryset = queryset.filter(hourly_update_id=hourly_update)
+        return queryset
+
+    @action(detail=True, methods=("get",), url_path="download")
+    def download(self, request, pk=None):
+        evidence = self.get_object()
+        evidence.file.open("rb")
+        response = FileResponse(
+            evidence.file,
+            content_type=evidence.content_type or "application/octet-stream",
+            as_attachment=True,
+            filename=evidence.original_name,
+        )
+        response["X-Content-Type-Options"] = "nosniff"
+        return response
 
 
 class NotificationInboxView(APIView):
