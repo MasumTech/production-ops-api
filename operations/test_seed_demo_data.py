@@ -249,9 +249,10 @@ def test_seed_demo_day_shift_start_follows_weekday_weekend_rule(
         .first()
     )
     assert first_block is not None
-    assert first_block.planned_start_at.astimezone().time().replace(
-        tzinfo=None
-    ) == expected_start
+    assert (
+        first_block.planned_start_at.astimezone().time().replace(tzinfo=None)
+        == expected_start
+    )
 
 
 @pytest.mark.django_db
