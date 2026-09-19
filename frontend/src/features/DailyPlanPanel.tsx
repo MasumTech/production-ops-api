@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 
 import { AppIcon } from "../AppIcon";
 import { EmptyState } from "../components";
@@ -228,7 +228,7 @@ export function DailyPlanPanel({
               style={
                 {
                   "--tl-plan-label-width": "150px",
-                } as React.CSSProperties
+                } as CSSProperties
               }
               aria-hidden="true"
             >
