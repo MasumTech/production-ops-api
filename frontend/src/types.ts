@@ -79,6 +79,11 @@ export interface MaterialReadiness {
   owner: number | null;
   owner_username: string | null;
   expected_available_at: string | null;
+  needed_by_at: string | null;
+  risk_summary: string;
+  responsible_role: string;
+  expected_action: string;
+  next_action: string;
   hold_reason: string;
   notes: string;
 }
