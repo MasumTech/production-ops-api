@@ -180,7 +180,6 @@ async function installThreeLineReferenceData(page: Page) {
     };
 
     if (url.pathname in fixtures) {
-      console.log("MY_LINES_FIXTURE", url.pathname, url.search);
       await json(route, fixtures[url.pathname]);
       return;
     }
@@ -197,12 +196,11 @@ test("My Lines matches the latest three-card reference", async ({ page }, testIn
   await page.getByLabel("Operational date").fill(operationalDate);
 
   await expect(page.locator(".team-control-card")).toHaveCount(3);
-  console.log("MY_LINES_RENDER", await page.locator(".team-lines-v2").innerText());
   await expect(page.getByText("3", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("1", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("RED", { exact: true })).toBeVisible();
-  await expect(page.getByText("AMBER", { exact: true })).toBeVisible();
-  await expect(page.getByText("GREEN", { exact: true })).toBeVisible();
+  await expect(page.locator(".team-rag-badge--red")).toContainText("RED");
+  await expect(page.locator(".team-rag-badge--amber")).toContainText("AMBER");
+  await expect(page.locator(".team-rag-badge--green")).toContainText("GREEN");
   await expect(page.getByText("STOPPED", { exact: true })).toBeVisible();
   await expect(page.getByText("Running with issues", { exact: true })).toBeVisible();
   await expect(page.getByText("Running to plan", { exact: true }).first()).toBeVisible();
