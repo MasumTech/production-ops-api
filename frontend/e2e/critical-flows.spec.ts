@@ -56,18 +56,11 @@ test("team leader is routed to the assigned-line workspace", async ({ page }) =>
   await expect(page.getByRole("group", { name: "Data view" })).toBeVisible();
   await expect(page.getByRole("button", { name: /Alerts/ })).toBeVisible();
   await expect(page.getByLabel(/Open profile menu/)).toBeVisible();
-  await expect(page.locator(".team-line-card")).toHaveCount(2);
-  await expect(
-    page.getByRole("heading", { name: "Today's product timeline 07:00 – 18:00" }),
-  ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Progress vs plan" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Priority suggestion" })).toBeVisible();
-  await expect(page.locator(".team-quick-actions button")).toHaveCount(4);
-
-  await page.getByRole("button", { name: /min downtime/ }).first().click();
-  await expect(page.getByRole("heading", { name: /Hourly downtime · Line/ })).toBeVisible();
-  await expect(page.locator(".team-hourly-grid article")).toHaveCount(11);
-  await expect(page.getByText("Planned breaks are excluded from recorded loss.")).toBeVisible();
+  await expect(page.locator(".team-control-card")).toHaveCount(2);
+  await expect(page.getByLabel("Assigned-line summary")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Update line" }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Raise issue" }).first()).toBeVisible();
+  await expect(page.getByText("Priority:", { exact: true })).toBeVisible();
 
   const workspace = page.locator('aside[aria-label="Team Leader workspace"]');
   await expect(workspace).toBeVisible();
