@@ -521,13 +521,36 @@ class DailyPlanBlock(TimeStampedModel):
                     errors["planned_start_at"] = (
                         "Plan blocks must stay on the assignment date."
                     )
-                if self.assignment.shift_type == Shift.ShiftType.DAY and not (
-                    start.time().replace(tzinfo=None) >= time(7)
-                    and end.time().replace(tzinfo=None) <= time(18)
-                ):
-                    errors["planned_start_at"] = (
-                        "Day plan blocks must stay between 07:00 and 18:00."
+                if self.assignment.shift_type == Shift.ShiftType.DAY:
+                    configured_shift = Shift.objects.filter(
+                        production_line=self.assignment.production_line,
+                        date=self.assignment.date,
+                        shift_type=self.assignment.shift_type,
+                    ).first()
+                    default_start = (
+                        time(7)
+                        if self.assignment.date.weekday() >= 5
+                        else time(6, 45)
                     )
+                    shift_start = (
+                        configured_shift.start_time
+                        if configured_shift
+                        else default_start
+                    )
+                    shift_end = (
+                        configured_shift.end_time
+                        if configured_shift
+                        else time(18)
+                    )
+                    if not (
+                        start.time().replace(tzinfo=None) >= shift_start
+                        and end.time().replace(tzinfo=None) <= shift_end
+                    ):
+                        errors["planned_start_at"] = (
+                            "Day plan blocks must stay inside the configured "
+                            f"shift window {shift_start.strftime('%H:%M')}–"
+                            f"{shift_end.strftime('%H:%M')}."
+                        )
 
         if self.block_type == self.BlockType.PRODUCTION:
             if not self.product_code.strip():
