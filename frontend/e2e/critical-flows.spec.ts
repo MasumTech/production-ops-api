@@ -67,9 +67,10 @@ test("team leader is routed to the assigned-line workspace", async ({ page }) =>
   await expect(workspace.getByRole("button")).toHaveCount(5);
   await workspace.getByRole("button", { name: "Daily Plan" }).click();
   await expect(
-    page.getByRole("heading", { name: "Daily production plan" }),
+    page.getByRole("heading", { name: "Daily Plan" }),
   ).toBeVisible();
-  await expect(page.locator(".daily-plan-card")).toHaveCount(2);
+  await expect(page.locator(".tl-plan-v2__row")).toHaveCount(2);
+  await expect(page.getByLabel("Output by assigned line")).toBeVisible();
 
   await workspace.getByRole("button", { name: "Materials" }).click();
   await expect(
