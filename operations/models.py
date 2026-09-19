@@ -395,6 +395,7 @@ class HourlyLineUpdate(TimeStampedModel):
         null=True,
         blank=True,
     )
+    action_owner_role = models.CharField(max_length=40, blank=True)
     support_required = models.TextField(blank=True)
     requires_follow_up = models.BooleanField(default=False)
     recorded_at = models.DateTimeField(default=timezone.now)
@@ -452,6 +453,29 @@ class HourlyLineUpdate(TimeStampedModel):
             f"{self.get_status_display()} - "
             f"{self.recorded_at:%Y-%m-%d %H:%M}"
         )
+
+
+class OperationalEvidence(TimeStampedModel):
+    hourly_update = models.ForeignKey(
+        HourlyLineUpdate,
+        on_delete=models.CASCADE,
+        related_name="evidence",
+    )
+    file = models.FileField(upload_to="operational_evidence/%Y/%m/%d")
+    original_name = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=120)
+    size_bytes = models.PositiveIntegerField()
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="uploaded_operational_evidence",
+    )
+
+    class Meta:
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.hourly_update_id} - {self.original_name}"
 
 
 class DailyPlanBlock(TimeStampedModel):
@@ -945,6 +969,7 @@ class OperationalEscalation(TimeStampedModel):
         null=True,
         blank=True,
     )
+    owner_role = models.CharField(max_length=40, blank=True)
     raised_at = models.DateTimeField(default=timezone.now)
     response_due_at = models.DateTimeField()
     raised_by = models.ForeignKey(
@@ -1061,8 +1086,11 @@ class OperationalEscalation(TimeStampedModel):
                 self.Priority.CRITICAL,
             }
             and self.owner_id is None
+            and not self.owner_role.strip()
         ):
-            errors["owner"] = "High or Critical escalation must have an owner."
+            errors["owner"] = (
+                "High or Critical escalation must have a named owner or owner role."
+            )
 
         if (
             self.priority == self.Priority.CRITICAL
