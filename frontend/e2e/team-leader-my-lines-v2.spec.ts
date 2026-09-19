@@ -181,13 +181,13 @@ async function installThreeLineReferenceData(page: Page) {
   );
   await page.route(/\/api\/break-opportunities\/\?.*/, (route) => json(route, []));
   await page.route(/\/api\/shift-handovers\/\?.*/, (route) => json(route, []));
-  await page.route(/\/api\/active-users\/\/?(?:\?.*)?$/, (route) => json(route, []));
+  await page.route(/\/api\/active-users\/?(?:\?.*)?$/, (route) => json(route, []));
 }
 
 test("My Lines matches the latest three-card reference", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1586, height: 992 });
-  await signIn(page);
   await installThreeLineReferenceData(page);
+  await signIn(page);
 
   await page.getByLabel("Operational date").fill(operationalDate);
 
