@@ -28,7 +28,9 @@ test("manager can open the daily risk briefing after secure sign-in", async ({ p
   await expect(page.locator(".control-kpi")).toHaveCount(4);
   await expect(page.locator(".leader-card")).toHaveCount(3);
   await expect(page.locator(".leader-line")).toHaveCount(6);
-  await expect(page.locator(".downtime-bars article")).toHaveCount(11);
+  // The deterministic fixture is Friday, so the configured day shift starts
+  // at 06:45 and produces a 15-minute opening bucket plus 11 hourly buckets.
+  await expect(page.locator(".downtime-bars article")).toHaveCount(12);
 
   await workspace.getByRole("button", { name: "Team Leaders" }).click();
   await expect(page.getByRole("heading", { name: "Team Leaders & line control" })).toBeVisible();
