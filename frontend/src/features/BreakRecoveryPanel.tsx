@@ -31,13 +31,12 @@ export function BreakRecoveryPanel({
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState("");
-  const [lineFilter, setLineFilter] = useState("all");
-  const [activeTab, setActiveTab] = useState<"recovery" | "history">("recovery");
-  const visibleAssignmentIds = new Set(assignments.slice(0, 2).map((item) => item.id));
-  const visible = opportunities.filter((item) => visibleAssignmentIds.has(item.assignment) && (lineFilter === "all" || item.production_line_code === lineFilter));
-  const confirmedCount = visible.filter((item) => item.confirmed_at).length;
-  const resumedCount = visible.filter((item) => item.run_resumed_at).length;
-  const pendingCount = visible.filter((item) => !item.run_resumed_at).length;
+  const visibleAssignmentIds = new Set(
+    assignments.slice(0, 3).map((item) => item.id),
+  );
+  const visible = opportunities.filter((item) =>
+    visibleAssignmentIds.has(item.assignment),
+  );
 
   const transition = async (
     item: BreakOpportunity,
@@ -93,29 +92,6 @@ export function BreakRecoveryPanel({
         body="When a Red stop is close to an approved break, review the opportunity and capture the complete fault-to-restart timeline."
       />
       {error ? <ErrorBanner message={error} /> : null}
-      <div className="break-recovery-tabs"><button className={activeTab === "recovery" ? "is-active" : ""} onClick={() => setActiveTab("recovery")}>Shift recovery</button><button className={activeTab === "history" ? "is-active" : ""} onClick={() => setActiveTab("history")}>Historical loss</button></div>
-      <div className="break-recovery-filters"><label>Date range<input type="date" defaultValue={new Date().toISOString().slice(0,10)} /></label><label>Line<select value={lineFilter} onChange={(event) => setLineFilter(event.target.value)}><option value="all">All lines</option>{Array.from(new Set(opportunities.map((item) => item.production_line_code))).map((line) => <option key={line} value={line}>{line}</option>)}</select></label><button className="button button--primary">Apply filters</button></div>
-      {activeTab === "history" ? <div className="break-policy-banner"><strong>Historical loss</strong><span>Review recorded downtime and recovery evidence for the selected date and line.</span></div> : null}
-
-      <div className="break-recovery-summary" aria-label="Break recovery summary">
-        <article>
-          <span>Suggested</span>
-          <strong>{visible.length}</strong>
-        </article>
-        <article>
-          <span>Confirmed full break</span>
-          <strong>{confirmedCount}</strong>
-        </article>
-        <article>
-          <span>Run resumed</span>
-          <strong>{resumedCount}</strong>
-        </article>
-        <article>
-          <span>Needs action</span>
-          <strong>{pendingCount}</strong>
-        </article>
-      </div>
-
       <div className="break-policy-banner">
         <strong>Team Leader confirms every decision.</strong>
         <span>
