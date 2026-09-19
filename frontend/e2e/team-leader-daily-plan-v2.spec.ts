@@ -74,6 +74,11 @@ test("Daily Plan matches the approved timeline reference", async ({
   ).toBeVisible();
   await expect(
     lineOne.locator(".tl-plan-v2__block--production").filter({
+      hasText: "Salt & Pepper Chicken",
+    }),
+  ).toContainText("06:45 – 09:00");
+  await expect(
+    lineOne.locator(".tl-plan-v2__block--production").filter({
       hasText: "Sweet & Sour Chicken",
     }),
   ).toBeVisible();
