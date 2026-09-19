@@ -1,55 +1,37 @@
 import { EmptyState, PageIntro } from "../components";
 import { formatDateTime } from "../format";
-import type { Assignment, DailyPlanBlock } from "../types";
+import { getShiftWindow } from "../shiftTiming";
+import type { Assignment, DailyPlanBlock, ShiftRecord } from "../types";
 
 function formatTime(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
     minute: "2-digit",
+    hour12: true,
   }).format(new Date(value));
 }
 
 export function DailyPlanPanel({
   assignments,
   planBlocks,
+  shifts = [],
 }: {
   assignments: Assignment[];
   planBlocks: DailyPlanBlock[];
+  shifts?: ShiftRecord[];
 }) {
-  const visibleAssignments = assignments.slice(0, 2);
-  const visibleBlocks = planBlocks.filter((block) =>
-    visibleAssignments.some((assignment) => assignment.id === block.assignment),
-  );
-  const productionBlocks = visibleBlocks.filter((block) => block.block_type !== "break");
-  const breakBlocks = visibleBlocks.filter((block) => block.block_type === "break");
-  const plannedUnits = productionBlocks.reduce((total, block) => total + block.planned_units, 0);
+  const visibleAssignments = assignments.slice(0, 3);
+  const operationalDate =
+    visibleAssignments[0]?.date ?? new Date().toISOString().slice(0, 10);
+  const window = getShiftWindow(operationalDate, shifts, "day");
 
   return (
     <section>
       <PageIntro
-        eyebrow="07:00-18:00 day shift"
+        eyebrow={`${window.startLabel}-${window.endLabel} day shift`}
         title="Daily production plan"
         body="Follow the approved product sequence, hourly rate and two 40-minute break windows for each assigned line."
       />
-
-      <div className="daily-plan-toolbar" aria-label="Daily plan summary">
-        <article>
-          <span>Assigned lines</span>
-          <strong>{visibleAssignments.length}</strong>
-        </article>
-        <article>
-          <span>Planned products</span>
-          <strong>{productionBlocks.length}</strong>
-        </article>
-        <article>
-          <span>Planned units</span>
-          <strong>{plannedUnits}</strong>
-        </article>
-        <article>
-          <span>Break windows</span>
-          <strong>{breakBlocks.length}/4</strong>
-        </article>
-      </div>
 
       {visibleAssignments.length === 0 ? (
         <EmptyState
