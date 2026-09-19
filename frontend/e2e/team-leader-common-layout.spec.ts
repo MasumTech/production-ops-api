@@ -58,7 +58,7 @@ for (const viewport of viewports) {
     await page.waitForTimeout(3800);
 
     if (viewport.name === "phone") {
-      await page.getByRole("button", { name: "Close navigation" }).click();
+      await page.locator(".team-control-menu").click();
       await expect(sidebar).not.toHaveClass(/team-control-sidebar--open/);
       await page.screenshot({
         path: testInfo.outputPath("team-leader-common-layout-phone.png"),
