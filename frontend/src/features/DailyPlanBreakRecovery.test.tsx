@@ -104,7 +104,7 @@ describe("daily plan and break opportunity workspace", () => {
       />,
     );
 
-    expect(screen.getByText("06:45-18:00 day shift")).toBeInTheDocument();
+    expect(screen.getByText("06:45–18:00 day shift")).toBeInTheDocument();
     expect(screen.queryByLabelText("Daily plan summary")).not.toBeInTheDocument();
   });
 
@@ -112,10 +112,48 @@ describe("daily plan and break opportunity workspace", () => {
     render(<DailyPlanPanel assignments={[assignment]} planBlocks={planBlocks} />);
 
     expect(screen.getByRole("heading", { name: "Daily production plan" })).toBeInTheDocument();
+    expect(screen.getByText("LINE 3")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ready Meals" })).toBeInTheDocument();
+    expect(screen.getByLabelText("48 planned units")).toBeInTheDocument();
     expect(screen.getByText("Salt & Pepper Chicken")).toBeInTheDocument();
     expect(screen.getByText(/SPC-01 · 24\/hour · 48 units/)).toBeInTheDocument();
     expect(screen.getByText("Break 1 · 40 minutes")).toBeInTheDocument();
+    expect(screen.getByText(/1\/2 approved breaks/)).toBeInTheDocument();
+    expect(screen.getByText(/Published for/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /create|publish|edit/i })).not.toBeInTheDocument();
+  });
+
+  it("supports a legitimate third assigned line without adding manager controls", () => {
+    const assignments = [
+      assignment,
+      {
+        ...assignment,
+        id: 8,
+        production_line: 4,
+        production_line_code: "DEMO-LINE-04",
+        production_line_name: "Secondary Filling",
+      },
+      {
+        ...assignment,
+        id: 9,
+        production_line: 5,
+        production_line_code: "DEMO-LINE-05",
+        production_line_name: "Final Packing",
+      },
+    ];
+
+    render(
+      <DailyPlanPanel
+        assignments={assignments}
+        planBlocks={planBlocks}
+      />,
+    );
+
+    expect(screen.getByText("LINE 3")).toBeInTheDocument();
+    expect(screen.getByText("LINE 4")).toBeInTheDocument();
+    expect(screen.getByText("LINE 5")).toBeInTheDocument();
+    expect(screen.getAllByRole("article")).toHaveLength(3);
+    expect(screen.queryByLabelText("Daily plan summary")).not.toBeInTheDocument();
   });
 
   it("lets the Team Leader confirm a suggested full break", async () => {
