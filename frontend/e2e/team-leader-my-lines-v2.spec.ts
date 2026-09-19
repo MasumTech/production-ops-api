@@ -164,24 +164,28 @@ async function installThreeLineReferenceData(page: Page) {
     },
   ];
 
-  await page.route(/\/api\/team-leader-assignments\/my-lines\/\?.*/, (route) =>
-    json(route, assignments),
-  );
-  await page.route(/\/api\/hourly-line-updates\/latest-status\/\?.*/, (route) =>
-    json(route, updates),
-  );
-  await page.route(/\/api\/shifts\/\?.*/, (route) => json(route, shifts));
-  await page.route(/\/api\/downtime-events\/\?.*/, (route) => json(route, []));
-  await page.route(/\/api\/daily-plan-blocks\/\?.*/, (route) => json(route, []));
-  await page.route(/\/api\/product-material-readiness\/\?.*/, (route) =>
-    json(route, []),
-  );
-  await page.route(/\/api\/operational-escalations\/\?.*/, (route) =>
-    json(route, []),
-  );
-  await page.route(/\/api\/break-opportunities\/\?.*/, (route) => json(route, []));
-  await page.route(/\/api\/shift-handovers\/\?.*/, (route) => json(route, []));
-  await page.route(/\/api\/active-users\/?(?:\?.*)?$/, (route) => json(route, []));
+  await page.route("**/*", async (route) => {
+    const url = new URL(route.request().url());
+    const fixtures: Record<string, unknown> = {
+      "/api/team-leader-assignments/my-lines/": assignments,
+      "/api/hourly-line-updates/latest-status/": updates,
+      "/api/shifts/": shifts,
+      "/api/downtime-events/": [],
+      "/api/daily-plan-blocks/": [],
+      "/api/product-material-readiness/": [],
+      "/api/operational-escalations/": [],
+      "/api/break-opportunities/": [],
+      "/api/shift-handovers/": [],
+      "/api/active-users/": [],
+    };
+
+    if (url.pathname in fixtures) {
+      await json(route, fixtures[url.pathname]);
+      return;
+    }
+
+    await route.continue();
+  });
 }
 
 test("My Lines matches the latest three-card reference", async ({ page }, testInfo) => {
