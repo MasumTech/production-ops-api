@@ -118,7 +118,14 @@ describe("daily plan and break opportunity workspace", () => {
     expect(screen.getByText("Salt & Pepper Chicken")).toBeInTheDocument();
     expect(screen.getByText(/SPC-01 · 24\/hour · 48 units/)).toBeInTheDocument();
     expect(screen.getByText("Break 1 · 40 minutes")).toBeInTheDocument();
-    expect(screen.getByText(/1\/2 approved breaks/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_, element) =>
+          element?.tagName === "SPAN" &&
+          element.textContent?.replace(/\\s+/g, " ").trim() ===
+            "1/2 approved breaks",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Published for/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /create|publish|edit/i })).not.toBeInTheDocument();
   });
