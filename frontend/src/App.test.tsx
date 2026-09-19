@@ -137,7 +137,7 @@ describe("tablet workspace", () => {
     expect(screen.getByText("Behind plan")).toBeInTheDocument();
     expect(screen.getAllByText("Chicken Curry").length).toBeGreaterThan(0);
     expect(screen.getByText("6,000")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Today's product timeline 07:00 – 18:00" }))
+    expect(screen.getByRole("heading", { name: "Today's product timeline 06:45 – 18:00" }))
       .toBeInTheDocument();
   });
 
