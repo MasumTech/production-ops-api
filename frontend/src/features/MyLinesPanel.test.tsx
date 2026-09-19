@@ -2,13 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import type {
-  Assignment,
-  DailyPlanBlock,
-  DowntimeEvent,
-  ShiftRecord,
-  WorkspaceData,
-} from "../types";
+import type { Assignment, ShiftRecord, WorkspaceData } from "../types";
 import { MyLinesPanel } from "./MyLinesPanel";
 
 const assignments: Assignment[] = [
@@ -40,49 +34,6 @@ function at(hour: number, minute = 0): string {
   return `2026-09-12T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00Z`;
 }
 
-function displayTime(value: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(value));
-}
-
-function linePlan(
-  assignment: Assignment,
-  product: string,
-  breakOne: [number, number],
-  breakTwo: [number, number],
-): DailyPlanBlock[] {
-  const breakOneStart = breakOne[0] * 60 + breakOne[1];
-  const breakTwoStart = breakTwo[0] * 60 + breakTwo[1];
-  const fromMinutes = (value: number) => at(Math.floor(value / 60), value % 60);
-  const definitions: Array<[DailyPlanBlock["block_type"], number, number, number | null]> = [
-    ["production", 7 * 60, breakOneStart, null],
-    ["break", breakOneStart, breakOneStart + 40, 1],
-    ["production", breakOneStart + 40, breakTwoStart, null],
-    ["break", breakTwoStart, breakTwoStart + 40, 2],
-    ["production", breakTwoStart + 40, 18 * 60, null],
-  ];
-
-  return definitions.map(([blockType, start, end, breakNumber], index) => ({
-    id: assignment.id * 10 + index,
-    assignment: assignment.id,
-    assignment_date: assignment.date,
-    production_line: assignment.production_line,
-    production_line_code: assignment.production_line_code,
-    sequence_number: index + 1,
-    block_type: blockType,
-    planned_start_at: fromMinutes(start),
-    planned_end_at: fromMinutes(end),
-    product_code: blockType === "production" ? `PRODUCT-${assignment.id}` : "",
-    product_name: blockType === "production" ? product : "",
-    target_units_per_hour: blockType === "production" ? 840 : null,
-    planned_units: blockType === "production" ? 1000 : 0,
-    break_number: breakNumber,
-  }));
-}
-
 const shifts: ShiftRecord[] = [
   {
     id: 20,
@@ -95,9 +46,9 @@ const shifts: ShiftRecord[] = [
     start_time: "07:00:00",
     end_time: "18:00:00",
     planned_output: 8400,
-    actual_output: 4980,
-    downtime_minutes: 12,
-    performance_percentage: 59,
+    actual_output: 6888,
+    downtime_minutes: 4,
+    performance_percentage: 82,
   },
   {
     id: 21,
@@ -110,42 +61,9 @@ const shifts: ShiftRecord[] = [
     start_time: "07:00:00",
     end_time: "18:00:00",
     planned_output: 6000,
-    actual_output: 2760,
+    actual_output: 4020,
     downtime_minutes: 8,
-    performance_percentage: 46,
-  },
-];
-
-const downtimeEvents: DowntimeEvent[] = [
-  {
-    id: 30,
-    shift: 20,
-    production_line: 101,
-    production_line_code: "DEMO-LINE-01",
-    shift_date: "2026-09-12",
-    started_at: at(8, 5),
-    ended_at: at(8, 17),
-    duration_minutes: 12,
-    reason_category: "equipment",
-    description: "Filler sensor reset",
-    owner_group: "engineering",
-    status: "resolved",
-    resolution_note: "Line restarted",
-  },
-  {
-    id: 31,
-    shift: 21,
-    production_line: 102,
-    production_line_code: "DEMO-LINE-02",
-    shift_date: "2026-09-12",
-    started_at: at(9, 12),
-    ended_at: at(9, 20),
-    duration_minutes: 8,
-    reason_category: "material",
-    description: "Carton replenishment",
-    owner_group: "operations",
-    status: "resolved",
-    resolution_note: "Stock restored",
+    performance_percentage: 67,
   },
 ];
 
@@ -166,8 +84,8 @@ const data: WorkspaceData = {
       action_owner_username: null,
       support_required: "",
       requires_follow_up: false,
-      recorded_at: at(16),
-      next_update_due_at: at(17),
+      recorded_at: at(10, 12),
+      next_update_due_at: at(18),
     },
     {
       id: 41,
@@ -177,97 +95,81 @@ const data: WorkspaceData = {
       production_line_name: "Secondary Packing",
       status: "amber",
       current_product: "Oat Milk Chai",
-      issue_summary: "Carton stock running low",
-      action_taken: "Replenishment requested",
+      issue_summary: "Seal concern",
+      action_taken: "Machine Minder checking",
       action_owner: null,
       action_owner_username: null,
-      support_required: "Operations",
+      support_required: "Engineering",
       requires_follow_up: true,
-      recorded_at: at(16, 10),
-      next_update_due_at: at(17, 10),
+      recorded_at: at(10, 12),
+      next_update_due_at: at(10, 20),
     },
   ],
   materials: [],
   escalations: [],
-  planBlocks: [
-    ...linePlan(assignments[0], "Salt & Pepper Chicken", [11, 20], [15, 20]),
-    ...linePlan(assignments[1], "Oat Milk Chai", [10, 40], [14, 40]),
-  ],
+  planBlocks: [],
   breakOpportunities: [],
   breaks: [],
   handovers: [],
   users: [],
   shifts,
-  downtimeEvents,
+  downtimeEvents: [],
 };
 
-describe("Team Leader My Lines reference board", () => {
-  it("renders two production cards, reference metrics, status and planned breaks", () => {
-    render(<MyLinesPanel data={data} onRaiseIssue={vi.fn()} onNavigate={vi.fn()} />);
+describe("Team Leader My Lines v2", () => {
+  it("renders the latest card-based operational control view", () => {
+    render(<MyLinesPanel data={data} onRaiseIssue={vi.fn()} />);
 
-    expect(screen.getByRole("heading", { name: "My lines" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "My Lines" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Current position, ownership and next update"),
+    ).toBeInTheDocument();
+    expect(screen.locator(".team-control-card")).toHaveLength(2);
     expect(screen.getByRole("heading", { name: "Line 1" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Line 2" })).toBeInTheDocument();
-    expect(screen.getAllByText("Salt & Pepper Chicken").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Oat Milk Chai").length).toBeGreaterThan(0);
-    expect(screen.getByText("On track")).toBeInTheDocument();
-    expect(screen.getByText("Behind plan")).toBeInTheDocument();
-    expect(screen.getByText("8,400")).toBeInTheDocument();
-    expect(screen.getByText("6,000")).toBeInTheDocument();
-    expect(screen.getAllByText("Break")).toHaveLength(4);
-    expect(screen.getByRole("button", { name: "12 min downtime" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "8 min downtime" })).toBeInTheDocument();
+    expect(screen.getByText("Running to plan", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText("Running with issues", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText("Seal concern", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText("Machine Minder checking", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText("Engineering · Line contact", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText("Due in 8 min", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText("Priority:", { exact: true })).toBeInTheDocument();
+    expect(
+      screen.queryByText("Today's product timeline", { exact: false }),
+    ).not.toBeInTheDocument();
   });
 
-  it("renders a weekday 06:45 shift from recorded shift times", () => {
-    const weekdayData: WorkspaceData = {
-      ...data,
-      assignments: data.assignments.map((assignment) => ({
-        ...assignment,
-        date: "2026-09-14",
-      })),
-      shifts: data.shifts.map((shift) => ({
-        ...shift,
-        date: "2026-09-14",
-        start_time: "06:45:00",
-        end_time: "18:00:00",
-      })),
-    };
-
-    render(<MyLinesPanel data={weekdayData} onRaiseIssue={vi.fn()} onNavigate={vi.fn()} />);
-
-    expect(screen.getByText("06:45 – 18:00")).toBeInTheDocument();
-    expect(screen.getByText("06:45")).toBeInTheDocument();
-  });
-
-  it("opens the eleven-hour downtime evidence with a short description and functional owner", async () => {
-    const actor = userEvent.setup();
-    render(<MyLinesPanel data={data} onRaiseIssue={vi.fn()} onNavigate={vi.fn()} />);
-
-    await actor.click(screen.getByRole("button", { name: "12 min downtime" }));
-
-    expect(screen.getByRole("heading", { name: "Hourly downtime · Line 1" }))
-      .toBeInTheDocument();
-    expect(screen.getByText("Filler sensor reset")).toBeInTheDocument();
-    expect(screen.getByText(`${displayTime(at(8, 5))}–${displayTime(at(8, 17))}`))
-      .toBeInTheDocument();
-    expect(screen.getByText("Engineering · Resolved")).toBeInTheDocument();
-    expect(screen.getAllByText("No recorded loss")).toHaveLength(10);
-    expect(screen.getByText("Planned breaks are excluded from recorded loss."))
-      .toBeInTheDocument();
-  });
-
-  it("shows a legitimate third assigned line instead of hiding it", () => {
+  it("supports a legitimate third line and severity-sorts Red, Amber, Green", () => {
     const thirdAssignment: Assignment = {
       ...assignments[1],
       id: 3,
       production_line: 103,
       production_line_code: "DEMO-LINE-03",
-      production_line_name: "Third Line",
+      production_line_name: "Prepared Foods",
     };
     const thirdLineData: WorkspaceData = {
       ...data,
       assignments: [...assignments, thirdAssignment],
+      updates: [
+        ...data.updates,
+        {
+          id: 42,
+          assignment: 3,
+          production_line: 103,
+          production_line_code: "DEMO-LINE-03",
+          production_line_name: "Prepared Foods",
+          status: "red",
+          current_product: "Vegetable Spring Rolls",
+          issue_summary: "Quality hold",
+          action_taken: "Product isolated",
+          action_owner: null,
+          action_owner_username: null,
+          support_required: "QA / Operations",
+          requires_follow_up: true,
+          recorded_at: at(10, 12),
+          next_update_due_at: at(10, 12),
+        },
+      ],
       shifts: [
         ...data.shifts,
         {
@@ -275,46 +177,47 @@ describe("Team Leader My Lines reference board", () => {
           id: 22,
           production_line: 103,
           production_line_code: "DEMO-LINE-03",
+          planned_output: 6400,
+          actual_output: 3450,
+          downtime_minutes: 14,
+          performance_percentage: 54,
         },
-      ],
-      planBlocks: [
-        ...data.planBlocks,
-        ...linePlan(thirdAssignment, "Tea Packs", [10, 0], [14, 0]),
       ],
     };
 
-    render(
-      <MyLinesPanel
-        data={thirdLineData}
-        onRaiseIssue={vi.fn()}
-        onNavigate={vi.fn()}
-      />,
-    );
+    render(<MyLinesPanel data={thirdLineData} onRaiseIssue={vi.fn()} />);
 
-    expect(screen.getByRole("heading", { name: "Line 3" })).toBeInTheDocument();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.locator(".team-control-card")).toHaveLength(3);
+    expect(screen.getByText("RED", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText("AMBER", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText("GREEN", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText("STOPPED", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText("Due now", { exact: true })).toBeInTheDocument();
+
+    const headings = screen.getAllByRole("heading", { level: 2 });
+    expect(headings.map((heading) => heading.textContent)).toEqual([
+      "Line 3",
+      "Line 2",
+      "Line 1",
+    ]);
   });
 
-  it("routes all four quick actions through the existing workflows", async () => {
+  it("routes both page-level and card-level actions to the selected priority line", async () => {
     const onRaiseIssue = vi.fn();
-    const onNavigate = vi.fn();
     const actor = userEvent.setup();
-    render(
-      <MyLinesPanel
-        data={data}
-        onRaiseIssue={onRaiseIssue}
-        onNavigate={onNavigate}
-      />,
-    );
 
-    await actor.click(screen.getByRole("button", { name: "Update line" }));
-    await actor.click(screen.getByRole("button", { name: "Raise issue" }));
-    await actor.click(screen.getByRole("button", { name: "Material problem" }));
-    await actor.click(screen.getByRole("button", { name: "Handover" }));
+    render(<MyLinesPanel data={data} onRaiseIssue={onRaiseIssue} />);
 
-    expect(onRaiseIssue).toHaveBeenNthCalledWith(1, assignments[0].id, "update");
-    expect(onRaiseIssue).toHaveBeenNthCalledWith(2, assignments[1].id, "escalation");
-    expect(onNavigate).toHaveBeenNthCalledWith(1, "materials");
-    expect(onNavigate).toHaveBeenNthCalledWith(2, "handover");
+    const updateButtons = screen.getAllByRole("button", { name: "Update line" });
+    const issueButtons = screen.getAllByRole("button", { name: "Raise issue" });
+
+    await actor.click(updateButtons[0]);
+    expect(onRaiseIssue).toHaveBeenLastCalledWith(assignments[1].id, "update");
+
+    await actor.click(issueButtons[0]);
+    expect(onRaiseIssue).toHaveBeenLastCalledWith(assignments[1].id, "escalation");
+
+    await actor.click(updateButtons[1]);
+    expect(onRaiseIssue).toHaveBeenLastCalledWith(assignments[1].id, "update");
   });
 });
