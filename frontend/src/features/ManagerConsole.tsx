@@ -306,6 +306,11 @@ export function ManagerConsole({
   const [planLineFilter, setPlanLineFilter] = useState("all");
   const [planLeaderFilter, setPlanLeaderFilter] = useState("all");
   const [planEditorOpen, setPlanEditorOpen] = useState(false);
+  const [shiftEditorOpen, setShiftEditorOpen] = useState(false);
+  const [shiftStart, setShiftStart] = useState("");
+  const [shiftEnd, setShiftEnd] = useState("");
+  const [shiftTimeSaving, setShiftTimeSaving] = useState(false);
+  const [shiftTimeMessage, setShiftTimeMessage] = useState("");
   const [selectedPlanBlock, setSelectedPlanBlock] = useState<DailyPlanBlock | null>(null);
   const [materialsTab, setMaterialsTab] = useState<"materials" | "actions">("materials");
   const [materialStatusFilter, setMaterialStatusFilter] = useState<MaterialStatus | "all">("all");
@@ -378,12 +383,27 @@ export function ManagerConsole({
     .filter((row) => row.update?.status === "green")
     .map((row) => displayLine(row.assignment.production_line_code))
     .join(", ");
-  const shiftLabel = shiftPattern === "day" ? "07:00–18:00" : "23:00–07:00";
+  const selectedShiftRecords = data.shifts.filter(
+    (shift) => shift.shift_type === shiftPattern,
+  );
+  const weekend = [0, 6].includes(new Date(`${operationalDate}T12:00:00`).getDay());
+  const defaultShiftStart = shiftPattern === "day" ? (weekend ? "07:00" : "06:45") : "23:00";
+  const defaultShiftEnd = shiftPattern === "day" ? "18:00" : "07:00";
+  const configuredShiftStart = selectedShiftRecords[0]?.start_time?.slice(0, 5) || defaultShiftStart;
+  const configuredShiftEnd = selectedShiftRecords[0]?.end_time?.slice(0, 5) || defaultShiftEnd;
+  const shiftLabel = `${configuredShiftStart}–${configuredShiftEnd}`;
   const liveView = viewMode === "live" && !isHistorical;
   const recoveryOpportunities = (data.breakOpportunities ?? []).filter((item) => recoveryLineFilter === "all" || String(item.production_line) === recoveryLineFilter);
   const recordedDowntime = data.downtimeEvents.filter((event) => recoveryLineFilter === "all" || String(event.production_line) === recoveryLineFilter).reduce((total, event) => total + event.duration_minutes, 0);
   const recoveredMinutes = recoveryOpportunities.filter((item) => item.status === "recovered" && item.checks_completed_at).reduce((total, item) => total + Math.max(0, Math.round((new Date(item.checks_completed_at!).getTime() - new Date(item.suggested_start_at).getTime()) / 60000)), 0);
   const remainingLoss = Math.max(0, recordedDowntime - recoveredMinutes);
+
+  useEffect(() => {
+    if (!shiftEditorOpen) {
+      setShiftStart(configuredShiftStart);
+      setShiftEnd(configuredShiftEnd);
+    }
+  }, [configuredShiftEnd, configuredShiftStart, shiftEditorOpen]);
 
   useEffect(() => {
     if (isHistorical) setViewMode("historical");
@@ -408,6 +428,41 @@ export function ManagerConsole({
     setManagerComment(event.resolution_note);
     setDowntimeEditorOpen(false);
     setDowntimeMessage("");
+  };
+
+  const saveShiftTimes = async () => {
+    if (!shiftStart || !shiftEnd || shiftStart === shiftEnd) {
+      setShiftTimeMessage("Choose different start and end times.");
+      return;
+    }
+    if (!selectedShiftRecords.length) {
+      setShiftTimeMessage("No shift records exist for this date and shift.");
+      return;
+    }
+    setShiftTimeSaving(true);
+    setShiftTimeMessage("");
+    try {
+      await Promise.all(
+        selectedShiftRecords.map((shift) =>
+          apiRequest<ShiftRecord>(`/shifts/${shift.id}/`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              start_time: shiftStart,
+              end_time: shiftEnd,
+            }),
+          }),
+        ),
+      );
+      setShiftTimeMessage("Shift time updated for all lines.");
+      onRefresh();
+      setShiftEditorOpen(false);
+    } catch (caught) {
+      setShiftTimeMessage(
+        caught instanceof Error ? caught.message : "Could not update shift time.",
+      );
+    } finally {
+      setShiftTimeSaving(false);
+    }
   };
 
   const saveDowntimeEvent = async () => {
@@ -915,11 +970,11 @@ export function ManagerConsole({
               <div className="daily-plan-controls">
                 <select aria-label="Filter daily plans by line" value={planLineFilter} onChange={(event) => setPlanLineFilter(event.target.value)}><option value="all">All lines</option>{rows.map((row) => <option key={row.assignment.id} value={row.assignment.production_line}>{displayLine(row.assignment.production_line_code)}</option>)}</select>
                 <select aria-label="Filter daily plans by Team Leader" value={planLeaderFilter} onChange={(event) => setPlanLeaderFilter(event.target.value)}><option value="all">All Team Leaders</option>{hierarchyGroups.map((group, index) => <option key={group.teamLeaderId} value={group.teamLeaderId}>Team Leader {index + 1}</option>)}</select>
-                {profile.is_staff ? <button type="button" className="button button--primary" onClick={() => setPlanEditorOpen(true)}><AppIcon name="edit" size={18} /> Edit plan</button> : null}
+                {profile.is_staff ? <><button type="button" className="button button--ghost" onClick={() => { setShiftStart(configuredShiftStart); setShiftEnd(configuredShiftEnd); setShiftTimeMessage(""); setShiftEditorOpen(true); }}><AppIcon name="clock" size={18} /> Shift times</button><button type="button" className="button button--primary" onClick={() => setPlanEditorOpen(true)}><AppIcon name="edit" size={18} /> Edit plan</button></> : null}
               </div>
               <section className="daily-plan-timeline-board" aria-label="Daily schedule timeline">
                 <header className="daily-plan-timeline-header">
-                  <div><strong>Shift schedule</strong><span>07:00 – 18:00</span></div>
+                  <div><strong>Shift schedule</strong><span>{shiftLabel}</span></div>
                   <div className="daily-plan-legend"><span className="legend-production">Production</span><span className="legend-break">Planned break</span></div>
                 </header>
                 <div className="daily-plan-axis" aria-hidden="true">{Array.from({ length: 12 }, (_, index) => <span key={index}>{String(7 + index).padStart(2, "0")}:00</span>)}</div>
@@ -944,6 +999,7 @@ export function ManagerConsole({
                 <div className="responsive-table"><table><thead><tr><th>Line</th><th>Planned</th><th>Actual</th><th>Full-day completion</th><th>Position now</th></tr></thead><tbody>{planRows.map((row) => { const delta = (row.shift?.actual_output ?? 0) - Math.round((row.shift?.planned_output ?? 0) * Math.min(1, Math.max(0, (new Date().getHours() * 60 + new Date().getMinutes() - 420) / 660))); return <tr key={row.assignment.id}><td>{displayLine(row.assignment.production_line_code)}</td><td>{NUMBER.format(row.shift?.planned_output ?? 0)}</td><td>{NUMBER.format(row.shift?.actual_output ?? 0)}</td><td>{planPercent(row.shift) ?? 0}%</td><td className={delta < 0 ? "metric-behind" : "metric-ahead"}>{delta < 0 ? `${NUMBER.format(Math.abs(delta))} behind` : `${NUMBER.format(delta)} ahead`}</td></tr>; })}</tbody></table></div>
               </section>
               {selectedPlanBlock ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="plan-block-title"><header><div><span className="eyebrow">Schedule detail</span><h2 id="plan-block-title">{selectedPlanBlock.block_type === "break" ? `Planned break ${selectedPlanBlock.break_number ?? ""}` : selectedPlanBlock.product_name}</h2></div><button type="button" aria-label="Close plan detail" onClick={() => setSelectedPlanBlock(null)}>×</button></header><dl className="plan-block-facts"><div><dt>Start</dt><dd>{shortTime(selectedPlanBlock.planned_start_at)}</dd></div><div><dt>End</dt><dd>{shortTime(selectedPlanBlock.planned_end_at)}</dd></div><div><dt>Target</dt><dd>{selectedPlanBlock.target_units_per_hour ?? "—"} / hour</dd></div><div><dt>Quantity</dt><dd>{NUMBER.format(selectedPlanBlock.planned_units)}</dd></div><div><dt>Materials</dt><dd>{data.materials.filter((item) => item.assignment === selectedPlanBlock.assignment && item.sequence_number === selectedPlanBlock.sequence_number).map((item) => item.product_name).join(", ") || "No material record"}</dd></div></dl><footer><button type="button" className="button button--primary" onClick={() => setSelectedPlanBlock(null)}>Done</button></footer></section></div> : null}
+              {shiftEditorOpen ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="shift-time-title"><header><div><span className="eyebrow">Operations control</span><h2 id="shift-time-title">Shift start & end</h2></div><button type="button" aria-label="Close shift time editor" onClick={() => setShiftEditorOpen(false)}>×</button></header><p>These times apply to every recorded {shiftPattern} shift line for {controlBoardDate(operationalDate)}.</p><label>Shift start<input type="time" value={shiftStart} onChange={(event) => setShiftStart(event.target.value)} /></label><label>Shift end<input type="time" value={shiftEnd} onChange={(event) => setShiftEnd(event.target.value)} /></label><p className="workflow-boundary">Default day shift: Monday–Friday 06:45–18:00; Saturday–Sunday 07:00–18:00. Operations may override the recorded shift when required.</p>{shiftTimeMessage ? <p role="status">{shiftTimeMessage}</p> : null}<footer><button type="button" className="button button--ghost" onClick={() => setShiftEditorOpen(false)}>Cancel</button><button type="button" className="button button--primary" disabled={shiftTimeSaving} onClick={() => void saveShiftTimes()}>{shiftTimeSaving ? "Saving…" : "Save shift time"}</button></footer></section></div> : null}
               {planEditorOpen ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="plan-review-title"><header><div><span className="eyebrow">Permission verified</span><h2 id="plan-review-title">Review plan changes</h2></div><button type="button" aria-label="Close plan editor" onClick={() => setPlanEditorOpen(false)}>×</button></header><p>Review line, timing, quantities and materials before saving. Existing published blocks remain unchanged until confirmation.</p><footer><button type="button" className="button button--ghost" onClick={() => setPlanEditorOpen(false)}>Cancel</button><button type="button" className="button button--primary" onClick={() => setPlanEditorOpen(false)}>Continue to edit</button></footer></section></div> : null}
             </>
           ) : null}
