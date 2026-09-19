@@ -137,11 +137,11 @@ describe("tablet workspace", () => {
     expect(screen.getByText("Behind plan")).toBeInTheDocument();
     expect(screen.getAllByText("Chicken Curry").length).toBeGreaterThan(0);
     expect(screen.getByText("6,000")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Today's product timeline 07:00 – 18:00" }))
+    expect(screen.getByRole("heading", { name: "Today's product timeline 06:45 – 18:00" }))
       .toBeInTheDocument();
   });
 
-  it("keeps the Team Leader view to two lines and flags invalid extra scope", () => {
+  it("shows up to three valid Team Leader line assignments", () => {
     const assignments = [
       assignment,
       { ...assignment, id: 8, production_line_code: "LINE-04" },
@@ -170,8 +170,8 @@ describe("tablet workspace", () => {
 
     expect(screen.getByRole("heading", { name: "Line 3" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Line 4" })).toBeInTheDocument();
-    expect(screen.queryByText("Line 5")).not.toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("Only the first two are shown");
+    expect(screen.getByRole("heading", { name: "Line 5" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("posts a line update through the real API contract", async () => {
