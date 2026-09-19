@@ -14,7 +14,6 @@ import {
 } from "./api";
 import { ErrorBanner } from "./components";
 import productionLineIllustration from "./assets/production-line-illustration.png";
-import { NotificationCentre } from "./NotificationCentre";
 import { BreakRecoveryPanel } from "./features/BreakRecoveryPanel";
 import { DailyPlanPanel } from "./features/DailyPlanPanel";
 import { HandoversPanel } from "./features/HandoversPanel";
@@ -433,7 +432,7 @@ export default function App() {
     if (result.needsReview) {
       setToast(`${result.needsReview} queued action${result.needsReview === 1 ? "" : "s"} need review.`);
     }
-  }, [online, profile, refresh, teamViewMode]);
+  }, [online, profile, refresh]);
 
   useEffect(() => {
     if (online && profile) void syncOutbox();
@@ -463,7 +462,7 @@ export default function App() {
       if (refreshTimer !== null) window.clearTimeout(refreshTimer);
       disconnect();
     };
-  }, [online, profile, refresh]);
+  }, [online, profile, refresh, teamViewMode]);
 
   useEffect(() => {
     if (
