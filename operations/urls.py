@@ -9,10 +9,12 @@ from .views import (
     DailyPlanBlockViewSet,
     DowntimeEventViewSet,
     HourlyLineUpdateViewSet,
+    IssueCaptureView,
     NotificationInboxView,
     NotificationReadView,
     ObservabilitySummaryView,
     OperationalEscalationViewSet,
+    OperationalEvidenceViewSet,
     OperationalEventViewSet,
     OperationsDashboardView,
     PilotFeedbackViewSet,
@@ -82,6 +84,11 @@ router.register(
     basename="operational-event",
 )
 router.register(
+    "operational-evidence",
+    OperationalEvidenceViewSet,
+    basename="operational-evidence",
+)
+router.register(
     "shift-handovers",
     ShiftHandoverViewSet,
     basename="shift-handover",
@@ -118,6 +125,11 @@ router.register(
 )
 
 urlpatterns = [
+    path(
+        "issue-captures/",
+        IssueCaptureView.as_view(),
+        name="issue-capture",
+    ),
     path(
         "auth/me/",
         CurrentUserView.as_view(),
