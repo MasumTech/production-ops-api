@@ -528,9 +528,7 @@ class DailyPlanBlock(TimeStampedModel):
                         shift_type=self.assignment.shift_type,
                     ).first()
                     default_start = (
-                        time(7)
-                        if self.assignment.date.weekday() >= 5
-                        else time(6, 45)
+                        time(7) if self.assignment.date.weekday() >= 5 else time(6, 45)
                     )
                     shift_start = (
                         configured_shift.start_time
@@ -538,9 +536,7 @@ class DailyPlanBlock(TimeStampedModel):
                         else default_start
                     )
                     shift_end = (
-                        configured_shift.end_time
-                        if configured_shift
-                        else time(18)
+                        configured_shift.end_time if configured_shift else time(18)
                     )
                     if not (
                         start.time().replace(tzinfo=None) >= shift_start
