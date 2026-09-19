@@ -22,12 +22,18 @@ export function RaiseIssuePanel({
   users,
   selectedAssignment,
   initialMode = "update",
+  initialEscalation,
   onSaved,
 }: {
   assignments: Assignment[];
   users: UserChoice[];
   selectedAssignment: number | null;
   initialMode?: "update" | "escalation";
+  initialEscalation?: {
+    category: string;
+    summary: string;
+    details: string;
+  } | null;
   onSaved: (message: string) => Promise<void>;
 }) {
   const [mode, setMode] = useState<"update" | "escalation">(initialMode);
@@ -54,7 +60,12 @@ export function RaiseIssuePanel({
   useEffect(() => {
     if (selectedAssignment) setAssignment(String(selectedAssignment));
     setMode(initialMode);
-  }, [initialMode, selectedAssignment]);
+    if (initialMode === "escalation" && initialEscalation) {
+      setCategory(initialEscalation.category);
+      setEscalationSummary(initialEscalation.summary);
+      setDetails(initialEscalation.details);
+    }
+  }, [initialEscalation, initialMode, selectedAssignment]);
 
   useEffect(() => {
     if (status === "red") setFollowUp(true);
