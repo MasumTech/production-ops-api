@@ -1097,10 +1097,14 @@ class IssueCaptureSerializer(serializers.Serializer):
         problem = (attrs.get("short_problem") or "").strip()
         immediate_control = (attrs.get("immediate_control") or "").strip()
 
-        if status_value in {
-            HourlyLineUpdate.Status.AMBER,
-            HourlyLineUpdate.Status.RED,
-        } and not problem:
+        if (
+            status_value
+            in {
+                HourlyLineUpdate.Status.AMBER,
+                HourlyLineUpdate.Status.RED,
+            }
+            and not problem
+        ):
             raise serializers.ValidationError(
                 {"short_problem": "Amber or Red status requires a short problem."}
             )
