@@ -274,6 +274,36 @@ def test_creating_shift_assigns_current_user_as_supervisor(
 
 
 @pytest.mark.django_db
+def test_regular_user_cannot_change_shift_time(
+    authenticated_client,
+    shift,
+):
+    response = authenticated_client.patch(
+        reverse("shift-detail", args=(shift.id,)),
+        {"start_time": "06:45:00", "end_time": "18:00:00"},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_staff_can_change_shift_time(
+    staff_client,
+    shift,
+):
+    response = staff_client.patch(
+        reverse("shift-detail", args=(shift.id,)),
+        {"start_time": "06:45:00", "end_time": "18:00:00"},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["start_time"] == "06:45:00"
+    assert response.data["end_time"] == "18:00:00"
+
+
+@pytest.mark.django_db
 def test_duplicate_shift_is_rejected(
     authenticated_client,
     shift,

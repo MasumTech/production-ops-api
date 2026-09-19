@@ -888,6 +888,12 @@ class ProductionLineViewSet(viewsets.ModelViewSet):
 class ShiftViewSet(viewsets.ModelViewSet):
     serializer_class = ShiftSerializer
     permission_classes = (IsAuthenticated,)
+
+    def get_permissions(self):
+        if self.action in {"update", "partial_update", "destroy"}:
+            return [IsStaffOrReadOnly()]
+        return super().get_permissions()
+
     filter_backends = (
         filters.SearchFilter,
         filters.OrderingFilter,
