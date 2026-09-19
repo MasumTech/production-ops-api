@@ -649,6 +649,7 @@ export default function App() {
           <DailyPlanPanel
             assignments={data.assignments}
             planBlocks={data.planBlocks}
+            shifts={data.shifts}
           />
         ) : null}
         {tab === "materials" && profile ? (
