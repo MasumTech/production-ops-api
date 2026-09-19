@@ -35,6 +35,17 @@ export function HandoversPanel({
   const [busy, setBusy] = useState<number | "new" | null>(null);
   const [error, setError] = useState("");
 
+  const visibleHandovers = useMemo(
+    () =>
+      [...handovers].sort(
+        (left, right) =>
+          Number(left.status !== "pending") - Number(right.status !== "pending") ||
+          new Date(right.handed_over_at).getTime() -
+            new Date(left.handed_over_at).getTime(),
+      ),
+    [handovers],
+  );
+
   const eligibleEscalations = useMemo(
     () =>
       escalations.filter(
@@ -197,20 +208,24 @@ export function HandoversPanel({
         </form>
       ) : null}
 
-      {handovers.length === 0 ? (
+      {visibleHandovers.length === 0 ? (
         <EmptyState
           title="No handovers visible"
           body="Outgoing and incoming records involving your assignments will appear here."
         />
       ) : (
         <div className="card-list">
-          {handovers.map((handover) => {
+          {visibleHandovers.map((handover) => {
             const canAccept =
               handover.status === "pending" &&
               (profile.is_staff || handover.incoming_team_leader_username === profile.username);
 
             return (
-              <article className="workflow-card" key={handover.id}>
+              <article
+                className="workflow-card handover-card"
+                key={handover.id}
+                aria-label={`${handover.production_line_code} handover ${handover.status}`}
+              >
                 <div className="workflow-card__header">
                   <div>
                     <span className="eyebrow">{handover.production_line_code}</span>
@@ -219,6 +234,9 @@ export function HandoversPanel({
                   <StatusPill value={handover.status} />
                 </div>
                 <p className="handover-summary">{handover.operational_summary}</p>
+                {handover.notes ? (
+                  <p className="handover-notes">{handover.notes}</p>
+                ) : null}
                 <div className="timeline-pair">
                   <span>Created <strong>{formatDateTime(handover.handed_over_at)}</strong></span>
                   <span>Carry-over <strong>{handover.escalations.length} items</strong></span>
