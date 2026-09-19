@@ -7,6 +7,14 @@ import { escalationRole } from "../operationalRoles";
 import { NotificationCentre } from "../NotificationCentre";
 import { AppIcon, type AppIconName } from "../AppIcon";
 import { apiRequest } from "../api";
+import {
+  elapsedShiftFraction,
+  formatClockMinutes,
+  getShiftWindow,
+  timeBuckets,
+  timelineStyle,
+  timelineTicks,
+} from "../shiftTiming";
 import type { LiveConnectionState } from "../realtime";
 import {
   WorkspaceSidebar,
@@ -177,22 +185,6 @@ function shortTime(value: string | null): string {
   }).format(new Date(value));
 }
 
-function shiftMinute(value: string): number {
-  const date = new Date(value);
-  return date.getHours() * 60 + date.getMinutes();
-}
-
-function planBlockPosition(block: DailyPlanBlock) {
-  const shiftStart = 7 * 60;
-  const shiftMinutes = 11 * 60;
-  const start = Math.max(0, shiftMinute(block.planned_start_at) - shiftStart);
-  const duration = Math.max(1, shiftMinute(block.planned_end_at) - shiftMinute(block.planned_start_at));
-  return {
-    left: `${(start / shiftMinutes) * 100}%`,
-    width: `${(Math.min(duration, shiftMinutes - start) / shiftMinutes) * 100}%`,
-  };
-}
-
 function controlBoardDate(value: string): string {
   return new Intl.DateTimeFormat("en-GB", {
     weekday: "short",
@@ -221,11 +213,26 @@ function updatedTime(value: string | null): string {
   }).format(new Date(value))}`;
 }
 
-function hourlyDowntime(events: DowntimeEvent[], operationalDate: string) {
-  return Array.from({ length: 11 }, (_, offset) => {
-    const hour = 7 + offset;
-    const bucketStart = new Date(`${operationalDate}T${String(hour).padStart(2, "0")}:00:00`);
-    const bucketEnd = new Date(bucketStart.getTime() + 60 * 60 * 1000);
+function hourlyDowntime(
+  events: DowntimeEvent[],
+  operationalDate: string,
+  startMinutes: number,
+  endMinutes: number,
+) {
+  const window = {
+    startMinutes,
+    endMinutes,
+    startLabel: formatClockMinutes(startMinutes),
+    endLabel: formatClockMinutes(endMinutes),
+  };
+  return timeBuckets(window).map((bucket) => {
+    const bucketStart = new Date(
+      `${operationalDate}T${formatClockMinutes(bucket.startMinutes)}:00`,
+    );
+    const bucketEnd = new Date(
+      bucketStart.getTime() +
+        (bucket.endMinutes - bucket.startMinutes) * 60 * 1000,
+    );
     const matching = events.filter((event) => {
       const start = new Date(event.started_at);
       const end = new Date(event.ended_at ?? Date.now());
@@ -240,7 +247,7 @@ function hourlyDowntime(events: DowntimeEvent[], operationalDate: string) {
       return total + Math.max(0, Math.round((end - start) / 60_000));
     }, 0);
     return {
-      label: `${String(hour).padStart(2, "0")}:00–${String(hour + 1).padStart(2, "0")}:00`,
+      label: bucket.label,
       minutes,
       description: matching.length
         ? [...new Set(matching.map((event) => event.description))].join(" · ")
@@ -370,7 +377,13 @@ export function ManagerConsole({
   const selectedDowntimeEvents = data.downtimeEvents.filter(
     (event) => event.production_line === effectiveDowntimeLine,
   );
-  const downtimeHours = hourlyDowntime(selectedDowntimeEvents, operationalDate);
+  const scheduleWindow = getShiftWindow(operationalDate, data.shifts, shiftPattern);
+  const downtimeHours = hourlyDowntime(
+    selectedDowntimeEvents,
+    operationalDate,
+    scheduleWindow.startMinutes,
+    scheduleWindow.endMinutes,
+  );
   const selectedDowntimeEvent = data.downtimeEvents.find(
     (event) => event.id === selectedDowntimeEventId,
   ) ?? selectedDowntimeEvents[0] ?? null;
@@ -392,6 +405,7 @@ export function ManagerConsole({
   const configuredShiftStart = selectedShiftRecords[0]?.start_time?.slice(0, 5) || defaultShiftStart;
   const configuredShiftEnd = selectedShiftRecords[0]?.end_time?.slice(0, 5) || defaultShiftEnd;
   const shiftLabel = `${configuredShiftStart}–${configuredShiftEnd}`;
+  const planAxisTicks = timelineTicks(scheduleWindow);
   const liveView = viewMode === "live" && !isHistorical;
   const recoveryOpportunities = (data.breakOpportunities ?? []).filter((item) => recoveryLineFilter === "all" || String(item.production_line) === recoveryLineFilter);
   const recordedDowntime = data.downtimeEvents.filter((event) => recoveryLineFilter === "all" || String(event.production_line) === recoveryLineFilter).reduce((total, event) => total + event.duration_minutes, 0);
@@ -594,8 +608,8 @@ export function ManagerConsole({
               value={shiftPattern}
               onChange={(event) => setShiftPattern(event.target.value as ManagerShiftPattern)}
             >
-              <option value="day">Day · 07:00–18:00</option>
-              <option value="night">Night · 23:00–07:00</option>
+              <option value="day">Day · {shiftPattern === "day" ? shiftLabel : getShiftWindow(operationalDate, data.shifts, "day").startLabel + "–" + getShiftWindow(operationalDate, data.shifts, "day").endLabel}</option>
+              <option value="night">Night · {shiftPattern === "night" ? shiftLabel : getShiftWindow(operationalDate, data.shifts, "night").startLabel + "–" + getShiftWindow(operationalDate, data.shifts, "night").endLabel}</option>
             </select>
             </label>
             <span className="manager-header-divider" aria-hidden="true" />
@@ -977,7 +991,7 @@ export function ManagerConsole({
                   <div><strong>Shift schedule</strong><span>{shiftLabel}</span></div>
                   <div className="daily-plan-legend"><span className="legend-production">Production</span><span className="legend-break">Planned break</span></div>
                 </header>
-                <div className="daily-plan-axis" aria-hidden="true">{Array.from({ length: 12 }, (_, index) => <span key={index}>{String(7 + index).padStart(2, "0")}:00</span>)}</div>
+                <div className="daily-plan-axis" aria-hidden="true">{planAxisTicks.map((minutes) => <span key={minutes}>{formatClockMinutes(minutes)}</span>)}</div>
                 <div className="daily-plan-rows">
                   {planRows.map((row) => {
                     const blocks = (data.planBlocks ?? []).filter((block) => block.assignment === row.assignment.id).sort((left, right) => left.sequence_number - right.sequence_number);
@@ -985,7 +999,7 @@ export function ManagerConsole({
                       <div className="daily-plan-row-label"><strong>{displayLine(row.assignment.production_line_code)}</strong><span>{row.update?.current_product || "Planned production"}</span></div>
                       <div className="daily-plan-track">
                         {blocks.length ? blocks.map((block) => {
-                          return <button type="button" className={`daily-plan-block daily-plan-block--${block.block_type}`} style={planBlockPosition(block)} key={block.id} onClick={() => setSelectedPlanBlock(block)}>
+                          return <button type="button" className={`daily-plan-block daily-plan-block--${block.block_type}`} style={timelineStyle(block.planned_start_at, block.planned_end_at, scheduleWindow)} key={block.id} onClick={() => setSelectedPlanBlock(block)}>
                             <strong>{block.block_type === "break" ? `Break ${block.break_number ?? ""}` : block.product_name}</strong><span>{shortTime(block.planned_start_at)} – {shortTime(block.planned_end_at)}</span>
                           </button>;
                         }) : <span className="daily-plan-empty">No plan blocks recorded</span>}
@@ -996,7 +1010,7 @@ export function ManagerConsole({
               </section>
               <section className="daily-plan-output-table" aria-label="Daily plan output table">
                 <h2>Output by line</h2>
-                <div className="responsive-table"><table><thead><tr><th>Line</th><th>Planned</th><th>Actual</th><th>Full-day completion</th><th>Position now</th></tr></thead><tbody>{planRows.map((row) => { const delta = (row.shift?.actual_output ?? 0) - Math.round((row.shift?.planned_output ?? 0) * Math.min(1, Math.max(0, (new Date().getHours() * 60 + new Date().getMinutes() - 420) / 660))); return <tr key={row.assignment.id}><td>{displayLine(row.assignment.production_line_code)}</td><td>{NUMBER.format(row.shift?.planned_output ?? 0)}</td><td>{NUMBER.format(row.shift?.actual_output ?? 0)}</td><td>{planPercent(row.shift) ?? 0}%</td><td className={delta < 0 ? "metric-behind" : "metric-ahead"}>{delta < 0 ? `${NUMBER.format(Math.abs(delta))} behind` : `${NUMBER.format(delta)} ahead`}</td></tr>; })}</tbody></table></div>
+                <div className="responsive-table"><table><thead><tr><th>Line</th><th>Planned</th><th>Actual</th><th>Full-day completion</th><th>Position now</th></tr></thead><tbody>{planRows.map((row) => { const delta = (row.shift?.actual_output ?? 0) - Math.round((row.shift?.planned_output ?? 0) * elapsedShiftFraction(scheduleWindow)); return <tr key={row.assignment.id}><td>{displayLine(row.assignment.production_line_code)}</td><td>{NUMBER.format(row.shift?.planned_output ?? 0)}</td><td>{NUMBER.format(row.shift?.actual_output ?? 0)}</td><td>{planPercent(row.shift) ?? 0}%</td><td className={delta < 0 ? "metric-behind" : "metric-ahead"}>{delta < 0 ? `${NUMBER.format(Math.abs(delta))} behind` : `${NUMBER.format(delta)} ahead`}</td></tr>; })}</tbody></table></div>
               </section>
               {selectedPlanBlock ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="plan-block-title"><header><div><span className="eyebrow">Schedule detail</span><h2 id="plan-block-title">{selectedPlanBlock.block_type === "break" ? `Planned break ${selectedPlanBlock.break_number ?? ""}` : selectedPlanBlock.product_name}</h2></div><button type="button" aria-label="Close plan detail" onClick={() => setSelectedPlanBlock(null)}>×</button></header><dl className="plan-block-facts"><div><dt>Start</dt><dd>{shortTime(selectedPlanBlock.planned_start_at)}</dd></div><div><dt>End</dt><dd>{shortTime(selectedPlanBlock.planned_end_at)}</dd></div><div><dt>Target</dt><dd>{selectedPlanBlock.target_units_per_hour ?? "—"} / hour</dd></div><div><dt>Quantity</dt><dd>{NUMBER.format(selectedPlanBlock.planned_units)}</dd></div><div><dt>Materials</dt><dd>{data.materials.filter((item) => item.assignment === selectedPlanBlock.assignment && item.sequence_number === selectedPlanBlock.sequence_number).map((item) => item.product_name).join(", ") || "No material record"}</dd></div></dl><footer><button type="button" className="button button--primary" onClick={() => setSelectedPlanBlock(null)}>Done</button></footer></section></div> : null}
               {shiftEditorOpen ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="shift-time-title"><header><div><span className="eyebrow">Operations control</span><h2 id="shift-time-title">Shift start & end</h2></div><button type="button" aria-label="Close shift time editor" onClick={() => setShiftEditorOpen(false)}>×</button></header><p>These times apply to every recorded {shiftPattern} shift line for {controlBoardDate(operationalDate)}.</p><label>Shift start<input type="time" value={shiftStart} onChange={(event) => setShiftStart(event.target.value)} /></label><label>Shift end<input type="time" value={shiftEnd} onChange={(event) => setShiftEnd(event.target.value)} /></label><p className="workflow-boundary">Default day shift: Monday–Friday 06:45–18:00; Saturday–Sunday 07:00–18:00. Operations may override the recorded shift when required.</p>{shiftTimeMessage ? <p role="status">{shiftTimeMessage}</p> : null}<footer><button type="button" className="button button--ghost" onClick={() => setShiftEditorOpen(false)}>Cancel</button><button type="button" className="button button--primary" disabled={shiftTimeSaving} onClick={() => void saveShiftTimes()}>{shiftTimeSaving ? "Saving…" : "Save shift time"}</button></footer></section></div> : null}
