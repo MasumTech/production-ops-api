@@ -33,17 +33,19 @@ for (const viewport of viewports) {
     await expect(
       page.getByText("Operations Control Board", { exact: true }),
     ).toBeVisible();
-    await expect(page.getByLabel("Shift pattern")).toHaveValue("day");
-    await expect(page.getByRole("group", { name: "Data view" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Refresh" })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Alerts/ })).toBeVisible();
     await expect(page.getByLabel(/Open profile menu/)).toBeVisible();
 
     const sidebar = page.locator('aside[aria-label="Team Leader workspace"]');
     if (viewport.name === "phone") {
+      await expect(page.getByRole("group", { name: "Data view" })).toBeHidden();
       await page.getByRole("button", { name: "Open navigation" }).click();
       await expect(sidebar).toHaveClass(/team-control-sidebar--open/);
+      await expect(sidebar.getByRole("button")).toHaveCount(5);
     } else {
+      await expect(page.getByLabel("Shift pattern")).toHaveValue("day");
+      await expect(page.getByRole("group", { name: "Data view" })).toBeVisible();
+      await expect(page.getByRole("button", { name: /Alerts/ })).toBeVisible();
       await expect(sidebar).toBeVisible();
       await expect(sidebar.getByRole("button")).toHaveCount(5);
       await expect(sidebar.getByRole("button", { name: "My Lines" })).toHaveAttribute(
