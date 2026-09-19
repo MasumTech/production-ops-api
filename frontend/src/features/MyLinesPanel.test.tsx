@@ -92,6 +92,8 @@ const shifts: ShiftRecord[] = [
     supervisor_username: "operations.manager",
     date: "2026-09-12",
     shift_type: "day",
+    start_time: "07:00:00",
+    end_time: "18:00:00",
     planned_output: 8400,
     actual_output: 4980,
     downtime_minutes: 12,
@@ -105,6 +107,8 @@ const shifts: ShiftRecord[] = [
     supervisor_username: "operations.manager",
     date: "2026-09-12",
     shift_type: "day",
+    start_time: "07:00:00",
+    end_time: "18:00:00",
     planned_output: 6000,
     actual_output: 2760,
     downtime_minutes: 8,
@@ -213,6 +217,27 @@ describe("Team Leader My Lines reference board", () => {
     expect(screen.getAllByText("Break")).toHaveLength(4);
     expect(screen.getByRole("button", { name: "12 min downtime" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "8 min downtime" })).toBeInTheDocument();
+  });
+
+  it("renders a weekday 06:45 shift from recorded shift times", () => {
+    const weekdayData: WorkspaceData = {
+      ...data,
+      assignments: data.assignments.map((assignment) => ({
+        ...assignment,
+        date: "2026-09-14",
+      })),
+      shifts: data.shifts.map((shift) => ({
+        ...shift,
+        date: "2026-09-14",
+        start_time: "06:45:00",
+        end_time: "18:00:00",
+      })),
+    };
+
+    render(<MyLinesPanel data={weekdayData} onRaiseIssue={vi.fn()} onNavigate={vi.fn()} />);
+
+    expect(screen.getByText("06:45 – 18:00")).toBeInTheDocument();
+    expect(screen.getByText("06:45")).toBeInTheDocument();
   });
 
   it("opens the eleven-hour downtime evidence with a short description and functional owner", async () => {
