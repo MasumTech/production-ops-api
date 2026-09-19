@@ -64,12 +64,36 @@ test("Daily Plan matches the approved timeline reference", async ({
   const lineTwo = page.locator(".tl-plan-v2__row").filter({
     hasText: "Line 2",
   });
-  await expect(lineOne.getByText("Salt & Pepper Chicken")).toBeVisible();
-  await expect(lineOne.getByText("Sweet & Sour Chicken")).toBeVisible();
-  await expect(lineOne.getByText("Vegetable Spring Rolls")).toBeVisible();
-  await expect(lineTwo.getByText("Oat Drink 1L")).toBeVisible();
-  await expect(lineTwo.getByText("BBQ Chicken Bites")).toBeVisible();
-  await expect(lineTwo.getByText("Vegetable Mix Filling")).toBeVisible();
+  await expect(
+    lineOne.locator(".tl-plan-v2__block--production").filter({
+      hasText: "Salt & Pepper Chicken",
+    }),
+  ).toBeVisible();
+  await expect(
+    lineOne.locator(".tl-plan-v2__block--production").filter({
+      hasText: "Sweet & Sour Chicken",
+    }),
+  ).toBeVisible();
+  await expect(
+    lineOne.locator(".tl-plan-v2__block--production").filter({
+      hasText: "Vegetable Spring Rolls",
+    }),
+  ).toBeVisible();
+  await expect(
+    lineTwo.locator(".tl-plan-v2__block--production").filter({
+      hasText: "Oat Drink 1L",
+    }),
+  ).toBeVisible();
+  await expect(
+    lineTwo.locator(".tl-plan-v2__block--production").filter({
+      hasText: "BBQ Chicken Bites",
+    }),
+  ).toBeVisible();
+  await expect(
+    lineTwo.locator(".tl-plan-v2__block--production").filter({
+      hasText: "Vegetable Mix Filling",
+    }),
+  ).toBeVisible();
 
   const output = page.getByLabel("Output by assigned line");
   await expect(output.getByRole("heading", { name: "Output by assigned line" })).toBeVisible();
