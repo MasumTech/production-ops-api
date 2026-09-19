@@ -36,6 +36,28 @@ type LineView = {
   downtime: number;
 };
 
+function minutesOfDay(value: string): number {
+  const parsed = new Date(value);
+  return parsed.getHours() * 60 + parsed.getMinutes();
+}
+
+function formatTime(value: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(value));
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat("en-GB").format(value);
+}
+
+function lineLabel(code: string, index: number): string {
+  const lineNumber = code.match(/(\d+)$/)?.[1];
+  return `Line ${lineNumber ? Number(lineNumber) : index + 1}`;
+}
+
 function plannedProgressAt(
   blocks: DailyPlanBlock[],
   recordedAt: string | undefined,
