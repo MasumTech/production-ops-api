@@ -61,6 +61,24 @@ export function dateTimeToShiftMinutes(value: string, window: ShiftWindow): numb
   return minutes;
 }
 
+export function scheduleDateTimeToShiftMinutes(
+  value: string,
+  window: ShiftWindow,
+): number {
+  const date = new Date(value);
+  let minutes = date.getUTCHours() * 60 + date.getUTCMinutes();
+  if (window.endMinutes > 24 * 60 && minutes < window.startMinutes) {
+    minutes += 24 * 60;
+  }
+  return minutes;
+}
+
+export function formatScheduleClock(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return formatClockMinutes(date.getUTCHours() * 60 + date.getUTCMinutes());
+}
+
 export function timelineStyle(
   start: string,
   end: string,
@@ -69,11 +87,11 @@ export function timelineStyle(
   const shiftDuration = Math.max(1, window.endMinutes - window.startMinutes);
   const startMinute = Math.max(
     window.startMinutes,
-    dateTimeToShiftMinutes(start, window),
+    scheduleDateTimeToShiftMinutes(start, window),
   );
   const endMinute = Math.min(
     window.endMinutes,
-    dateTimeToShiftMinutes(end, window),
+    scheduleDateTimeToShiftMinutes(end, window),
   );
   return {
     left: `${((startMinute - window.startMinutes) / shiftDuration) * 100}%`,
