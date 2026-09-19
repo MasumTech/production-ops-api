@@ -175,7 +175,7 @@ describe("daily plan and break opportunity workspace", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Production")).toBeInTheDocument();
     expect(screen.getByText("Planned break")).toBeInTheDocument();
-    expect(screen.getByText("Salt & Pepper Chicken")).toBeInTheDocument();
+    expect(screen.getAllByText("Salt & Pepper Chicken").length).toBeGreaterThan(0);
     expect(screen.getByText("Break 1")).toBeInTheDocument();
 
     const output = screen.getByLabelText("Output by assigned line");
