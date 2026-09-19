@@ -206,13 +206,13 @@ test("My Lines matches the latest three-card reference", async ({ page }, testIn
   await expect(page.getByText("Running to plan", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Quality hold", { exact: true })).toBeVisible();
   await expect(page.getByText("Machine Minder checking", { exact: true })).toBeVisible();
-  await expect(page.getByText("QA / Operations · Line contact", { exact: true })).toBeVisible();
+  await expect(page.getByText("QA · Line contact", { exact: true })).toBeVisible();
   await expect(page.getByText("Engineering · Line contact", { exact: true })).toBeVisible();
   await expect(page.getByText("Due now", { exact: true })).toBeVisible();
   await expect(page.getByText("Due in 8 min", { exact: true })).toBeVisible();
   await expect(page.getByText("Priority:", { exact: true })).toBeVisible();
 
-  await page.waitForTimeout(300);
+  await expect(page.locator(".toast")).toBeHidden({ timeout: 5000 });
 
   await page.screenshot({
     path: testInfo.outputPath("team-leader-my-lines-v2-reference.png"),
