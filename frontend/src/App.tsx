@@ -625,7 +625,6 @@ export default function App() {
           <MyLinesPanel
             data={data}
             onRaiseIssue={openIssueFor}
-            onNavigate={setTab}
           />
         ) : null}
         {tab === "issues" && profile ? (

@@ -21,8 +21,8 @@ async function signInAsTeamLeader(page: Page) {
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByLabel("Operational date").fill(operationalDate);
-  await expect(page.getByRole("heading", { name: "My lines" })).toBeVisible();
-  await expect(page.locator(".team-line-card")).toHaveCount(2);
+  await expect(page.getByRole("heading", { name: "My Lines" })).toBeVisible();
+  await expect(page.locator(".team-control-card")).toHaveCount(2);
 }
 
 for (const viewport of viewports) {
