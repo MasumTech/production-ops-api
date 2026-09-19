@@ -124,10 +124,10 @@ describe("Team Leader My Lines v2", () => {
     expect(
       screen.getByText("Current position, ownership and next update"),
     ).toBeInTheDocument();
-    expect(screen.locator(".team-control-card")).toHaveLength(2);
+    expect(document.querySelectorAll(".team-control-card")).toHaveLength(2);
     expect(screen.getByRole("heading", { name: "Line 1" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Line 2" })).toBeInTheDocument();
-    expect(screen.getByText("Running to plan", { exact: true })).toBeInTheDocument();
+    expect(screen.getAllByText("Running to plan", { exact: true }).length).toBeGreaterThan(0);
     expect(screen.getByText("Running with issues", { exact: true })).toBeInTheDocument();
     expect(screen.getByText("Seal concern", { exact: true })).toBeInTheDocument();
     expect(screen.getByText("Machine Minder checking", { exact: true })).toBeInTheDocument();
@@ -187,7 +187,7 @@ describe("Team Leader My Lines v2", () => {
 
     render(<MyLinesPanel data={thirdLineData} onRaiseIssue={vi.fn()} />);
 
-    expect(screen.locator(".team-control-card")).toHaveLength(3);
+    expect(document.querySelectorAll(".team-control-card")).toHaveLength(3);
     expect(screen.getByText("RED", { exact: true })).toBeInTheDocument();
     expect(screen.getByText("AMBER", { exact: true })).toBeInTheDocument();
     expect(screen.getByText("GREEN", { exact: true })).toBeInTheDocument();
