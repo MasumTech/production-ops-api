@@ -220,5 +220,21 @@ SPECTACULAR_SETTINGS = {
             ("high", "High"),
             ("critical", "Critical"),
         ],
+        "IssueOwnerRoleEnum": [
+            ("engineering", "Engineering"),
+            ("qa", "QA"),
+            ("operations", "Operations"),
+            ("materials", "Materials"),
+            ("machine_minder", "Machine Minder"),
+            ("operative", "Operative"),
+        ],
+        "OperationalEscalationCategoryEnum": [
+            ("equipment", "Equipment"),
+            ("material", "Material"),
+            ("quality", "Quality"),
+            ("staffing", "Staffing"),
+            ("safety", "Safety"),
+            ("other", "Other"),
+        ],
     },
 }
