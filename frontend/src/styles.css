@@ -829,8 +829,22 @@ td span {
 
 .handover-summary {
   margin: 1rem 0;
-  color: #d4dde5;
+  color: var(--muted);
   line-height: 1.55;
+}
+
+.handover-notes {
+  margin: -0.35rem 0 1rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 0.65rem;
+  color: #36516c;
+  background: #f5f8fb;
+  font-size: 0.8rem;
+}
+
+.handover-card .compact-list {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
 }
 
 .compact-list {
@@ -2075,7 +2089,7 @@ td span {
 
 .daily-plan-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
   gap: 1rem;
 }
 
@@ -3419,7 +3433,7 @@ td span {
 
 .team-line-cards {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 16px;
   margin-bottom: 20px;
 }
@@ -3830,7 +3844,7 @@ td span {
 
 .team-progress-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   margin-top: 8px;
 }
 

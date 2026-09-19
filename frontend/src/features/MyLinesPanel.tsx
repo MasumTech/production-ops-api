@@ -109,7 +109,7 @@ function eventMinutesInBucket(
 }
 
 function buildLineViews(data: WorkspaceData): LineView[] {
-  return data.assignments.slice(0, 2).map((assignment) => {
+  return data.assignments.slice(0, 3).map((assignment) => {
     const update = data.updates
       .filter((item) => item.assignment === assignment.id)
       .sort(
@@ -164,7 +164,7 @@ export function MyLinesPanel({
   onNavigate,
 }: {
   data: WorkspaceData;
-  onRaiseIssue: (assignmentId: number) => void;
+  onRaiseIssue: (assignmentId: number, mode: "update" | "escalation") => void;
   onNavigate: (tab: WorkspaceTab) => void;
 }) {
   const lines = useMemo(() => buildLineViews(data), [data]);
@@ -199,10 +199,10 @@ export function MyLinesPanel({
         <p>Live status and plan for today&apos;s production</p>
       </header>
 
-      {data.assignments.length > 2 ? (
+      {data.assignments.length > 3 ? (
         <div className="scope-warning" role="alert">
-          This Team Leader has {data.assignments.length} assignments. Only the first two are shown;
-          ask Operations to correct today&apos;s line allocation.
+          This Team Leader has {data.assignments.length} assignments. The control board supports up
+          to three active lines; ask Operations to review today&apos;s allocation.
         </div>
       ) : null}
 
@@ -477,12 +477,17 @@ export function MyLinesPanel({
           <section className="team-quick-actions" aria-labelledby="quick-actions-heading">
             <h2 id="quick-actions-heading">Quick actions</h2>
             <div>
-              <button type="button" onClick={() => onRaiseIssue(lines[0].assignment.id)}>
+              <button type="button" onClick={() => onRaiseIssue(lines[0].assignment.id, "update")}>
                 <AppIcon name="edit" size={24} /> Update line
               </button>
               <button
                 type="button"
-                onClick={() => onRaiseIssue(worstLine?.assignment.id ?? lines[0].assignment.id)}
+                onClick={() =>
+                  onRaiseIssue(
+                    worstLine?.assignment.id ?? lines[0].assignment.id,
+                    "escalation",
+                  )
+                }
               >
                 <AppIcon name="warning" size={25} /> Raise issue
               </button>
