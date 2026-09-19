@@ -192,6 +192,12 @@ function isDueSoon(line: LineView, referenceTime: number): boolean {
 
 function contactCopy(line: LineView): string {
   const owner = ownerCopy(line);
+  const normalized = owner.toLowerCase();
+
+  if (normalized.includes("qa")) return "QA · Line contact";
+  if (normalized.includes("engineering")) return "Engineering · Line contact";
+  if (normalized.includes("materials")) return "Materials · Line contact";
+  if (normalized.includes("operations")) return "Operations · Line contact";
   return `${owner} · Line contact`;
 }
 
