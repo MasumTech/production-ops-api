@@ -5820,6 +5820,7 @@ td span {
 }
 
 .team-control-sidebar.sidebar {
+  grid-area: auto;
   position: sticky;
   z-index: 45;
   top: 70px;
@@ -5906,6 +5907,9 @@ td span {
 }
 
 .team-control-workspace {
+  grid-area: auto;
+  width: 100%;
+  max-width: none;
   min-width: 0;
   padding: 28px 30px 44px;
   background:
