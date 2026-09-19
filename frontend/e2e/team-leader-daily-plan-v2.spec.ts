@@ -48,9 +48,12 @@ test("Daily Plan matches the approved timeline reference", async ({
     page.getByLabel("Daily Plan sequence view"),
   ).toHaveValue("products");
   await expect(page.getByText("2 lines assigned")).toBeVisible();
+  await expect(page.getByLabel("Shift pattern")).toContainText(
+    "Day · 06:45–18:00",
+  );
 
   await expect(
-    page.getByRole("heading", { name: /Shift schedule · 07:00–18:00/ }),
+    page.getByRole("heading", { name: /Shift schedule · 06:45–18:00/ }),
   ).toBeVisible();
   await expect(page.getByText("Production", { exact: true })).toBeVisible();
   await expect(page.getByText("Planned break", { exact: true })).toBeVisible();
