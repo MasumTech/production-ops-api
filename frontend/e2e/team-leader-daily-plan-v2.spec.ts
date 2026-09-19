@@ -43,10 +43,10 @@ test("Daily Plan matches the approved timeline reference", async ({
   ).toBeVisible();
   await expect(
     page.getByLabel("Filter Daily Plan by assigned line"),
-  ).toHaveDisplayValue("All assigned lines");
+  ).toHaveValue("all");
   await expect(
     page.getByLabel("Daily Plan sequence view"),
-  ).toHaveDisplayValue("Product sequence");
+  ).toHaveValue("products");
   await expect(page.getByText("2 lines assigned")).toBeVisible();
 
   await expect(
@@ -113,7 +113,7 @@ test("Request plan change routes to the selected-line review workflow", async ({
   await expect(
     page.getByRole("heading", { name: /Raise issue|Operational escalation/i }),
   ).toBeVisible();
-  await expect(
-    page.getByDisplayValue("Daily plan change request"),
-  ).toBeVisible();
+  await expect(page.getByLabel("Summary")).toHaveValue(
+    "Daily plan change request",
+  );
 });
