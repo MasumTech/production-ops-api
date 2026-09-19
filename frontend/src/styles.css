@@ -829,8 +829,22 @@ td span {
 
 .handover-summary {
   margin: 1rem 0;
-  color: #d4dde5;
+  color: var(--muted);
   line-height: 1.55;
+}
+
+.handover-notes {
+  margin: -0.35rem 0 1rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 0.65rem;
+  color: #36516c;
+  background: #f5f8fb;
+  font-size: 0.8rem;
+}
+
+.handover-card .compact-list {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
 }
 
 .compact-list {
