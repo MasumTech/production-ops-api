@@ -57,6 +57,16 @@ test("Daily Plan matches the approved Team Leader reference", async ({
   await expect(lineTwo.getByText("BBQ Chicken Bites")).toBeVisible();
   await expect(lineTwo.getByText("Vegetable Mix Filling")).toBeVisible();
 
+  const firstPlanRow = lineOne.locator(".daily-plan-block").first();
+  await expect(firstPlanRow).toHaveCSS("position", "static");
+  await expect(firstPlanRow).toHaveCSS("display", "grid");
+  const rowBox = await firstPlanRow.boundingBox();
+  const cardBox = await lineOne.boundingBox();
+  expect(rowBox).not.toBeNull();
+  expect(cardBox).not.toBeNull();
+  expect(rowBox!.width).toBeLessThanOrEqual(cardBox!.width);
+  expect(rowBox!.height).toBeLessThan(100);
+
   await expect(
     page.getByText(/Approved production, food-safety, quality and escalation procedures remain authoritative/i),
   ).toBeVisible();
