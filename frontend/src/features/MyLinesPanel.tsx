@@ -3,6 +3,14 @@ import { useMemo, useState, type CSSProperties } from "react";
 import { AppIcon } from "../AppIcon";
 import { EmptyState } from "../components";
 import { titleCase } from "../format";
+import {
+  dateTimeToShiftMinutes,
+  formatClockMinutes,
+  getShiftWindow,
+  timeBuckets,
+  timelineStyle,
+  timelineTicks,
+} from "../shiftTiming";
 import type {
   Assignment,
   DailyPlanBlock,
@@ -12,11 +20,6 @@ import type {
   WorkspaceData,
   WorkspaceTab,
 } from "../types";
-
-const SHIFT_START_MINUTES = 7 * 60;
-const SHIFT_END_MINUTES = 18 * 60;
-const SHIFT_HOURS = Array.from({ length: 11 }, (_, index) => index + 7);
-const TIMELINE_LABELS = Array.from({ length: 12 }, (_, index) => index + 7);
 
 type LineView = {
   assignment: Assignment;
@@ -32,38 +35,6 @@ type LineView = {
   variance: number;
   downtime: number;
 };
-
-function minutesOfDay(value: string): number {
-  const parsed = new Date(value);
-  return parsed.getHours() * 60 + parsed.getMinutes();
-}
-
-function formatTime(value: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(value));
-}
-
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat("en-GB").format(value);
-}
-
-function lineLabel(code: string, index: number): string {
-  const lineNumber = code.match(/(\d+)$/)?.[1];
-  return `Line ${lineNumber ? Number(lineNumber) : index + 1}`;
-}
-
-function timelineStyle(start: string, end: string): CSSProperties {
-  const startMinute = Math.max(SHIFT_START_MINUTES, minutesOfDay(start));
-  const endMinute = Math.min(SHIFT_END_MINUTES, minutesOfDay(end));
-  const shiftDuration = SHIFT_END_MINUTES - SHIFT_START_MINUTES;
-  return {
-    left: `${((startMinute - SHIFT_START_MINUTES) / shiftDuration) * 100}%`,
-    width: `${(Math.max(0, endMinute - startMinute) / shiftDuration) * 100}%`,
-  };
-}
 
 function plannedProgressAt(
   blocks: DailyPlanBlock[],
@@ -92,14 +63,27 @@ function statusLabel(status: RagStatus): string {
   return "Action required";
 }
 
-function eventMinutesInHour(event: DowntimeEvent, hour: number): number {
-  const hourStart = hour * 60;
-  const hourEnd = hourStart + 60;
-  const eventStart = minutesOfDay(event.started_at);
+function eventMinutesInBucket(
+  event: DowntimeEvent,
+  startMinutes: number,
+  endMinutes: number,
+  shiftStartMinutes: number,
+  shiftEndMinutes: number,
+): number {
+  const window = {
+    startMinutes: shiftStartMinutes,
+    endMinutes: shiftEndMinutes,
+    startLabel: formatClockMinutes(shiftStartMinutes),
+    endLabel: formatClockMinutes(shiftEndMinutes),
+  };
+  const eventStart = dateTimeToShiftMinutes(event.started_at, window);
   const eventEnd = event.ended_at
-    ? minutesOfDay(event.ended_at)
+    ? dateTimeToShiftMinutes(event.ended_at, window)
     : eventStart + event.duration_minutes;
-  return Math.max(0, Math.min(eventEnd, hourEnd) - Math.max(eventStart, hourStart));
+  return Math.max(
+    0,
+    Math.min(eventEnd, endMinutes) - Math.max(eventStart, startMinutes),
+  );
 }
 
 function buildLineViews(data: WorkspaceData): LineView[] {
@@ -162,6 +146,13 @@ export function MyLinesPanel({
   onNavigate: (tab: WorkspaceTab) => void;
 }) {
   const lines = useMemo(() => buildLineViews(data), [data]);
+  const operationalDate = data.assignments[0]?.date ?? new Date().toISOString().slice(0, 10);
+  const shiftWindow = useMemo(
+    () => getShiftWindow(operationalDate, data.shifts, "day"),
+    [data.shifts, operationalDate],
+  );
+  const timelineLabels = useMemo(() => timelineTicks(shiftWindow), [shiftWindow]);
+  const downtimeBuckets = useMemo(() => timeBuckets(shiftWindow), [shiftWindow]);
   const [hourlyOpen, setHourlyOpen] = useState(false);
   const [selectedLineId, setSelectedLineId] = useState<number | null>(null);
   const selectedLine =
@@ -255,7 +246,7 @@ export function MyLinesPanel({
           <section className="team-product-timeline" aria-labelledby="product-timeline-heading">
             <header>
               <h2 id="product-timeline-heading">
-                Today&apos;s product timeline <span>07:00 – 18:00</span>
+                Today&apos;s product timeline <span>{shiftWindow.startLabel} – {shiftWindow.endLabel}</span>
               </h2>
               <button
                 type="button"
@@ -270,8 +261,8 @@ export function MyLinesPanel({
             <div className="team-timeline-scroll">
               <div className="team-timeline-hours" aria-hidden="true">
                 <span />
-                {TIMELINE_LABELS.map((hour) => (
-                  <time key={hour}>{String(hour).padStart(2, "0")}:00</time>
+                {timelineLabels.map((minutes) => (
+                  <time key={minutes}>{formatClockMinutes(minutes)}</time>
                 ))}
               </div>
               {lines.map((line, index) => (
@@ -289,7 +280,7 @@ export function MyLinesPanel({
                             : `team-timeline-block team-timeline-block--production team-timeline-block--line-${index + 1}`
                         }
                         key={block.id}
-                        style={timelineStyle(block.planned_start_at, block.planned_end_at)}
+                        style={timelineStyle(block.planned_start_at, block.planned_end_at, shiftWindow)}
                         title={`${block.block_type === "break" ? `Break ${block.break_number}` : block.product_name}: ${formatTime(block.planned_start_at)}–${formatTime(block.planned_end_at)}`}
                       >
                         <strong>
@@ -309,6 +300,7 @@ export function MyLinesPanel({
                             new Date(event.started_at).getTime() +
                               event.duration_minutes * 60_000,
                           ).toISOString(),
+                          shiftWindow,
                         )}
                         aria-label={`${lineLabel(line.assignment.production_line_code, index)} downtime: ${event.description}, ${event.duration_minutes} minutes`}
                         onClick={() => showHourlyDowntime(line)}
@@ -348,17 +340,32 @@ export function MyLinesPanel({
                   </div>
                 </header>
                 <div className="team-hourly-grid">
-                  {SHIFT_HOURS.map((hour) => {
+                  {downtimeBuckets.map((bucket) => {
                     const hourEvents = selectedLine.events.filter(
-                      (event) => eventMinutesInHour(event, hour) > 0,
+                      (event) =>
+                        eventMinutesInBucket(
+                          event,
+                          bucket.startMinutes,
+                          bucket.endMinutes,
+                          shiftWindow.startMinutes,
+                          shiftWindow.endMinutes,
+                        ) > 0,
                     );
                     const minutes = hourEvents.reduce(
-                      (total, event) => total + eventMinutesInHour(event, hour),
+                      (total, event) =>
+                        total +
+                        eventMinutesInBucket(
+                          event,
+                          bucket.startMinutes,
+                          bucket.endMinutes,
+                          shiftWindow.startMinutes,
+                          shiftWindow.endMinutes,
+                        ),
                       0,
                     );
                     return (
-                      <article className={minutes ? "has-loss" : ""} key={hour}>
-                        <span>{String(hour).padStart(2, "0")}:00–{String(hour + 1).padStart(2, "0")}:00</span>
+                      <article className={minutes ? "has-loss" : ""} key={bucket.startMinutes}>
+                        <span>{bucket.label}</span>
                         <strong>{minutes} min</strong>
                         <small>
                           {hourEvents.length
