@@ -55,6 +55,29 @@ for (const viewport of viewports) {
       await expect(page.getByText("Version 1.4.0", { exact: true })).toBeVisible();
     }
 
+    await page.waitForTimeout(3800);
+
+    if (viewport.name === "phone") {
+      await page.getByRole("button", { name: "Close navigation" }).click();
+      await expect(sidebar).not.toHaveClass(/team-control-sidebar--open/);
+      await page.screenshot({
+        path: testInfo.outputPath("team-leader-common-layout-phone.png"),
+        animations: "disabled",
+        fullPage: false,
+      });
+
+      await page.getByRole("button", { name: "Open navigation" }).click();
+      await expect(sidebar).toHaveClass(/team-control-sidebar--open/);
+      await page.screenshot({
+        path: testInfo.outputPath(
+          "team-leader-common-layout-phone-navigation.png",
+        ),
+        animations: "disabled",
+        fullPage: false,
+      });
+      return;
+    }
+
     await page.screenshot({
       path: testInfo.outputPath(
         `team-leader-common-layout-${viewport.name}.png`,
