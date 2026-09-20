@@ -9,7 +9,7 @@ import {
   SubmitButton,
   UserSelect,
 } from "../components";
-import { toIso } from "../format";
+import { formatScheduleClock } from "../shiftTiming";
 import type {
   Assignment,
   MaterialReadiness,
@@ -24,13 +24,13 @@ function lineLabel(code: string): string {
 
 function clock(value: string | null | undefined): string {
   if (!value) return "Not set";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Not set";
-  return new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(date);
+  return formatScheduleClock(value);
+}
+
+function wallClockIso(value: string): string | null {
+  if (!value) return null;
+  const normalized = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value);
+  return normalized ? `${value}:00Z` : null;
 }
 
 function statusLabel(status: MaterialStatus): string {
@@ -225,9 +225,9 @@ export function MaterialsPanel({
       owner: owner ? Number(owner) : null,
       expected_available_at:
         status === "short" || status === "in_process"
-          ? toIso(expectedAvailable)
+          ? wallClockIso(expectedAvailable)
           : null,
-      needed_by_at: neededBy ? toIso(neededBy) : null,
+      needed_by_at: neededBy ? wallClockIso(neededBy) : null,
       risk_summary: riskSummary.trim(),
       responsible_role: responsibleRole.trim(),
       expected_action: expectedAction.trim(),
