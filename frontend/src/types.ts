@@ -159,10 +159,16 @@ export interface BreakOpportunity {
   assignment: number;
   production_line: number;
   production_line_code: string;
+  production_line_name?: string;
   break_block: number;
   break_number: number;
   source_update: number;
   issue_summary: string;
+  source_action_taken?: string;
+  source_support_required?: string;
+  source_next_update_due_at?: string | null;
+  planned_break_start_at?: string;
+  planned_break_end_at?: string;
   status: BreakOpportunityStatus;
   fault_at: string;
   suggested_start_at: string;

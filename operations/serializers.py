@@ -1361,6 +1361,24 @@ class BreakOpportunitySerializer(serializers.ModelSerializer):
     issue_summary = serializers.CharField(
         source="source_update.issue_summary", read_only=True
     )
+    source_action_taken = serializers.CharField(
+        source="source_update.action_taken", read_only=True
+    )
+    source_support_required = serializers.CharField(
+        source="source_update.support_required", read_only=True
+    )
+    source_next_update_due_at = serializers.DateTimeField(
+        source="source_update.next_update_due_at", read_only=True
+    )
+    planned_break_start_at = serializers.DateTimeField(
+        source="break_block.planned_start_at", read_only=True
+    )
+    planned_break_end_at = serializers.DateTimeField(
+        source="break_block.planned_end_at", read_only=True
+    )
+    production_line_name = serializers.CharField(
+        source="assignment.production_line.name", read_only=True
+    )
 
     class Meta:
         model = BreakOpportunity
@@ -1369,10 +1387,16 @@ class BreakOpportunitySerializer(serializers.ModelSerializer):
             "assignment",
             "production_line",
             "production_line_code",
+            "production_line_name",
             "break_block",
             "break_number",
             "source_update",
             "issue_summary",
+            "source_action_taken",
+            "source_support_required",
+            "source_next_update_due_at",
+            "planned_break_start_at",
+            "planned_break_end_at",
             "status",
             "fault_at",
             "suggested_start_at",

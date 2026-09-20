@@ -147,6 +147,25 @@ def test_seed_demo_data_creates_complete_dataset():
     assert BreakOpportunity.objects.filter(
         status=BreakOpportunity.Status.SUGGESTED
     ).exists()
+    suggested_break = BreakOpportunity.objects.select_related(
+        "break_block",
+        "source_update",
+    ).get(status=BreakOpportunity.Status.SUGGESTED)
+    assert suggested_break.assignment.production_line.code == "DEMO-LINE-02"
+    assert suggested_break.break_block.break_number == 1
+    assert suggested_break.fault_at.astimezone().time().replace(tzinfo=None) == time(
+        9, 55
+    )
+    assert suggested_break.suggested_start_at.astimezone().time().replace(
+        tzinfo=None
+    ) == time(10, 0)
+    assert suggested_break.expected_return_at.astimezone().time().replace(
+        tzinfo=None
+    ) == time(10, 40)
+    assert suggested_break.source_update.issue_summary == "Printer fault"
+    assert suggested_break.source_update.next_update_due_at.astimezone().time().replace(
+        tzinfo=None
+    ) == time(10, 35)
     assert (
         sum(
             event.duration_minutes

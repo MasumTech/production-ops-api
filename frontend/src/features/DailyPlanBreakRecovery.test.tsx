@@ -99,10 +99,16 @@ const opportunity: BreakOpportunity = {
   assignment: assignment.id,
   production_line: assignment.production_line,
   production_line_code: assignment.production_line_code,
+  production_line_name: assignment.production_line_name,
   break_block: 2,
   break_number: 1,
   source_update: 22,
-  issue_summary: "Filler stopped",
+  issue_summary: "Printer fault",
+  source_action_taken: "Line stopped safely and product controlled",
+  source_support_required: "Engineering checks before restart",
+  source_next_update_due_at: "2026-09-04T08:45:00Z",
+  planned_break_start_at: "2026-09-04T08:30:00Z",
+  planned_break_end_at: "2026-09-04T09:10:00Z",
   status: "suggested",
   fault_at: "2026-09-04T08:05:00Z",
   suggested_start_at: "2026-09-04T08:10:00Z",
@@ -246,7 +252,7 @@ describe("daily plan and break opportunity workspace", () => {
     ).toHaveLength(3);
   });
 
-  it("lets the Team Leader confirm a suggested full break", async () => {
+  it("matches the current-opportunity reference and confirms safely", async () => {
     const postSpy = vi.spyOn(api, "postJson").mockResolvedValue(opportunity);
     const onSaved = vi.fn().mockResolvedValue(undefined);
     const actor = userEvent.setup();
@@ -260,14 +266,39 @@ describe("daily plan and break opportunity workspace", () => {
     );
 
     expect(
-      screen.queryByRole("button", { name: "Plan break" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Team Leader confirms every decision."),
+      screen.getByRole("heading", { name: "Break & Recovery" }),
     ).toBeInTheDocument();
-    await actor.click(
-      screen.getByRole("button", { name: "Confirm full break" }),
-    );
+    expect(
+      screen.getByText(
+        "Preserve the full approved break and prepare a controlled restart",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Review required", { exact: true })).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Current opportunity" }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.getByRole("heading", { name: /Current event · Line/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("08:05 · Printer fault")).toBeInTheDocument();
+    expect(screen.getByText("Stopped safely")).toBeInTheDocument();
+    expect(screen.getByText("08:45")).toBeInTheDocument();
+    expect(screen.getByText("08:30–09:10")).toBeInTheDocument();
+    expect(screen.getByText("08:10–08:50")).toBeInTheDocument();
+    expect(screen.getByText("35 min")).toBeInTheDocument();
+    expect(screen.getByText("40 min")).toBeInTheDocument();
+    expect(screen.getByText("Approved speed")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Never recall people early, reduce approved rest, bypass checks/i,
+      ),
+    ).toBeInTheDocument();
+
+    const confirmButton = screen.getByRole("button", {
+      name: "Confirm opportunity",
+    });
+    expect(confirmButton).toBeEnabled();
+    await actor.click(confirmButton);
 
     await waitFor(() => expect(postSpy).toHaveBeenCalledOnce());
     expect(postSpy).toHaveBeenCalledWith(
@@ -276,6 +307,39 @@ describe("daily plan and break opportunity workspace", () => {
     );
     expect(onSaved).toHaveBeenCalledWith(
       "Break confirmed. The full 40-minute return time is protected.",
+    );
+  });
+
+  it("requires a recorded reason before declining an opportunity", async () => {
+    const postSpy = vi.spyOn(api, "postJson").mockResolvedValue({
+      ...opportunity,
+      status: "declined",
+      declined_at: "2026-09-04T08:08:00Z",
+      decline_reason: "Approved break remains at planned time.",
+    });
+    const actor = userEvent.setup();
+
+    render(
+      <BreakRecoveryPanel
+        assignments={[assignment]}
+        opportunities={[opportunity]}
+        onSaved={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    await actor.click(
+      screen.getByRole("button", { name: "Decline with reason" }),
+    );
+    await actor.type(
+      screen.getByLabelText("Reason for declining"),
+      "Approved break remains at planned time.",
+    );
+    await actor.click(screen.getByRole("button", { name: "Confirm decline" }));
+
+    await waitFor(() => expect(postSpy).toHaveBeenCalledOnce());
+    expect(postSpy).toHaveBeenCalledWith(
+      "/break-opportunities/13/decline/",
+      { decline_reason: "Approved break remains at planned time." },
     );
   });
 });
