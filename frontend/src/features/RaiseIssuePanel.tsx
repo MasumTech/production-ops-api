@@ -1,137 +1,314 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { OfflineQueuedError, postJson } from "../api";
 import {
-  AssignmentSelect,
-  ErrorBanner,
-  PageIntro,
-  SubmitButton,
-  UserSelect,
-} from "../components";
-import { toIso } from "../format";
-import type { Assignment, Escalation, LineUpdate, UserChoice } from "../types";
+  ApiError,
+  OfflineQueuedError,
+  postForm,
+  postJson,
+} from "../api";
+import { AppIcon } from "../AppIcon";
+import { ErrorBanner } from "../components";
+import type {
+  Assignment,
+  Escalation,
+  LineUpdate,
+  RagStatus,
+} from "../types";
 
-function futureLocal(minutes: number): string {
-  const value = new Date(Date.now() + minutes * 60_000);
-  value.setMinutes(value.getMinutes() - value.getTimezoneOffset());
-  return value.toISOString().slice(0, 16);
+type IssueMode = "update" | "escalation";
+
+type IssueCaptureResponse = {
+  line_update: LineUpdate;
+  escalation: Escalation | null;
+  evidence: {
+    id: number;
+    original_name: string;
+    content_type: string;
+    size_bytes: number;
+  } | null;
+};
+
+type IssueDraft = {
+  assignment: string;
+  status: RagStatus;
+  category: string;
+  shortProblem: string;
+  immediateControl: string;
+  supportRequired: string;
+  actionOwnerRole: string;
+  nextUpdateMinutes: number;
+};
+
+const SUPPORT_ROLES = [
+  ["engineering", "Engineering"],
+  ["qa", "QA"],
+  ["operations", "Operations"],
+  ["materials", "Materials"],
+  ["machine_minder", "Machine Minder"],
+  ["operative", "Operative"],
+] as const;
+
+const CATEGORY_OPTIONS = [
+  ["equipment", "Machine / seal"],
+  ["material", "Materials"],
+  ["quality", "Quality"],
+  ["staffing", "Staffing"],
+  ["safety", "Safety"],
+  ["other", "Other"],
+] as const;
+
+const NEXT_UPDATE_OPTIONS = [10, 20, 30, 60] as const;
+const MAX_EVIDENCE_BYTES = 5 * 1024 * 1024;
+
+function draftKey(assignment: string): string {
+  return `team-leader-issue-draft:${assignment || "unassigned"}`;
+}
+
+function formatTime(value: Date): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(value);
+}
+
+function lineNumber(code: string): string {
+  const match = code.match(/(\d+)$/);
+  return match ? String(Number(match[1])) : code;
+}
+
+function safeParseDraft(value: string | null): IssueDraft | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as Partial<IssueDraft>;
+    if (
+      typeof parsed.assignment === "string" &&
+      typeof parsed.status === "string" &&
+      typeof parsed.category === "string" &&
+      typeof parsed.shortProblem === "string" &&
+      typeof parsed.immediateControl === "string" &&
+      typeof parsed.supportRequired === "string" &&
+      typeof parsed.actionOwnerRole === "string" &&
+      typeof parsed.nextUpdateMinutes === "number"
+    ) {
+      return parsed as IssueDraft;
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 export function RaiseIssuePanel({
   assignments,
-  users,
+  updates,
   selectedAssignment,
   initialMode = "update",
   initialEscalation,
+  online,
   onSaved,
+  onCancel,
 }: {
   assignments: Assignment[];
-  users: UserChoice[];
+  updates: LineUpdate[];
   selectedAssignment: number | null;
-  initialMode?: "update" | "escalation";
+  initialMode?: IssueMode;
   initialEscalation?: {
     category: string;
     summary: string;
     details: string;
   } | null;
+  online: boolean;
   onSaved: (message: string) => Promise<void>;
+  onCancel: () => void;
 }) {
-  const [mode, setMode] = useState<"update" | "escalation">(initialMode);
-  const [assignment, setAssignment] = useState(selectedAssignment?.toString() ?? "");
-  const [status, setStatus] = useState("green");
-  const [currentProduct, setCurrentProduct] = useState("");
-  const [issueSummary, setIssueSummary] = useState("");
-  const [actionTaken, setActionTaken] = useState("");
-  const [actionOwner, setActionOwner] = useState("");
-  const [supportRequired, setSupportRequired] = useState("");
-  const [followUp, setFollowUp] = useState(false);
-  const [nextUpdate, setNextUpdate] = useState(futureLocal(60));
-
+  const [assignment, setAssignment] = useState(
+    selectedAssignment?.toString() ?? assignments[0]?.id.toString() ?? "",
+  );
+  const [status, setStatus] = useState<RagStatus>(
+    initialMode === "escalation" ? "amber" : "green",
+  );
   const [category, setCategory] = useState("equipment");
-  const [priority, setPriority] = useState("medium");
-  const [escalationSummary, setEscalationSummary] = useState("");
-  const [details, setDetails] = useState("");
-  const [immediateAction, setImmediateAction] = useState("");
-  const [responseOwner, setResponseOwner] = useState("");
-  const [responseDue, setResponseDue] = useState(futureLocal(60));
+  const [shortProblem, setShortProblem] = useState("");
+  const [immediateControl, setImmediateControl] = useState("");
+  const [supportRequired, setSupportRequired] = useState("engineering");
+  const [actionOwnerRole, setActionOwnerRole] = useState("engineering");
+  const [nextUpdateMinutes, setNextUpdateMinutes] = useState(10);
+  const [evidence, setEvidence] = useState<File | null>(null);
+  const [raisedAt, setRaisedAt] = useState(() => new Date());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const selected = assignments.find((item) => String(item.id) === assignment);
+  const latestUpdate = useMemo(
+    () =>
+      updates
+        .filter((item) => String(item.assignment) === assignment)
+        .sort(
+          (left, right) =>
+            new Date(right.recorded_at).getTime() -
+            new Date(left.recorded_at).getTime(),
+        )[0],
+    [assignment, updates],
+  );
+  const currentProduct = latestUpdate?.current_product ?? "";
+  const pageTitle = initialMode === "escalation" ? "Raise issue" : "Update line";
+  const pageSubtitle =
+    initialMode === "escalation"
+      ? "Record a short structured update after the approved urgent escalation"
+      : "Record the current line position, ownership and next update";
 
   useEffect(() => {
-    if (selectedAssignment) setAssignment(String(selectedAssignment));
-    setMode(initialMode);
+    const nextAssignment =
+      selectedAssignment?.toString() ?? assignments[0]?.id.toString() ?? "";
+    setAssignment(nextAssignment);
+    setStatus(initialMode === "escalation" ? "amber" : "green");
+    setRaisedAt(new Date());
+    setEvidence(null);
+
     if (initialMode === "escalation" && initialEscalation) {
-      setCategory(initialEscalation.category);
-      setEscalationSummary(initialEscalation.summary);
-      setDetails(initialEscalation.details);
+      setCategory(initialEscalation.category || "other");
+      setShortProblem(initialEscalation.summary);
+      setImmediateControl(initialEscalation.details);
+      return;
     }
-  }, [initialEscalation, initialMode, selectedAssignment]);
+
+    const draft = safeParseDraft(localStorage.getItem(draftKey(nextAssignment)));
+    if (draft) {
+      setStatus(draft.status);
+      setCategory(draft.category);
+      setShortProblem(draft.shortProblem);
+      setImmediateControl(draft.immediateControl);
+      setSupportRequired(draft.supportRequired);
+      setActionOwnerRole(draft.actionOwnerRole);
+      setNextUpdateMinutes(draft.nextUpdateMinutes);
+    } else {
+      setCategory("equipment");
+      setShortProblem("");
+      setImmediateControl("");
+      setSupportRequired("engineering");
+      setActionOwnerRole("engineering");
+      setNextUpdateMinutes(10);
+    }
+  }, [assignments, initialEscalation, initialMode, selectedAssignment]);
 
   useEffect(() => {
-    if (status === "red") setFollowUp(true);
-  }, [status]);
-
-  const saveUpdate = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setError("");
-    try {
-      await postJson<LineUpdate>("/hourly-line-updates/", {
-        assignment: Number(assignment),
-        status,
-        current_product: currentProduct.trim(),
-        issue_summary: issueSummary.trim(),
-        action_taken: actionTaken.trim(),
-        action_owner: actionOwner ? Number(actionOwner) : null,
-        support_required: supportRequired.trim(),
-        requires_follow_up: followUp,
-        next_update_due_at: toIso(nextUpdate),
-      });
-      await onSaved("Line status recorded.");
-      setIssueSummary("");
-      setActionTaken("");
-      setSupportRequired("");
-    } catch (caught) {
-      if (caught instanceof OfflineQueuedError) {
-        await onSaved(caught.message);
-        setIssueSummary("");
-        setActionTaken("");
-        setSupportRequired("");
-      } else {
-        setError(caught instanceof Error ? caught.message : "Could not save the line update.");
-      }
-    } finally {
-      setBusy(false);
+    if (status === "red" && actionOwnerRole === "operative") {
+      setActionOwnerRole("operations");
     }
+  }, [actionOwnerRole, status]);
+
+  const nextUpdateLabel = (minutes: number) => {
+    const value = new Date(raisedAt.getTime() + minutes * 60_000);
+    return `${minutes} minutes · ${formatTime(value)}`;
   };
 
-  const saveEscalation = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
+  const saveDraft = async () => {
     setError("");
+    const draft: IssueDraft = {
+      assignment,
+      status,
+      category,
+      shortProblem,
+      immediateControl,
+      supportRequired,
+      actionOwnerRole,
+      nextUpdateMinutes,
+    };
+    localStorage.setItem(draftKey(assignment), JSON.stringify(draft));
+    await onSaved("Issue draft saved on this device.");
+  };
+
+  const selectEvidence = (file: File | null) => {
+    setError("");
+    if (!file) {
+      setEvidence(null);
+      return;
+    }
+    if (file.size > MAX_EVIDENCE_BYTES) {
+      setError("Evidence must be 5 MB or smaller.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    setEvidence(file);
+  };
+
+  const submit = async (escalate: boolean) => {
+    setError("");
+
+    if (!assignment) {
+      setError("Select an assigned line.");
+      return;
+    }
+    if (!shortProblem.trim() && status !== "green") {
+      setError("Add a short problem for Amber or Red status.");
+      return;
+    }
+    if (status === "red" && !immediateControl.trim()) {
+      setError("Record the immediate control before saving a Red issue.");
+      return;
+    }
+    if (escalate && status === "green") {
+      setError("Change the status to Amber or Red before escalating.");
+      return;
+    }
+
+    const payload = {
+      assignment: Number(assignment),
+      status,
+      category,
+      current_product: currentProduct,
+      short_problem: shortProblem.trim() || "Routine line update",
+      immediate_control: immediateControl.trim(),
+      support_required: supportRequired,
+      action_owner_role: actionOwnerRole,
+      next_update_minutes: nextUpdateMinutes,
+      escalate,
+    };
+
+    setBusy(true);
     try {
-      await postJson<Escalation>("/operational-escalations/", {
-        assignment: Number(assignment),
-        category,
-        priority,
-        summary: escalationSummary.trim(),
-        details: details.trim(),
-        immediate_action: immediateAction.trim(),
-        owner: responseOwner ? Number(responseOwner) : null,
-        response_due_at: toIso(responseDue),
-      });
-      await onSaved("Escalation raised and added to the attention queue.");
-      setEscalationSummary("");
-      setDetails("");
-      setImmediateAction("");
+      let result: IssueCaptureResponse;
+      if (evidence) {
+        const form = new FormData();
+        Object.entries(payload).forEach(([key, value]) =>
+          form.append(key, String(value)),
+        );
+        form.append("evidence", evidence);
+        result = await postForm<IssueCaptureResponse>("/issue-captures/", form);
+      } else {
+        result = await postJson<IssueCaptureResponse>(
+          "/issue-captures/",
+          payload,
+        );
+      }
+
+      localStorage.removeItem(draftKey(assignment));
+      setEvidence(null);
+      setShortProblem("");
+      setImmediateControl("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+
+      await onSaved(
+        result.escalation
+          ? "Issue recorded and escalated to the attention queue."
+          : initialMode === "update"
+            ? "Line update recorded."
+            : "Support request recorded.",
+      );
     } catch (caught) {
       if (caught instanceof OfflineQueuedError) {
+        localStorage.removeItem(draftKey(assignment));
         await onSaved(caught.message);
-        setEscalationSummary("");
-        setDetails("");
-        setImmediateAction("");
+      } else if (caught instanceof ApiError) {
+        setError(caught.message);
       } else {
-        setError(caught instanceof Error ? caught.message : "Could not raise the escalation.");
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "Could not record this issue.",
+        );
       }
     } finally {
       setBusy(false);
@@ -139,170 +316,256 @@ export function RaiseIssuePanel({
   };
 
   return (
-    <section>
-      <PageIntro
-        eyebrow="Fast capture"
-        title="Update line or raise issue"
-        body="Record the RAG position first. Use escalation when a blocker needs a responsible function and deadline."
-      />
-      <div className="segmented-control" aria-label="Issue workflow">
-        <button
-          className={mode === "update" ? "is-active" : ""}
-          onClick={() => setMode("update")}
-        >
-          Line update
-        </button>
-        <button
-          className={mode === "escalation" ? "is-active" : ""}
-          onClick={() => setMode("escalation")}
-        >
-          Escalation
-        </button>
-      </div>
-      {error ? <ErrorBanner message={error} /> : null}
+    <section className="raise-issue-v2">
+      <header className="raise-issue-v2__header">
+        <div>
+          <h1>{pageTitle}</h1>
+          <p>{pageSubtitle}</p>
+        </div>
+        <span className="raise-issue-v2__connection">
+          <i className={online ? "is-online" : ""} aria-hidden="true" />
+          {online ? "Online" : "Offline"}
+        </span>
+      </header>
 
-      {mode === "update" ? (
-        <form className="form-card form-grid" onSubmit={saveUpdate}>
-          <label className="span-2">
-            Assigned line
-            <AssignmentSelect
-              assignments={assignments}
-              value={assignment}
-              onChange={(event) => setAssignment(event.target.value)}
-              required
-            />
-          </label>
-          <label>
-            RAG status
-            <select value={status} onChange={(event) => setStatus(event.target.value)}>
-              <option value="green">Green</option>
-              <option value="amber">Amber</option>
-              <option value="red">Red</option>
-            </select>
-          </label>
-          <label>
-            Current product
-            <input value={currentProduct} onChange={(event) => setCurrentProduct(event.target.value)} />
-          </label>
-          <label className="span-2">
-            Issue summary {status !== "green" ? "(required)" : ""}
-            <input
-              value={issueSummary}
-              onChange={(event) => setIssueSummary(event.target.value)}
-              required={status !== "green"}
-              maxLength={255}
-            />
-          </label>
-          <label className="span-2">
-            Action taken
-            <textarea value={actionTaken} onChange={(event) => setActionTaken(event.target.value)} rows={3} />
-          </label>
-          <label>
-            Action owner
-            <UserSelect users={users} value={actionOwner} onChange={(event) => setActionOwner(event.target.value)} />
-          </label>
-          <label>
-            Next update due
-            <input
-              type="datetime-local"
-              value={nextUpdate}
-              onChange={(event) => setNextUpdate(event.target.value)}
-              required
-            />
-          </label>
-          <label className="span-2">
-            Support required
-            <input value={supportRequired} onChange={(event) => setSupportRequired(event.target.value)} />
-          </label>
-          <label className="checkbox-row span-2">
-            <input
-              type="checkbox"
-              checked={followUp}
-              onChange={(event) => setFollowUp(event.target.checked)}
-              disabled={status === "red"}
-            />
-            Requires follow-up {status === "red" ? "(mandatory for Red)" : ""}
-          </label>
-          <div className="form-actions span-2">
-            <SubmitButton busy={busy}>Record line update</SubmitButton>
+      <div className="raise-issue-v2__card">
+        <div className="issue-stepper" aria-label="Issue capture progress">
+          <div className="issue-stepper__item is-active">
+            <span>1</span>
+            <strong>Describe</strong>
           </div>
-        </form>
-      ) : (
-        <form className="form-card form-grid" onSubmit={saveEscalation}>
-          <label className="span-2">
-            Assigned line
-            <AssignmentSelect
-              assignments={assignments}
+          <i aria-hidden="true" />
+          <div className="issue-stepper__item">
+            <span>2</span>
+            <strong>Support</strong>
+          </div>
+          <i aria-hidden="true" />
+          <div className="issue-stepper__item">
+            <span>3</span>
+            <strong>Follow-up</strong>
+          </div>
+        </div>
+
+        {error ? <ErrorBanner message={error} /> : null}
+
+        <form
+          className="raise-issue-v2__form"
+          onSubmit={(event) => event.preventDefault()}
+        >
+          <label>
+            <span>Line</span>
+            <select
+              aria-label="Line"
               value={assignment}
               onChange={(event) => setAssignment(event.target.value)}
               required
-            />
-          </label>
-          <label>
-            Category
-            <select value={category} onChange={(event) => setCategory(event.target.value)}>
-              <option value="equipment">Equipment</option>
-              <option value="material">Material</option>
-              <option value="quality">Quality</option>
-              <option value="staffing">Staffing</option>
-              <option value="safety">Safety</option>
-              <option value="other">Other</option>
+            >
+              {assignments.map((item) => {
+                const update = updates
+                  .filter((entry) => entry.assignment === item.id)
+                  .sort(
+                    (left, right) =>
+                      new Date(right.recorded_at).getTime() -
+                      new Date(left.recorded_at).getTime(),
+                  )[0];
+                return (
+                  <option value={item.id} key={item.id}>
+                    Line {lineNumber(item.production_line_code)}
+                    {update?.current_product
+                      ? ` · ${update.current_product}`
+                      : ` · ${item.production_line_name}`}
+                  </option>
+                );
+              })}
             </select>
           </label>
+
+          <fieldset className="issue-status-field">
+            <legend>Status</legend>
+            <div className="issue-status-selector" role="group" aria-label="Status">
+              {(["green", "amber", "red"] as RagStatus[]).map((value) => (
+                <button
+                  type="button"
+                  key={value}
+                  className={status === value ? `is-active is-${value}` : ""}
+                  aria-pressed={status === value}
+                  onClick={() => setStatus(value)}
+                >
+                  <i className={`is-${value}`} aria-hidden="true" />
+                  {value.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+
           <label>
-            Priority
-            <select value={priority} onChange={(event) => setPriority(event.target.value)}>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="critical">Critical</option>
+            <span>Category</span>
+            <select
+              aria-label="Category"
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+            >
+              {CATEGORY_OPTIONS.map(([value, label]) => (
+                <option value={value} key={value}>
+                  {label}
+                </option>
+              ))}
             </select>
           </label>
-          <label className="span-2">
-            Summary
-            <input
-              value={escalationSummary}
-              onChange={(event) => setEscalationSummary(event.target.value)}
-              required
-              maxLength={255}
-            />
+
+          <label>
+            <span>Time raised</span>
+            <span className="issue-time-field">
+              <input
+                aria-label="Time raised"
+                value={formatTime(raisedAt)}
+                readOnly
+              />
+              <AppIcon name="clock" size={19} />
+            </span>
           </label>
+
           <label className="span-2">
-            Detail
-            <textarea value={details} onChange={(event) => setDetails(event.target.value)} rows={3} />
-          </label>
-          <label className="span-2">
-            Immediate action {priority === "critical" ? "(required)" : ""}
+            <span>Short problem</span>
             <textarea
-              value={immediateAction}
-              onChange={(event) => setImmediateAction(event.target.value)}
-              required={priority === "critical"}
-              rows={3}
+              aria-label="Short problem"
+              value={shortProblem}
+              onChange={(event) => setShortProblem(event.target.value)}
+              rows={2}
+              maxLength={255}
+              placeholder="Describe the issue briefly"
             />
           </label>
-          <label>
-            Response owner {priority === "high" || priority === "critical" ? "(required)" : ""}
-            <UserSelect
-              users={users}
-              value={responseOwner}
-              onChange={(event) => setResponseOwner(event.target.value)}
-              required={priority === "high" || priority === "critical"}
+
+          <label className="span-2">
+            <span>Immediate control</span>
+            <textarea
+              aria-label="Immediate control"
+              value={immediateControl}
+              onChange={(event) => setImmediateControl(event.target.value)}
+              rows={2}
+              placeholder="Record the approved immediate control already taken"
             />
           </label>
+
           <label>
-            Response due
+            <span>Support required</span>
+            <select
+              aria-label="Support required"
+              value={supportRequired}
+              onChange={(event) => setSupportRequired(event.target.value)}
+            >
+              {SUPPORT_ROLES.map(([value, label]) => (
+                <option value={value} key={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            <span>Action owner</span>
+            <select
+              aria-label="Action owner"
+              value={actionOwnerRole}
+              onChange={(event) => setActionOwnerRole(event.target.value)}
+            >
+              {SUPPORT_ROLES.map(([value, label]) => (
+                <option value={value} key={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            <span>Next update</span>
+            <select
+              aria-label="Next update"
+              value={nextUpdateMinutes}
+              onChange={(event) =>
+                setNextUpdateMinutes(Number(event.target.value))
+              }
+            >
+              {NEXT_UPDATE_OPTIONS.map((minutes) => (
+                <option value={minutes} key={minutes}>
+                  {nextUpdateLabel(minutes)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="issue-evidence-field">
+            <span>Evidence / photo</span>
             <input
-              type="datetime-local"
-              value={responseDue}
-              onChange={(event) => setResponseDue(event.target.value)}
-              required
+              ref={fileInputRef}
+              className="visually-hidden"
+              aria-label="Evidence file"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf"
+              onChange={(event) =>
+                selectEvidence(event.target.files?.[0] ?? null)
+              }
             />
+            <button
+              type="button"
+              className={evidence ? "has-file" : ""}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <AppIcon name="paperclip" size={20} />
+              {evidence ? evidence.name : "Add evidence"}
+            </button>
           </label>
-          <div className="form-actions span-2">
-            <SubmitButton busy={busy}>Raise escalation</SubmitButton>
-          </div>
         </form>
-      )}
+
+        <div className="raise-issue-v2__safety" role="note">
+          <AppIcon name="warning" size={30} />
+          <p>
+            Make the situation safe and follow the approved safety, food-safety,
+            quality or technical procedure first. This app records visibility and
+            ownership; it does not replace the procedure.
+          </p>
+        </div>
+
+        <footer className="raise-issue-v2__actions">
+          <button
+            type="button"
+            className="issue-action issue-action--cancel"
+            onClick={onCancel}
+            disabled={busy}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="issue-action issue-action--outline"
+            onClick={() => void saveDraft()}
+            disabled={busy}
+          >
+            Save draft
+          </button>
+          <button
+            type="button"
+            className="issue-action issue-action--primary"
+            onClick={() => void submit(false)}
+            disabled={busy}
+          >
+            {busy
+              ? "Saving…"
+              : initialMode === "update"
+                ? "Save update"
+                : "Request support"}
+          </button>
+          <button
+            type="button"
+            className="issue-action issue-action--danger"
+            onClick={() => void submit(true)}
+            disabled={busy || status === "green"}
+          >
+            {busy ? "Saving…" : "Save & escalate"}
+          </button>
+        </footer>
+      </div>
     </section>
   );
 }
