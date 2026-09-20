@@ -38,7 +38,7 @@ test("Break Recovery matches the approved current-opportunity reference", async 
       "Preserve the full approved break and prepare a controlled restart",
     ),
   ).toBeVisible();
-  await expect(page.getByText("Review required", { exact: true })).toBeVisible();
+  await expect(page.locator(".break-recovery-v2__review")).toBeVisible();
 
   await expect(
     page.getByRole("tab", { name: "Current opportunity" }),
