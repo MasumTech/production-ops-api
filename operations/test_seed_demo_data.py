@@ -267,10 +267,10 @@ def test_seed_demo_data_creates_complete_dataset():
         assignment__date__lt=date(2026, 9, 2),
     )
     assert historical_escalations.count() == 2
-    assert {
-        escalation.assignment.date
-        for escalation in historical_escalations
-    } == {date(2026, 8, 29), date(2026, 8, 22)}
+    assert {escalation.assignment.date for escalation in historical_escalations} == {
+        date(2026, 8, 29),
+        date(2026, 8, 22),
+    }
 
     printer_escalation = OperationalEscalation.objects.get(
         summary="Printer restart checks required",
