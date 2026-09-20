@@ -96,7 +96,7 @@ test("team leader is routed to the assigned-line workspace", async ({ page }) =>
   await expect(
     page.getByRole("tab", { name: "Current opportunity" }),
   ).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByText("Review required", { exact: true })).toBeVisible();
+  await expect(page.locator(".break-recovery-v2__review")).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Confirm opportunity" }),
   ).toBeEnabled();
