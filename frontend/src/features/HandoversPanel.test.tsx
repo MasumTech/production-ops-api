@@ -236,9 +236,9 @@ describe("Team Leader Shift Handover v2", () => {
     const openItems = screen.getByLabelText("Open items for handover");
     const table = within(openItems).getByRole("table");
     expect(within(table).getAllByRole("row")).toHaveLength(4);
-    expect(within(table).getByText("Product hold")).toBeInTheDocument();
-    expect(within(table).getByText("Printer")).toBeInTheDocument();
-    expect(within(table).getByText("Oat Milk material")).toBeInTheDocument();
+    expect(table).toHaveTextContent("Product hold");
+    expect(table).toHaveTextContent("Printer");
+    expect(table).toHaveTextContent("Oat Milk material");
     expect(within(table).getByText("QA / Operations")).toBeInTheDocument();
     expect(within(table).getByText("Engineering")).toBeInTheDocument();
     expect(within(table).getByText("Materials")).toBeInTheDocument();
