@@ -203,9 +203,7 @@ class Command(BaseCommand):
     def _seed(self, operational_date, password):
         # Keep every relative demo timestamp anchored to the requested
         # operational date rather than the machine clock running the seed.
-        now = timezone.make_aware(
-            datetime.combine(operational_date, time(16, 30))
-        )
+        now = timezone.make_aware(datetime.combine(operational_date, time(16, 30)))
         users = self._seed_users(password)
         lines = self._seed_lines()
         assets = self._seed_assets(lines)
