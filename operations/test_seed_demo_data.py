@@ -163,12 +163,9 @@ def test_seed_demo_data_creates_complete_dataset():
         tzinfo=None
     ) == time(10, 40)
     assert suggested_break.source_update.issue_summary == "Printer fault"
-    assert (
-        suggested_break.source_update.next_update_due_at.astimezone()
-        .time()
-        .replace(tzinfo=None)
-        == time(10, 35)
-    )
+    assert suggested_break.source_update.next_update_due_at.astimezone().time().replace(
+        tzinfo=None
+    ) == time(10, 35)
     assert (
         sum(
             event.duration_minutes
