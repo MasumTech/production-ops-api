@@ -700,6 +700,8 @@ export default function App() {
             assignments={data.assignments}
             handovers={data.handovers}
             escalations={data.escalations}
+            updates={data.updates}
+            opportunities={data.breakOpportunities}
             onSaved={async (message) => {
               if (online) await refresh();
               setToast(message);
