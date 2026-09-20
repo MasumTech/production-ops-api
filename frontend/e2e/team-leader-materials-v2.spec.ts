@@ -91,6 +91,8 @@ test("Materials matches the approved readiness reference", async ({
     "Team Leaders cannot release held product.",
   );
 
+  await expect(page.locator(".toast")).toBeHidden({ timeout: 5000 });
+
   await page.screenshot({
     path: testInfo.outputPath("team-leader-materials-v2-reference.png"),
     animations: "disabled",
