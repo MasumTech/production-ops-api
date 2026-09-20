@@ -207,9 +207,9 @@ def test_seed_demo_data_creates_complete_dataset():
     assert short_material.responsible_role == "Materials"
     assert short_material.expected_action == "Decision due 10:20"
     assert short_material.next_action == "Confirm replenishment"
-    assert short_material.needed_by_at.astimezone().time().replace(
-        tzinfo=None
-    ) == time(10, 30)
+    assert short_material.needed_by_at.astimezone().time().replace(tzinfo=None) == time(
+        10, 30
+    )
     assert short_material.notes == "Carton stock below next-hour demand."
 
     held_material = ProductMaterialReadiness.objects.get(
