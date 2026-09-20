@@ -145,7 +145,8 @@ test("Request plan change routes to the selected-line review workflow", async ({
   await expect(
     page.getByRole("heading", { name: /Raise issue|Operational escalation/i }),
   ).toBeVisible();
-  await expect(page.getByLabel("Summary")).toHaveValue(
+  await expect(page.getByLabel("Short problem")).toHaveValue(
     "Daily plan change request",
   );
+  await expect(page.getByLabel("Category")).toHaveValue("other");
 });
