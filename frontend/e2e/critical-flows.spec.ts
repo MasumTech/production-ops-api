@@ -102,6 +102,12 @@ test("team leader is routed to the assigned-line workspace", async ({ page }) =>
   ).toBeEnabled();
 
   await workspace.getByRole("button", { name: "Shift Handover" }).click();
-  await expect(page.getByRole("heading", { name: "Shift handover" })).toBeVisible();
-  await expect(page.getByText("Pending", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Shift Handover" }),
+  ).toBeVisible();
+  await expect(page.getByText("3 open items")).toBeVisible();
+  await expect(page.getByLabel("Open items for handover")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Hand over" }),
+  ).toBeEnabled();
 });

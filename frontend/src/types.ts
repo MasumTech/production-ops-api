@@ -106,6 +106,7 @@ export interface Escalation {
   immediate_action: string;
   owner: number | null;
   owner_username: string | null;
+  raised_at?: string;
   response_due_at: string | null;
   is_overdue: boolean;
   needs_attention: boolean;

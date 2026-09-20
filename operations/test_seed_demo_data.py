@@ -87,13 +87,13 @@ def test_seed_demo_data_creates_complete_dataset():
         "users": 4,
         "lines": 6,
         "assets": 3,
-        "assignments": 9,
+        "assignments": 10,
         "shifts": 6,
         "downtime_events": 7,
         "plan_blocks": 30,
         "updates": 8,
         "materials": 4,
-        "escalations": 5,
+        "escalations": 6,
         "breaks": 2,
         "break_opportunities": 2,
         "handovers": 1,
@@ -114,6 +114,12 @@ def test_seed_demo_data_creates_complete_dataset():
         production_line__code="DEMO-LINE-01",
         date=date(2026, 9, 2),
         shift_type=Shift.ShiftType.DAY,
+    ).exists()
+    assert TeamLeaderAssignment.objects.filter(
+        production_line__code="DEMO-LINE-02",
+        date=date(2026, 9, 2),
+        shift_type=Shift.ShiftType.NIGHT,
+        team_leader__username="demo.leader.two",
     ).exists()
     weekday_shift = Shift.objects.get(
         production_line__code="DEMO-LINE-01",
@@ -243,6 +249,14 @@ def test_seed_demo_data_creates_complete_dataset():
         BreakOpportunity.Status.SUGGESTED,
         BreakOpportunity.Status.RECOVERED,
     }
+    printer_escalation = OperationalEscalation.objects.get(
+        summary="Printer restart checks required",
+        assignment__date=date(2026, 9, 2),
+    )
+    assert printer_escalation.assignment.production_line.code == "DEMO-LINE-02"
+    assert printer_escalation.priority == OperationalEscalation.Priority.MEDIUM
+    assert printer_escalation.immediate_action == "Temporary repair; checks passed"
+
     handover = ShiftHandover.objects.get()
     assert handover.status == ShiftHandover.Status.PENDING
     assert handover.escalations.filter(
