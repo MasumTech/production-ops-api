@@ -224,33 +224,58 @@ describe("tablet workspace", () => {
     expect(onRaiseIssue).toHaveBeenLastCalledWith(assignment.id, "escalation");
   });
 
-  it("posts a line update through the real API contract", async () => {
-    const postSpy = vi.spyOn(api, "postJson").mockResolvedValue({});
+  it("records a line update through the structured issue capture contract", async () => {
+    const existingUpdate = {
+      id: 20,
+      assignment: assignment.id,
+      production_line: assignment.production_line,
+      production_line_code: assignment.production_line_code,
+      production_line_name: assignment.production_line_name,
+      status: "green" as const,
+      current_product: "Chicken Curry",
+      issue_summary: "",
+      action_taken: "",
+      action_owner: null,
+      action_owner_username: null,
+      support_required: "",
+      requires_follow_up: false,
+      recorded_at: "2026-08-31T09:00:00Z",
+      next_update_due_at: "2026-08-31T10:00:00Z",
+    };
+    const postSpy = vi.spyOn(api, "postJson").mockResolvedValue({
+      line_update: existingUpdate,
+      escalation: null,
+      evidence: null,
+    } as never);
     const onSaved = vi.fn().mockResolvedValue(undefined);
     const actor = userEvent.setup();
 
     render(
       <RaiseIssuePanel
         assignments={[assignment]}
-        users={[user]}
+        updates={[existingUpdate]}
         selectedAssignment={assignment.id}
+        initialMode="update"
+        online
         onSaved={onSaved}
+        onCancel={vi.fn()}
       />,
     );
 
-    await actor.type(screen.getByLabelText("Current product"), "Chicken Curry");
-    await actor.click(screen.getByRole("button", { name: "Record line update" }));
+    await actor.click(screen.getByRole("button", { name: "Save update" }));
 
     await waitFor(() => expect(postSpy).toHaveBeenCalledOnce());
     expect(postSpy).toHaveBeenCalledWith(
-      "/hourly-line-updates/",
+      "/issue-captures/",
       expect.objectContaining({
         assignment: assignment.id,
         status: "green",
         current_product: "Chicken Curry",
+        short_problem: "Routine line update",
+        escalate: false,
       }),
     );
-    expect(onSaved).toHaveBeenCalledWith("Line status recorded.");
+    expect(onSaved).toHaveBeenCalledWith("Line update recorded.");
   });
 
   it("routes management staff to the manager console", async () => {
