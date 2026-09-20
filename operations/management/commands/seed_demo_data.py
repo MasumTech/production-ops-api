@@ -445,6 +445,12 @@ class Command(BaseCommand):
                 operational_date,
                 Shift.ShiftType.NIGHT,
             ),
+            "incoming_line_2": (
+                lines["line_2"],
+                users["leader_2"],
+                operational_date,
+                Shift.ShiftType.NIGHT,
+            ),
             "history_1": (
                 lines["line_1"],
                 users["leader"],
@@ -995,6 +1001,13 @@ class Command(BaseCommand):
 
     @staticmethod
     def _seed_escalations(now, users, assets, assignments, updates):
+        operational_date = assignments["line_1"].date
+
+        def event_time(hour, minute=0):
+            return timezone.make_aware(
+                datetime.combine(operational_date, time(hour, minute))
+            )
+
         definitions = {
             "critical": {
                 "assignment": assignments["line_1"],
@@ -1005,8 +1018,8 @@ class Command(BaseCommand):
                 "details": "Pressure drops during high-speed production.",
                 "immediate_action": "Line isolated and engineering contacted.",
                 "owner": users["manager"],
-                "raised_at": now - timedelta(minutes=70),
-                "response_due_at": now - timedelta(minutes=10),
+                "raised_at": event_time(15, 10),
+                "response_due_at": event_time(17, 10),
                 "hourly_update": updates["red"],
                 "asset": assets["filler"],
                 "loss_minutes": 47,
@@ -1021,10 +1034,26 @@ class Command(BaseCommand):
                 "details": "640 cartons are needed to protect the plan.",
                 "immediate_action": "Warehouse replenishment requested.",
                 "owner": users["manager"],
-                "raised_at": now - timedelta(minutes=20),
-                "response_due_at": now + timedelta(minutes=25),
+                "raised_at": event_time(16, 0),
+                "response_due_at": event_time(18, 10),
                 "loss_minutes": 8,
                 "estimated_lost_units": 120,
+            },
+            "printer": {
+                "assignment": assignments["line_2"],
+                "category": OperationalEscalation.Category.EQUIPMENT,
+                "priority": OperationalEscalation.Priority.MEDIUM,
+                "status": OperationalEscalation.Status.OPEN,
+                "summary": "Printer restart checks required",
+                "details": "Temporary repair completed; first production runs need monitoring.",
+                "immediate_action": "Temporary repair; checks passed",
+                "owner": users["manager"],
+                "raised_at": event_time(14, 35),
+                "response_due_at": event_time(18, 0),
+                "hourly_update": updates["line_2_stop"],
+                "asset": assets["packer"],
+                "loss_minutes": 35,
+                "estimated_lost_units": 420,
             },
             "unmapped": {
                 "assignment": assignments["line_3"],
