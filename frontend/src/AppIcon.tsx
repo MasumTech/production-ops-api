@@ -19,7 +19,8 @@ export type AppIconName =
   | "clipboard"
   | "refresh"
   | "menu"
-  | "search";
+  | "search"
+  | "paperclip";
 
 const paths: Record<AppIconName, ReactNode> = {
   home: <><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></>,
@@ -41,6 +42,7 @@ const paths: Record<AppIconName, ReactNode> = {
   refresh: <><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6.8 6.8L4 10M20 14l-2.8 3.2A7 7 0 0 1 5.5 15"/></>,
   menu: <><path d="M4 6h16M4 12h16M4 18h16"/></>,
   search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,
+  paperclip: <><path d="m21.4 11.6-8.9 8.9a6 6 0 0 1-8.5-8.5l9.6-9.6a4 4 0 1 1 5.7 5.7L9.7 17.7a2 2 0 1 1-2.8-2.8l8.9-8.9"/></>,
 };
 
 export function AppIcon({ name, size = 24 }: { name: AppIconName; size?: number }) {
