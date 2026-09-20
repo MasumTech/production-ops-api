@@ -32,7 +32,9 @@ test("Raise Issue matches the latest structured reference", async ({ page }, tes
   await expect(page.getByText("Describe", { exact: true })).toBeVisible();
   await expect(page.getByText("Support", { exact: true })).toBeVisible();
   await expect(page.getByText("Follow-up", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Line")).toHaveDisplayValue(/Line 2/);
+  await expect(page.getByLabel("Line").locator("option:checked")).toHaveText(
+    /Line 2/,
+  );
   await expect(page.getByRole("button", { name: "AMBER" })).toHaveAttribute(
     "aria-pressed",
     "true",
