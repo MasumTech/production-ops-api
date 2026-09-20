@@ -64,6 +64,13 @@ test("team leader is routed to the assigned-line workspace", async ({ page }) =>
   await expect(page.getByRole("button", { name: "Raise issue" }).first()).toBeVisible();
   await expect(page.getByText("Priority:", { exact: true })).toBeVisible();
 
+  const firstIssueButton = page.getByRole("button", { name: "Raise issue" }).first();
+  await firstIssueButton.click();
+  await expect(page.getByRole("heading", { name: "Raise issue" })).toBeVisible();
+  await expect(page.getByText("Describe", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("heading", { name: "My Lines" })).toBeVisible();
+
   const workspace = page.locator('aside[aria-label="Team Leader workspace"]');
   await expect(workspace).toBeVisible();
   await expect(workspace.getByRole("button")).toHaveCount(5);

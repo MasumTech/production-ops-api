@@ -13,6 +13,7 @@ from .models import (
     OperationalEscalation,
     OperationalEvent,
     OperationalEventReadReceipt,
+    OperationalEvidence,
     PilotApproval,
     PilotFeedback,
     PilotObservation,
@@ -426,7 +427,23 @@ class OperationsDashboardFilterSerializer(serializers.Serializer):
         return attrs
 
 
+class OperationalEvidenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OperationalEvidence
+        fields = (
+            "id",
+            "hourly_update",
+            "original_name",
+            "content_type",
+            "size_bytes",
+            "uploaded_by",
+            "created_at",
+        )
+        read_only_fields = fields
+
+
 class HourlyLineUpdateSerializer(serializers.ModelSerializer):
+    evidence = OperationalEvidenceSerializer(many=True, read_only=True)
     production_line = serializers.IntegerField(
         source="assignment.production_line_id",
         read_only=True,
@@ -477,12 +494,14 @@ class HourlyLineUpdateSerializer(serializers.ModelSerializer):
             "action_taken",
             "action_owner",
             "action_owner_username",
+            "action_owner_role",
             "support_required",
             "requires_follow_up",
             "recorded_at",
             "next_update_due_at",
             "recorded_by",
             "recorded_by_username",
+            "evidence",
             "created_at",
             "updated_at",
         )
@@ -849,6 +868,7 @@ class OperationalEscalationSerializer(serializers.ModelSerializer):
             "immediate_action",
             "owner",
             "owner_username",
+            "owner_role",
             "raised_at",
             "response_due_at",
             "raised_by",
@@ -916,6 +936,7 @@ class OperationalEscalationSerializer(serializers.ModelSerializer):
             OperationalEscalation.Priority.MEDIUM,
         )
         owner = attrs.get("owner")
+        owner_role = attrs.get("owner_role", "")
         immediate_action = attrs.get("immediate_action", "")
         response_due_at = attrs.get("response_due_at")
         instance = self.instance
@@ -971,8 +992,11 @@ class OperationalEscalationSerializer(serializers.ModelSerializer):
                 OperationalEscalation.Priority.CRITICAL,
             }
             and owner is None
+            and not (owner_role or "").strip()
         ):
-            errors["owner"] = "High or Critical escalation must have an owner."
+            errors["owner"] = (
+                "High or Critical escalation must have a named owner or owner role."
+            )
 
         if (
             priority == OperationalEscalation.Priority.CRITICAL
@@ -997,6 +1021,113 @@ class OperationalEscalationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(errors)
 
         return attrs
+
+
+ISSUE_OWNER_ROLES = (
+    ("engineering", "Engineering"),
+    ("qa", "QA"),
+    ("operations", "Operations"),
+    ("materials", "Materials"),
+    ("machine_minder", "Machine Minder"),
+    ("operative", "Operative"),
+)
+
+
+class IssueCaptureSerializer(serializers.Serializer):
+    assignment = serializers.PrimaryKeyRelatedField(
+        queryset=TeamLeaderAssignment.objects.select_related(
+            "production_line",
+            "team_leader",
+        )
+    )
+    status = serializers.ChoiceField(choices=HourlyLineUpdate.Status.choices)
+    category = serializers.ChoiceField(
+        choices=OperationalEscalation.Category.choices,
+        default=OperationalEscalation.Category.EQUIPMENT,
+    )
+    current_product = serializers.CharField(
+        max_length=150,
+        required=False,
+        allow_blank=True,
+    )
+    short_problem = serializers.CharField(max_length=255)
+    immediate_control = serializers.CharField(
+        required=False,
+        allow_blank=True,
+    )
+    support_required = serializers.ChoiceField(choices=ISSUE_OWNER_ROLES)
+    action_owner_role = serializers.ChoiceField(choices=ISSUE_OWNER_ROLES)
+    next_update_minutes = serializers.ChoiceField(choices=(10, 20, 30, 60))
+    escalate = serializers.BooleanField(default=False)
+    evidence = serializers.FileField(
+        required=False,
+        allow_empty_file=False,
+        write_only=True,
+    )
+
+    def validate_assignment(self, value):
+        request = self.context.get("request")
+        if (
+            request
+            and request.user.is_authenticated
+            and not request.user.is_staff
+            and value.team_leader_id != request.user.id
+        ):
+            raise serializers.ValidationError(
+                "You can only record an issue for a line assigned to you."
+            )
+        return value
+
+    def validate_evidence(self, value):
+        if value.size > 5 * 1024 * 1024:
+            raise serializers.ValidationError("Evidence must be 5 MB or smaller.")
+        allowed = {
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/heic",
+            "image/heif",
+            "application/pdf",
+        }
+        content_type = getattr(value, "content_type", "")
+        if content_type not in allowed:
+            raise serializers.ValidationError(
+                "Evidence must be a JPEG, PNG, WebP, HEIC/HEIF image, or PDF."
+            )
+        return value
+
+    def validate(self, attrs):
+        status_value = attrs["status"]
+        escalate = attrs.get("escalate", False)
+        problem = (attrs.get("short_problem") or "").strip()
+        immediate_control = (attrs.get("immediate_control") or "").strip()
+
+        if (
+            status_value
+            in {
+                HourlyLineUpdate.Status.AMBER,
+                HourlyLineUpdate.Status.RED,
+            }
+            and not problem
+        ):
+            raise serializers.ValidationError(
+                {"short_problem": "Amber or Red status requires a short problem."}
+            )
+        if status_value == HourlyLineUpdate.Status.RED and not immediate_control:
+            raise serializers.ValidationError(
+                {"immediate_control": "Red status requires an immediate control."}
+            )
+        if escalate and status_value == HourlyLineUpdate.Status.GREEN:
+            raise serializers.ValidationError(
+                {"status": "Green status cannot be escalated."}
+            )
+        return attrs
+
+
+class IssueCaptureResponseSerializer(serializers.Serializer):
+    line_update = HourlyLineUpdateSerializer(read_only=True)
+    escalation = OperationalEscalationSerializer(read_only=True, allow_null=True)
+    evidence = OperationalEvidenceSerializer(read_only=True, allow_null=True)
 
 
 class OperationalEscalationFilterSerializer(serializers.Serializer):

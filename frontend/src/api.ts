@@ -264,7 +264,9 @@ export async function apiRequest<T>(
     ...requestOptions,
     headers: {
       Accept: "application/json",
-      ...(requestOptions.body ? { "Content-Type": "application/json" } : {}),
+      ...(requestOptions.body && !(requestOptions.body instanceof FormData)
+        ? { "Content-Type": "application/json" }
+        : {}),
       ...(session?.access ? { Authorization: `Bearer ${session.access}` } : {}),
       ...headers,
     },
@@ -338,5 +340,24 @@ export function postJson<T>(path: string, body?: unknown): Promise<T> {
     if (caught instanceof ApiError) throw caught;
     enqueueOfflineAction(path, body, id);
     throw new OfflineQueuedError(id);
+  });
+}
+
+
+export function postForm<T>(path: string, body: FormData): Promise<T> {
+  if (!navigator.onLine) {
+    return Promise.reject(
+      new ApiError(
+        "Reconnect before submitting evidence. You can save this issue as a draft while offline.",
+        503,
+        null,
+      ),
+    );
+  }
+
+  return apiRequest<T>(path, {
+    method: "POST",
+    headers: { "Idempotency-Key": requestId() },
+    body,
   });
 }
