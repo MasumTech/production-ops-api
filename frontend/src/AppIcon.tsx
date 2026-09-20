@@ -18,7 +18,8 @@ export type AppIconName =
   | "edit"
   | "clipboard"
   | "refresh"
-  | "menu";
+  | "menu"
+  | "search";
 
 const paths: Record<AppIconName, ReactNode> = {
   home: <><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></>,
@@ -39,6 +40,7 @@ const paths: Record<AppIconName, ReactNode> = {
   clipboard: <><rect x="5" y="4" width="14" height="18" rx="2"/><path d="M9 4V2h6v2M9 10h6M9 14h6M9 18h4"/></>,
   refresh: <><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6.8 6.8L4 10M20 14l-2.8 3.2A7 7 0 0 1 5.5 15"/></>,
   menu: <><path d="M4 6h16M4 12h16M4 18h16"/></>,
+  search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,
 };
 
 export function AppIcon({ name, size = 24 }: { name: AppIconName; size?: number }) {
