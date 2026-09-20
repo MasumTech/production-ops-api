@@ -187,6 +187,7 @@ jobs:
             frontend/test-results/**/team-leader-materials-v2-*.png
             frontend/test-results/**/team-leader-break-recovery-v2-*.png
             frontend/test-results/**/team-leader-shift-handover-v2-*.png
+            frontend/test-results/**/team-leader-raise-issue-v2-*.png
           if-no-files-found: error
           retention-days: 7
 
