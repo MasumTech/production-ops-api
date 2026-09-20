@@ -264,7 +264,7 @@ export function BreakRecoveryPanel({
         {
           label: "Team away from workstation",
           complete:
-            current.status !== "suggested" ||
+            /stopped|safe/i.test(current.source_action_taken ?? "") ||
             Boolean(current.confirmed_at),
         },
         {
