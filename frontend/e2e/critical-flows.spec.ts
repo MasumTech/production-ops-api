@@ -76,11 +76,18 @@ test("team leader is routed to the assigned-line workspace", async ({ page }) =>
 
   await workspace.getByRole("button", { name: "Materials" }).click();
   await expect(
-    page.getByRole("heading", { name: "Product & material readiness" }),
+    page.getByRole("heading", { name: "Materials" }),
   ).toBeVisible();
-  for (const status of ["Ready", "In Process", "Short", "Held"]) {
+  await expect(page.getByRole("table")).toBeVisible();
+  for (const status of ["READY", "IN PROCESS", "SHORT", "HELD"]) {
     await expect(page.getByText(status, { exact: true }).first()).toBeVisible();
   }
+  await expect(page.getByLabel("Selected material details")).toContainText(
+    "Oat Milk Chai",
+  );
+  await expect(
+    page.getByRole("button", { name: "Raise material issue" }),
+  ).toBeVisible();
 
   await workspace.getByRole("button", { name: "Break & Recovery" }).click();
   await expect(page.getByRole("heading", { name: "Break & Recovery" })).toBeVisible();

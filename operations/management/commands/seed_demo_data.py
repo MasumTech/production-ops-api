@@ -225,7 +225,7 @@ class Command(BaseCommand):
             plan_blocks,
             updates,
         )
-        materials = self._seed_materials(now, users, assignments)
+        materials = self._seed_materials(operational_date, users, assignments)
         escalations = self._seed_escalations(
             now,
             users,
@@ -894,7 +894,12 @@ class Command(BaseCommand):
         return {"recovered": recovered, "suggested": suggested}
 
     @staticmethod
-    def _seed_materials(now, users, assignments):
+    def _seed_materials(operational_date, users, assignments):
+        def material_time(hour, minute=0):
+            return timezone.make_aware(
+                datetime.combine(operational_date, time(hour, minute))
+            )
+
         definitions = {
             "ready": {
                 "assignment": assignments["line_1"],
@@ -903,6 +908,11 @@ class Command(BaseCommand):
                 "product_name": "Salt & Pepper Chicken",
                 "planned_quantity": 8400,
                 "status": ProductMaterialReadiness.Status.READY,
+                "needed_by_at": material_time(9, 0),
+                "risk_summary": "",
+                "responsible_role": "Operations",
+                "expected_action": "Available",
+                "next_action": "Continue normal checks",
                 "notes": "Ingredients, packaging and release checks are complete.",
             },
             "in_process": {
@@ -913,28 +923,43 @@ class Command(BaseCommand):
                 "planned_quantity": 2600,
                 "status": ProductMaterialReadiness.Status.IN_PROCESS,
                 "owner": users["manager"],
-                "expected_available_at": now + timedelta(minutes=25),
+                "expected_available_at": material_time(11, 30),
+                "needed_by_at": material_time(12, 0),
+                "risk_summary": "120 kg",
+                "responsible_role": "Batcher",
+                "expected_action": "ETA 11:30",
+                "next_action": "Confirm batch release",
                 "notes": "Final sauce batch is being prepared for the next run.",
             },
             "short": {
                 "assignment": assignments["line_2"],
-                "sequence_number": 1,
+                "sequence_number": 2,
                 "product_code": "OMC-01",
                 "product_name": "Oat Milk Chai",
                 "planned_quantity": 6000,
                 "status": ProductMaterialReadiness.Status.SHORT,
                 "shortage_quantity": 640,
                 "owner": users["manager"],
-                "expected_available_at": now + timedelta(hours=1),
-                "notes": "Carton delivery is in transit.",
+                "expected_available_at": material_time(11, 30),
+                "needed_by_at": material_time(10, 30),
+                "risk_summary": "640 packs",
+                "responsible_role": "Materials",
+                "expected_action": "Decision due 10:20",
+                "next_action": "Confirm replenishment",
+                "notes": "Carton stock below next-hour demand.",
             },
             "held": {
                 "assignment": assignments["line_2"],
-                "sequence_number": 2,
+                "sequence_number": 3,
                 "product_code": "BBQ-02",
                 "product_name": "BBQ Chicken Bites",
                 "planned_quantity": 2200,
                 "status": ProductMaterialReadiness.Status.HELD,
+                "needed_by_at": material_time(14, 0),
+                "risk_summary": "QA label release",
+                "responsible_role": "QA",
+                "expected_action": "Do not use",
+                "next_action": "Await authorised release",
                 "hold_reason": "QA label verification is pending.",
                 "owner": users["manager"],
                 "notes": "QA release is required before the planned product change.",
@@ -951,12 +976,14 @@ class Command(BaseCommand):
                     "product_name": definition["product_name"],
                     "planned_quantity": definition["planned_quantity"],
                     "status": definition["status"],
-                    "shortage_quantity": definition.get(
-                        "shortage_quantity",
-                        0,
-                    ),
+                    "shortage_quantity": definition.get("shortage_quantity", 0),
                     "owner": definition.get("owner"),
                     "expected_available_at": definition.get("expected_available_at"),
+                    "needed_by_at": definition.get("needed_by_at"),
+                    "risk_summary": definition.get("risk_summary", ""),
+                    "responsible_role": definition.get("responsible_role", ""),
+                    "expected_action": definition.get("expected_action", ""),
+                    "next_action": definition.get("next_action", ""),
                     "hold_reason": definition.get("hold_reason", ""),
                     "created_by": definition["assignment"].team_leader,
                     "notes": definition["notes"],

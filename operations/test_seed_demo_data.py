@@ -197,6 +197,29 @@ def test_seed_demo_data_creates_complete_dataset():
         ProductMaterialReadiness.Status.SHORT,
         ProductMaterialReadiness.Status.HELD,
     }
+    short_material = ProductMaterialReadiness.objects.get(
+        product_code="OMC-01",
+        assignment__date=date(2026, 9, 2),
+    )
+    assert short_material.sequence_number == 2
+    assert short_material.shortage_quantity == 640
+    assert short_material.risk_summary == "640 packs"
+    assert short_material.responsible_role == "Materials"
+    assert short_material.expected_action == "Decision due 10:20"
+    assert short_material.next_action == "Confirm replenishment"
+    assert short_material.needed_by_at.astimezone().time().replace(tzinfo=None) == time(
+        10, 30
+    )
+    assert short_material.notes == "Carton stock below next-hour demand."
+
+    held_material = ProductMaterialReadiness.objects.get(
+        product_code="BBQ-02",
+        assignment__date=date(2026, 9, 2),
+    )
+    assert held_material.sequence_number == 3
+    assert held_material.risk_summary == "QA label release"
+    assert held_material.responsible_role == "QA"
+    assert held_material.expected_action == "Do not use"
     assert set(BreakOpportunity.objects.values_list("status", flat=True)) == {
         BreakOpportunity.Status.SUGGESTED,
         BreakOpportunity.Status.RECOVERED,
