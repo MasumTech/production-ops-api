@@ -113,8 +113,8 @@ export function HandoversPanel({
         .sort(
           (left, right) =>
             PRIORITY_ORDER[left.priority] - PRIORITY_ORDER[right.priority] ||
-            new Date(left.raised_at).getTime() -
-              new Date(right.raised_at).getTime(),
+            new Date(left.raised_at ?? 0).getTime() -
+              new Date(right.raised_at ?? 0).getTime(),
         ),
     [assignmentIds, escalations],
   );
@@ -429,7 +429,11 @@ export function HandoversPanel({
                   </td>
                   <td>{item.immediate_action || "Control not recorded"}</td>
                   <td>{responsibility(item)}</td>
-                  <td>{formatScheduleClock(item.raised_at)}</td>
+                  <td>
+                    {item.raised_at
+                      ? formatScheduleClock(item.raised_at)
+                      : "—"}
+                  </td>
                   <td>
                     <strong
                       className={
