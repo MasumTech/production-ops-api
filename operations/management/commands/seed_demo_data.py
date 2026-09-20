@@ -201,7 +201,11 @@ class Command(BaseCommand):
         get_user_model().objects.filter(username__startswith=DEMO_USER_PREFIX).delete()
 
     def _seed(self, operational_date, password):
-        now = timezone.now()
+        # Keep every relative demo timestamp anchored to the requested
+        # operational date rather than the machine clock running the seed.
+        now = timezone.make_aware(
+            datetime.combine(operational_date, time(16, 30))
+        )
         users = self._seed_users(password)
         lines = self._seed_lines()
         assets = self._seed_assets(lines)
@@ -1181,6 +1185,10 @@ class Command(BaseCommand):
 
     @staticmethod
     def _seed_handover(users, assignments, escalations):
+        operational_date = assignments["line_1"].date
+        handed_over_at = timezone.make_aware(
+            datetime.combine(operational_date, time(16, 25))
+        )
         handover, _ = ShiftHandover.objects.update_or_create(
             outgoing_assignment=assignments["line_1"],
             incoming_assignment=assignments["incoming"],
@@ -1191,6 +1199,7 @@ class Command(BaseCommand):
                 ),
                 "notes": "Confirm stable pressure before increasing speed.",
                 "handed_over_by": users["leader"],
+                "handed_over_at": handed_over_at,
                 "accepted_at": None,
                 "accepted_by": None,
             },
