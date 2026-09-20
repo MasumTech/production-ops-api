@@ -20,7 +20,7 @@ async function signInAsTeamLeader(page: Page) {
 }
 
 test("Raise Issue matches the latest structured reference", async ({ page }, testInfo) => {
-  await page.setViewportSize({ width: 1586, height: 992 });
+  await page.setViewportSize({ width: 1586, height: 1080 });
   await signInAsTeamLeader(page);
 
   const lineTwo = page.locator(".team-control-card").filter({
@@ -54,6 +54,7 @@ test("Raise Issue matches the latest structured reference", async ({ page }, tes
   await expect(page.getByRole("button", { name: "Request support" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save & escalate" })).toBeVisible();
   await expect(page.getByText(/does not replace the procedure/i)).toBeVisible();
+  await expect(page.locator(".toast")).toBeHidden({ timeout: 5000 });
 
   await page.screenshot({
     path: testInfo.outputPath("team-leader-raise-issue-v2-reference.png"),
