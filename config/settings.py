@@ -172,6 +172,9 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
@@ -216,6 +219,22 @@ SPECTACULAR_SETTINGS = {
             ("medium", "Medium"),
             ("high", "High"),
             ("critical", "Critical"),
+        ],
+        "IssueOwnerRoleEnum": [
+            ("engineering", "Engineering"),
+            ("qa", "QA"),
+            ("operations", "Operations"),
+            ("materials", "Materials"),
+            ("machine_minder", "Machine Minder"),
+            ("operative", "Operative"),
+        ],
+        "OperationalEscalationCategoryEnum": [
+            ("equipment", "Equipment"),
+            ("material", "Material"),
+            ("quality", "Quality"),
+            ("staffing", "Staffing"),
+            ("safety", "Safety"),
+            ("other", "Other"),
         ],
     },
 }
