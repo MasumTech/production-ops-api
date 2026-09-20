@@ -7379,3 +7379,442 @@ td span {
     padding-inline: 12px;
   }
 }
+
+
+/* Team Leader Materials v2 — approved readiness table + selected-item detail. */
+.materials-v2 {
+  display: grid;
+  gap: 18px;
+  color: #08214a;
+}
+
+.materials-v2__hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.materials-v2__hero h1 {
+  margin: 0;
+  color: #08214a;
+  font-size: clamp(2.2rem, 3vw, 3rem);
+  font-weight: 790;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.materials-v2__hero p {
+  margin: 7px 0 0;
+  color: #5a6f95;
+  font-size: 1.03rem;
+  font-weight: 500;
+}
+
+.materials-v2__add,
+.materials-v2__primary,
+.materials-v2__outline {
+  min-height: 48px;
+  padding: 0 28px;
+  border-radius: 6px;
+  font-size: 0.92rem;
+  font-weight: 760;
+  white-space: nowrap;
+}
+
+.materials-v2__add,
+.materials-v2__primary {
+  border: 1px solid #0b6deb;
+  color: #fff;
+  background: linear-gradient(180deg, #147cf4 0%, #0967dd 100%);
+  box-shadow: 0 5px 12px rgb(13 110 241 / 14%);
+}
+
+.materials-v2__outline {
+  border: 1px solid #1a77ef;
+  color: #0a67de;
+  background: #fff;
+}
+
+.materials-v2__filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 290px) minmax(220px, 290px) minmax(320px, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.materials-v2__filters select,
+.materials-v2__search {
+  min-height: 46px;
+  border: 1px solid #c8d5e3;
+  border-radius: 6px;
+  color: #17355f;
+  background: #fff;
+  box-shadow: 0 2px 8px rgb(12 48 86 / 3%);
+}
+
+.materials-v2__filters select {
+  margin: 0;
+  padding: 0 40px 0 14px;
+  font-size: 0.9rem;
+}
+
+.materials-v2__search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+}
+
+.materials-v2__search .app-icon {
+  flex: 0 0 auto;
+  color: #294d79;
+}
+
+.materials-v2__search input {
+  width: 100%;
+  min-height: 42px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  color: #17355f;
+  background: transparent;
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.materials-v2__search input::placeholder {
+  color: #6b7f9d;
+}
+
+.materials-v2__form {
+  margin: 0;
+  border: 1px solid #d3deea;
+  box-shadow: 0 6px 18px rgb(12 48 86 / 5%);
+}
+
+.materials-v2__table-card {
+  overflow: hidden;
+  border: 1px solid #d3deea;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 7px 20px rgb(12 48 86 / 5%);
+}
+
+.materials-v2__table-card .responsive-table {
+  overflow-x: auto;
+}
+
+.materials-v2__table-card table {
+  min-width: 980px;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.materials-v2__table-card th {
+  padding: 13px 16px;
+  border-bottom: 1px solid #d2dde8;
+  color: #405b80;
+  background: #eef3f8;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-align: left;
+  text-transform: none;
+}
+
+.materials-v2__table-card td {
+  padding: 13px 16px;
+  border-bottom: 1px solid #e1e8f0;
+  color: #17355f;
+  font-size: 0.82rem;
+  vertical-align: middle;
+}
+
+.materials-v2__table-card tbody tr {
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.materials-v2__table-card tbody tr:hover {
+  background: #f7fbff;
+}
+
+.materials-v2__table-card tbody tr.is-selected {
+  background: #dcefff;
+  box-shadow: inset 0 0 0 1px #b5daf8;
+}
+
+.materials-v2__table-card tbody tr:focus-visible {
+  outline: 2px solid #1580f6;
+  outline-offset: -2px;
+}
+
+.materials-v2__status {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: 7px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.materials-v2__status i {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+.materials-v2__status.is-ready {
+  color: #168841;
+  background: #e3f6e8;
+}
+
+.materials-v2__status.is-ready i {
+  background: #1aa353;
+}
+
+.materials-v2__status.is-in_process {
+  color: #0a69db;
+  background: #e7f2ff;
+}
+
+.materials-v2__status.is-in_process i {
+  background: #147cf0;
+}
+
+.materials-v2__status.is-short {
+  color: #df8900;
+  background: #fff3dc;
+}
+
+.materials-v2__status.is-short i {
+  background: #f0a000;
+}
+
+.materials-v2__status.is-held {
+  color: #e12f3e;
+  background: #ffe9eb;
+}
+
+.materials-v2__status.is-held i {
+  background: #ec3545;
+}
+
+.materials-v2__empty-filter {
+  margin: 0;
+  padding: 20px;
+  color: #667a96;
+  text-align: center;
+}
+
+.materials-v2__detail {
+  display: grid;
+  gap: 18px;
+  padding: 18px 20px 20px;
+  border: 1px solid #d3deea;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 7px 20px rgb(12 48 86 / 5%);
+}
+
+.materials-v2__detail > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.materials-v2__detail-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.materials-v2__detail-title h2 {
+  margin: 0;
+  color: #0a244b;
+  font-size: 1.5rem;
+  font-weight: 780;
+  letter-spacing: -0.03em;
+}
+
+.materials-v2__detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.materials-v2__facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-block: 1px solid #dce5ee;
+}
+
+.materials-v2__facts article {
+  min-width: 0;
+  padding: 18px 18px 16px;
+  border-right: 1px solid #dce5ee;
+}
+
+.materials-v2__facts article:first-child {
+  padding-left: 0;
+}
+
+.materials-v2__facts article:last-child {
+  border-right: 0;
+}
+
+.materials-v2__facts strong,
+.materials-v2__facts span {
+  display: block;
+}
+
+.materials-v2__facts strong {
+  overflow: hidden;
+  color: #102d54;
+  font-size: 0.96rem;
+  font-weight: 780;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.materials-v2__facts span {
+  margin-top: 6px;
+  color: #6c7f98;
+  font-size: 0.74rem;
+  font-weight: 560;
+}
+
+.materials-v2__description span {
+  display: block;
+  margin-bottom: 6px;
+  color: #17355f;
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.materials-v2__description p {
+  margin: 0;
+  color: #1f3e67;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.materials-v2__hold-warning {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid #ffd1d5;
+  border-radius: 6px;
+  color: #d92231;
+  background: #fff0f1;
+}
+
+.materials-v2__hold-warning > span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: #e42e3d;
+  font-size: 1.05rem;
+  font-weight: 850;
+}
+
+.materials-v2__hold-warning p {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 560;
+  line-height: 1.45;
+}
+
+@media (max-width: 1050px) {
+  .materials-v2__filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .materials-v2__search {
+    grid-column: 1 / -1;
+  }
+
+  .materials-v2__facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .materials-v2__facts article:nth-child(2) {
+    border-right: 0;
+  }
+
+  .materials-v2__facts article:nth-child(-n + 2) {
+    border-bottom: 1px solid #dce5ee;
+  }
+
+  .materials-v2__facts article:nth-child(3) {
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 700px) {
+  .materials-v2__hero,
+  .materials-v2__detail > header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .materials-v2__hero h1 {
+    font-size: 2.1rem;
+  }
+
+  .materials-v2__add,
+  .materials-v2__detail-actions,
+  .materials-v2__detail-actions > button {
+    width: 100%;
+  }
+
+  .materials-v2__detail-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .materials-v2__filters {
+    grid-template-columns: 1fr;
+  }
+
+  .materials-v2__search {
+    grid-column: auto;
+  }
+
+  .materials-v2__facts {
+    grid-template-columns: 1fr;
+  }
+
+  .materials-v2__facts article,
+  .materials-v2__facts article:first-child,
+  .materials-v2__facts article:nth-child(3) {
+    padding: 14px 0;
+    border-right: 0;
+    border-bottom: 1px solid #dce5ee;
+  }
+
+  .materials-v2__facts article:last-child {
+    border-bottom: 0;
+  }
+
+  .materials-v2__facts strong {
+    white-space: normal;
+  }
+}
