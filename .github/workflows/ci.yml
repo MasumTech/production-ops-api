@@ -184,6 +184,7 @@ jobs:
             frontend/test-results/**/team-leader-common-layout-*.png
             frontend/test-results/**/team-leader-my-lines-v2-*.png
             frontend/test-results/**/team-leader-daily-plan-v2-*.png
+            frontend/test-results/**/team-leader-materials-v2-*.png
           if-no-files-found: error
           retention-days: 7
 
