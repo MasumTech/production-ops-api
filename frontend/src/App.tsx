@@ -645,22 +645,19 @@ export default function App() {
           />
         ) : null}
         {tab === "issues" && profile ? (
-          <>
-            <button className="button button--ghost workspace-back" onClick={() => setTab("lines")}>
-              Back to My Lines
-            </button>
-            <RaiseIssuePanel
-              assignments={data.assignments.slice(0, 3)}
-              users={data.users}
-              selectedAssignment={selectedAssignment}
-              initialMode={captureMode}
-              initialEscalation={capturePrefill}
-              onSaved={async (message) => {
-                if (online) await refresh();
-                setToast(message);
-              }}
-            />
-          </>
+          <RaiseIssuePanel
+            assignments={data.assignments.slice(0, 3)}
+            updates={data.updates}
+            selectedAssignment={selectedAssignment}
+            initialMode={captureMode}
+            initialEscalation={capturePrefill}
+            online={online}
+            onCancel={() => setTab("lines")}
+            onSaved={async (message) => {
+              if (online) await refresh();
+              setToast(message);
+            }}
+          />
         ) : null}
         {tab === "plan" ? (
           <DailyPlanPanel
