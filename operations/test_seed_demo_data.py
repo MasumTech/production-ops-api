@@ -182,9 +182,23 @@ def test_seed_demo_data_creates_complete_dataset():
         == 42
     )
     for shift in Shift.objects.filter(date=date(2026, 9, 2)):
+        assert shift.start_time == time(6, 45)
+        assert shift.end_time == time(18, 0)
         assert shift.downtime_minutes == sum(
             event.duration_minutes for event in shift.downtime_events.all()
         )
+
+    material_eta = ProductMaterialReadiness.objects.exclude(
+        expected_available_at=None,
+    ).first()
+    assert material_eta is not None
+    assert material_eta.expected_available_at.astimezone().date() == date(2026, 9, 2)
+
+    assert all(
+        item.planned_start_at.astimezone().date() == date(2026, 9, 2)
+        and item.expected_return_at.astimezone().date() == date(2026, 9, 2)
+        for item in BreakRecovery.objects.all()
+    )
     assert list(
         TeamLeaderAssignment.objects.filter(
             date=date(2026, 9, 2),
@@ -249,6 +263,15 @@ def test_seed_demo_data_creates_complete_dataset():
         BreakOpportunity.Status.SUGGESTED,
         BreakOpportunity.Status.RECOVERED,
     }
+    historical_escalations = OperationalEscalation.objects.filter(
+        assignment__date__lt=date(2026, 9, 2),
+    )
+    assert historical_escalations.count() == 2
+    assert {
+        escalation.assignment.date
+        for escalation in historical_escalations
+    } == {date(2026, 8, 29), date(2026, 8, 22)}
+
     printer_escalation = OperationalEscalation.objects.get(
         summary="Printer restart checks required",
         assignment__date=date(2026, 9, 2),
@@ -259,6 +282,7 @@ def test_seed_demo_data_creates_complete_dataset():
 
     handover = ShiftHandover.objects.get()
     assert handover.status == ShiftHandover.Status.PENDING
+    assert handover.handed_over_at.astimezone().date() == date(2026, 9, 2)
     assert handover.escalations.filter(
         status=OperationalEscalation.Status.OPEN,
     ).exists()
