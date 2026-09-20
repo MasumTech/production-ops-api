@@ -52,10 +52,6 @@ function incomingAction(item: Escalation): string {
   }[item.category];
 }
 
-function firstName(value: string): string {
-  return value.trim().split(/\s+/)[0] || value;
-}
-
 function localDraftKey(profile: UserSummary, assignments: Assignment[]): string {
   const operationalDate = assignments[0]?.date ?? "unassigned";
   return (
@@ -346,9 +342,6 @@ export function HandoversPanel({
   }
 
   const outgoingName = profile.display_name || profile.username;
-  const incomingName =
-    pendingHandovers[0]?.incoming_team_leader_username ??
-    "Incoming Team Leader";
   const lastSavedAt =
     draftSavedAt ?? latestSavedRecord?.handed_over_at ?? null;
 
@@ -389,7 +382,7 @@ export function HandoversPanel({
             <em>
               {pendingHandovers.length
                 ? "Acceptance required"
-                : firstName(incomingName)}
+                : "Not yet sent"}
             </em>
           </strong>
         </div>
@@ -501,7 +494,6 @@ export function HandoversPanel({
               <p>
                 Incoming Team Leader:
                 <strong>
-                  {firstName(incomingName)} ·{" "}
                   <em>
                     {pendingHandovers.length
                       ? "Acceptance required"
