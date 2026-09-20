@@ -115,6 +115,12 @@ def test_seed_demo_data_creates_complete_dataset():
         date=date(2026, 9, 2),
         shift_type=Shift.ShiftType.DAY,
     ).exists()
+    assert TeamLeaderAssignment.objects.filter(
+        production_line__code="DEMO-LINE-02",
+        date=date(2026, 9, 2),
+        shift_type=Shift.ShiftType.NIGHT,
+        team_leader__username="demo.leader.two",
+    ).exists()
     weekday_shift = Shift.objects.get(
         production_line__code="DEMO-LINE-01",
         date=date(2026, 9, 2),
@@ -243,6 +249,14 @@ def test_seed_demo_data_creates_complete_dataset():
         BreakOpportunity.Status.SUGGESTED,
         BreakOpportunity.Status.RECOVERED,
     }
+    printer_escalation = OperationalEscalation.objects.get(
+        summary="Printer restart checks required",
+        assignment__date=date(2026, 9, 2),
+    )
+    assert printer_escalation.assignment.production_line.code == "DEMO-LINE-02"
+    assert printer_escalation.priority == OperationalEscalation.Priority.MEDIUM
+    assert printer_escalation.immediate_action == "Temporary repair; checks passed"
+
     handover = ShiftHandover.objects.get()
     assert handover.status == ShiftHandover.Status.PENDING
     assert handover.escalations.filter(
