@@ -580,9 +580,11 @@ the full immutable Git commit SHA; it never publishes or deploys a mutable
 `latest` tag.
 
 The repository does not provision a real server, DNS record, certificate,
-credential, backup service, or GitHub approval policy. Follow
-[the staging deployment runbook](docs/staging-deployment.md) only after those
-resources have been approved.
+credential, backup service, or GitHub approval policy. Use the
+[pilot UAT release readiness pack](docs/pilot-uat-release-readiness.md) to lock
+the release SHA, evidence, known boundaries, and named human approvals. Follow
+[the staging deployment runbook](docs/staging-deployment.md) only after the
+required resources have been approved.
 
 Validate a production-shaped environment before deployment:
 
