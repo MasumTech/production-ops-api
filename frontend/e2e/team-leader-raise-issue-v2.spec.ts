@@ -45,12 +45,27 @@ test("Raise Issue matches the latest structured reference", async ({ page }, tes
   await page
     .getByLabel("Immediate control")
     .fill("Line slowed; Machine Minder checking");
+
+  await expect(page.getByRole("button", { name: "Request support" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Support and ownership" }),
+  ).toBeVisible();
   await page.getByLabel("Support required").selectOption("engineering");
   await page.getByLabel("Action owner").selectOption("engineering");
-  await page.getByLabel("Next update").selectOption("10");
-
   await expect(page.getByRole("button", { name: "Add evidence" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save draft" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Follow-up and review" }),
+  ).toBeVisible();
+  await page.getByLabel("Next update").selectOption("10");
+  await expect(page.getByLabel("Issue review")).toContainText(
+    "Seal concern after former change",
+  );
   await expect(page.getByRole("button", { name: "Request support" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save & escalate" })).toBeVisible();
   await expect(page.getByText(/does not replace the procedure/i)).toBeVisible();

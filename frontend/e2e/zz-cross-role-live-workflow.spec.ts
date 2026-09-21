@@ -53,8 +53,10 @@ test("Team Leader escalation becomes visible to Operations Manager", async ({
   await page
     .getByLabel("Immediate control")
     .fill("Line stopped safely; engineering support requested");
+  await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Support required").selectOption("engineering");
   await page.getByLabel("Action owner").selectOption("engineering");
+  await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Next update").selectOption("10");
   await page.getByRole("button", { name: "Save & escalate" }).click();
 
@@ -121,8 +123,10 @@ test("Team Leader material escalation becomes a manager open action", async ({
   await expect(page.getByLabel("Short problem")).toHaveValue(
     "Oat Milk Chai material risk",
   );
+  await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Support required").selectOption("materials");
   await page.getByLabel("Action owner").selectOption("materials");
+  await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Save & escalate" }).click();
 
   await expect(

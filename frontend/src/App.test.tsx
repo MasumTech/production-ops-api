@@ -262,6 +262,8 @@ describe("tablet workspace", () => {
       />,
     );
 
+    await actor.click(screen.getByRole("button", { name: "Continue" }));
+    await actor.click(screen.getByRole("button", { name: "Continue" }));
     await actor.click(screen.getByRole("button", { name: "Save update" }));
 
     await waitFor(() => expect(postSpy).toHaveBeenCalledOnce());

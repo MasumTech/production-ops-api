@@ -74,7 +74,8 @@ function renderPanel(
 }
 
 describe("Raise Issue v2", () => {
-  it("matches the structured three-step issue reference", () => {
+  it("runs the structured three-step issue workflow", async () => {
+    const actor = userEvent.setup();
     renderPanel();
 
     expect(screen.getByRole("heading", { name: "Raise issue" })).toBeInTheDocument();
@@ -91,6 +92,22 @@ describe("Raise Issue v2", () => {
     expect(screen.getByLabelText("Category")).toHaveDisplayValue(
       "Machine / seal",
     );
+    expect(
+      screen.getByRole("button", { name: "Step 2: Support" }),
+    ).toBeDisabled();
+    expect(
+      screen.queryByLabelText("Support required"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Request support" }),
+    ).not.toBeInTheDocument();
+
+    await actor.type(screen.getByLabelText("Short problem"), "Seal concern");
+    await actor.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(
+      screen.getByRole("heading", { name: "Support and ownership" }),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Support required")).toHaveDisplayValue(
       "Engineering",
     );
@@ -99,11 +116,33 @@ describe("Raise Issue v2", () => {
     );
     expect(screen.getByRole("button", { name: "Add evidence" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save draft" })).toBeInTheDocument();
+
+    await actor.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(
+      screen.getByRole("heading", { name: "Follow-up and review" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Issue review")).toHaveTextContent("Seal concern");
     expect(screen.getByRole("button", { name: "Request support" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save & escalate" })).toBeInTheDocument();
     expect(
       screen.getByText(/does not replace the procedure/i),
     ).toBeInTheDocument();
+  });
+
+  it("keeps an Amber issue on Describe until a problem is recorded", async () => {
+    const actor = userEvent.setup();
+    renderPanel();
+
+    await actor.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(
+      screen.getByText("Add a short problem for Amber or Red status."),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Short problem")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Step 2: Support" }),
+    ).toBeDisabled();
   });
 
   it("saves an offline-safe local draft without creating an operational record", async () => {
@@ -122,6 +161,45 @@ describe("Raise Issue v2", () => {
     expect(draft.shortProblem).toBe("Seal concern");
   });
 
+  it("loads the selected line's own draft instead of carrying another line's details", async () => {
+    const secondAssignment: Assignment = {
+      ...assignment,
+      id: 13,
+      production_line: 23,
+      production_line_code: "DEMO-LINE-03",
+      production_line_name: "Final Packing",
+    };
+    localStorage.setItem(
+      "team-leader-issue-draft:13",
+      JSON.stringify({
+        assignment: "13",
+        status: "red",
+        category: "safety",
+        shortProblem: "Guard interlock concern",
+        immediateControl: "Line stopped and isolated",
+        supportRequired: "operations",
+        actionOwnerRole: "operations",
+        nextUpdateMinutes: 20,
+      }),
+    );
+    const actor = userEvent.setup();
+    renderPanel({ assignments: [assignment, secondAssignment] });
+
+    await actor.type(screen.getByLabelText("Short problem"), "Line two text");
+    await actor.selectOptions(screen.getByLabelText("Line"), "13");
+
+    expect(screen.getByLabelText("Short problem")).toHaveValue(
+      "Guard interlock concern",
+    );
+    expect(screen.getByLabelText("Immediate control")).toHaveValue(
+      "Line stopped and isolated",
+    );
+    expect(screen.getByRole("button", { name: "RED" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
   it("records a support request through the atomic issue capture endpoint", async () => {
     const postSpy = vi
       .spyOn(api, "postJson")
@@ -137,6 +215,8 @@ describe("Raise Issue v2", () => {
       screen.getByLabelText("Immediate control"),
       "Line slowed; Machine Minder checking",
     );
+    await actor.click(screen.getByRole("button", { name: "Continue" }));
+    await actor.click(screen.getByRole("button", { name: "Continue" }));
     await actor.click(screen.getByRole("button", { name: "Request support" }));
 
     await waitFor(() => expect(postSpy).toHaveBeenCalledOnce());
@@ -168,6 +248,8 @@ describe("Raise Issue v2", () => {
 
     await actor.type(screen.getByLabelText("Short problem"), "Seal concern");
     await actor.type(screen.getByLabelText("Immediate control"), "Line slowed");
+    await actor.click(screen.getByRole("button", { name: "Continue" }));
+    await actor.click(screen.getByRole("button", { name: "Continue" }));
     await actor.click(screen.getByRole("button", { name: "Save & escalate" }));
 
     await waitFor(() => expect(postSpy).toHaveBeenCalledOnce());
@@ -188,6 +270,7 @@ describe("Raise Issue v2", () => {
     renderPanel();
 
     await actor.type(screen.getByLabelText("Short problem"), "Seal concern");
+    await actor.click(screen.getByRole("button", { name: "Continue" }));
     const evidence = new File(["photo"], "seal-photo.png", {
       type: "image/png",
     });
@@ -196,6 +279,7 @@ describe("Raise Issue v2", () => {
       screen.getByRole("button", { name: /seal-photo\.png/i }),
     ).toBeInTheDocument();
 
+    await actor.click(screen.getByRole("button", { name: "Continue" }));
     await actor.click(screen.getByRole("button", { name: "Request support" }));
 
     await waitFor(() => expect(postFormSpy).toHaveBeenCalledOnce());

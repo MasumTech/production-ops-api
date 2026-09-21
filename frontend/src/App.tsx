@@ -655,7 +655,7 @@ export default function App() {
         ) : null}
         {tab === "issues" && profile ? (
           <RaiseIssuePanel
-            assignments={data.assignments.slice(0, 3)}
+            assignments={data.assignments}
             updates={data.updates}
             selectedAssignment={selectedAssignment}
             initialMode={captureMode}
