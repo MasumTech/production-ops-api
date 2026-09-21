@@ -161,6 +161,7 @@ export interface BreakOpportunity {
   production_line: number;
   production_line_code: string;
   production_line_name?: string;
+  assignment_date?: string;
   break_block: number;
   break_number: number;
   source_update: number;

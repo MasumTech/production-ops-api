@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { OfflineQueuedError, postJson } from "../api";
+import { apiList, OfflineQueuedError, postJson } from "../api";
 import { AppIcon } from "../AppIcon";
 import { EmptyState, ErrorBanner } from "../components";
 import { formatScheduleClock } from "../shiftTiming";
@@ -11,6 +11,7 @@ import type {
 } from "../types";
 
 type BreakView = "current" | "history";
+type HistoryRange = 7 | 30;
 
 type TimelinePoint = {
   label: string;
@@ -141,6 +142,21 @@ function absorbedDowntime(item: BreakOpportunity): number {
   );
 }
 
+function startDate(endDate: string, days: HistoryRange): string {
+  const date = new Date(`${endDate}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - (days - 1));
+  return date.toISOString().slice(0, 10);
+}
+
+function historyDate(item: BreakOpportunity): string {
+  if (!item.assignment_date) return "";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(new Date(`${item.assignment_date}T00:00:00Z`));
+}
+
 export function BreakRecoveryPanel({
   assignments,
   opportunities,
@@ -155,9 +171,20 @@ export function BreakRecoveryPanel({
   const [declineOpenId, setDeclineOpenId] = useState<number | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const [selectedOpportunityId, setSelectedOpportunityId] = useState<
+    number | null
+  >(null);
+  const [historyRange, setHistoryRange] = useState<HistoryRange>(7);
+  const [historyItems, setHistoryItems] = useState<BreakOpportunity[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
 
   const assignmentIds = useMemo(
-    () => new Set(assignments.slice(0, 3).map((item) => item.id)),
+    () => new Set(assignments.map((item) => item.id)),
+    [assignments],
+  );
+  const productionLineIds = useMemo(
+    () => new Set(assignments.map((item) => item.production_line)),
     [assignments],
   );
   const relevant = useMemo(
@@ -165,7 +192,7 @@ export function BreakRecoveryPanel({
       opportunities.filter((item) => assignmentIds.has(item.assignment)),
     [assignmentIds, opportunities],
   );
-  const current = useMemo(
+  const active = useMemo(
     () =>
       relevant
         .filter((item) => ACTIVE_STATUSES.has(item.status))
@@ -174,23 +201,70 @@ export function BreakRecoveryPanel({
             currentPriority(right.status) - currentPriority(left.status) ||
             new Date(right.fault_at).getTime() -
               new Date(left.fault_at).getTime(),
-        )[0] ?? null,
-    [relevant],
-  );
-  const history = useMemo(
-    () =>
-      relevant
-        .filter(
-          (item) =>
-            item.status === "recovered" || item.status === "declined",
-        )
-        .sort(
-          (left, right) =>
-            new Date(right.fault_at).getTime() -
-            new Date(left.fault_at).getTime(),
         ),
     [relevant],
   );
+  const current =
+    active.find((item) => item.id === selectedOpportunityId) ?? active[0] ?? null;
+  const operationalDate = assignments[0]?.date;
+
+  useEffect(() => {
+    if (activeView !== "history" || !operationalDate) return;
+
+    let cancelled = false;
+    const query = new URLSearchParams({
+      date_from: startDate(operationalDate, historyRange),
+      date_to: operationalDate,
+    });
+
+    setHistoryLoading(true);
+    setHistoryError("");
+    void apiList<BreakOpportunity>(
+      `/break-opportunities/?${query.toString()}`,
+    )
+      .then((items) => {
+        if (cancelled) return;
+        setHistoryItems(
+          items
+            .filter(
+              (item) =>
+                productionLineIds.has(item.production_line) &&
+                (item.status === "recovered" || item.status === "declined"),
+            )
+            .sort(
+              (left, right) =>
+                new Date(right.fault_at).getTime() -
+                new Date(left.fault_at).getTime(),
+            ),
+        );
+      })
+      .catch((caught) => {
+        if (cancelled) return;
+        setHistoryError(
+          caught instanceof Error
+            ? caught.message
+            : "Could not load recovery history.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeView, historyRange, operationalDate, productionLineIds]);
+
+  useEffect(() => {
+    if (
+      selectedOpportunityId !== null &&
+      !active.some((item) => item.id === selectedOpportunityId)
+    ) {
+      setSelectedOpportunityId(null);
+    }
+  }, [active, selectedOpportunityId]);
+
+  const history = historyItems;
 
   const transition = async (
     item: BreakOpportunity,
@@ -321,48 +395,94 @@ export function BreakRecoveryPanel({
       </div>
 
       {activeView === "history" ? (
-        history.length ? (
-          <div className="break-recovery-v2__history">
-            {history.map((item) => (
-              <article key={item.id}>
-                <header>
-                  <div>
-                    <strong>
-                      {lineLabel(item.production_line_code)} · Break{" "}
-                      {item.break_number}
-                    </strong>
-                    <span>{item.issue_summary}</span>
-                  </div>
-                  <span className={`is-${item.status}`}>
-                    {statusLabel(item.status)}
-                  </span>
-                </header>
-                <div>
-                  <span>Fault {clock(item.fault_at)}</span>
-                  <span>
-                    {item.run_resumed_at
-                      ? `Running ${clock(item.run_resumed_at)}`
-                      : item.declined_at
-                        ? `Declined ${clock(item.declined_at)}`
-                        : "Closed"}
-                  </span>
-                  <span>
-                    {item.recovery_notes ||
-                      item.decline_reason ||
-                      "No additional note recorded."}
-                  </span>
-                </div>
-              </article>
-            ))}
+        <>
+          <div className="break-recovery-v2__filters">
+            <label>
+              History range
+              <select
+                value={historyRange}
+                onChange={(event) =>
+                  setHistoryRange(Number(event.target.value) as HistoryRange)
+                }
+              >
+                <option value={7}>Last 7 days</option>
+                <option value={30}>Last 30 days</option>
+              </select>
+            </label>
+            {historyLoading ? (
+              <span role="status">Loading recovery history…</span>
+            ) : (
+              <span>{history.length} completed records</span>
+            )}
           </div>
-        ) : (
-          <EmptyState
-            title="No recovery history"
-            body="Recovered and declined break opportunities will appear here."
-          />
-        )
+          {historyError ? <ErrorBanner message={historyError} /> : null}
+          {!historyLoading && !historyError && history.length ? (
+            <div className="break-recovery-v2__history">
+              {history.map((item) => (
+                <article key={item.id}>
+                  <header>
+                    <div>
+                      <strong>
+                        {lineLabel(item.production_line_code)} · Break{" "}
+                        {item.break_number}
+                      </strong>
+                      <span>
+                        {historyDate(item) ? `${historyDate(item)} · ` : ""}
+                        {item.issue_summary}
+                      </span>
+                    </div>
+                    <span className={`is-${item.status}`}>
+                      {statusLabel(item.status)}
+                    </span>
+                  </header>
+                  <div>
+                    <span>
+                      Fault {clock(item.fault_at)}
+                    </span>
+                    <span>
+                      {item.run_resumed_at
+                        ? `Running ${clock(item.run_resumed_at)}`
+                        : item.declined_at
+                          ? `Declined ${clock(item.declined_at)}`
+                          : "Closed"}
+                    </span>
+                    <span>
+                      {item.recovery_notes ||
+                        item.decline_reason ||
+                        "No additional note recorded."}
+                    </span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : !historyLoading && !historyError ? (
+            <EmptyState
+              title="No recovery history"
+              body={`No recovered or declined opportunities in the last ${historyRange} days.`}
+            />
+          ) : null}
+        </>
       ) : current ? (
         <>
+          <label className="break-recovery-v2__selector">
+            Current line
+            <select
+              aria-label="Select break recovery line"
+              value={current.id}
+              onChange={(event) => {
+                setSelectedOpportunityId(Number(event.target.value));
+                setDeclineOpenId(null);
+                setError("");
+              }}
+            >
+              {active.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {lineLabel(item.production_line_code)} · {item.issue_summary} ·{" "}
+                  {statusLabel(item.status)}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="break-recovery-v2__top-grid">
             <article className="break-recovery-v2__event">
               <h2>
@@ -551,57 +671,29 @@ export function BreakRecoveryPanel({
                 >
                   Confirm opportunity
                 </button>
-                <button
-                  type="button"
-                  className="break-recovery-v2__disabled"
-                  disabled
-                >
-                  Resume line
-                  <small>Complete checks first</small>
-                </button>
               </>
             ) : null}
 
             {current.status === "confirmed" ? (
-              <>
-                <button
-                  type="button"
-                  className="break-recovery-v2__primary"
-                  disabled={busyId === current.id}
-                  onClick={() => void transition(current, "return")}
-                >
-                  Record return
-                </button>
-                <button
-                  type="button"
-                  className="break-recovery-v2__disabled"
-                  disabled
-                >
-                  Resume line
-                  <small>Complete checks first</small>
-                </button>
-              </>
+              <button
+                type="button"
+                className="break-recovery-v2__primary"
+                disabled={busyId === current.id}
+                onClick={() => void transition(current, "return")}
+              >
+                Record return
+              </button>
             ) : null}
 
             {current.status === "returned" ? (
-              <>
-                <button
-                  type="button"
-                  className="break-recovery-v2__primary"
-                  disabled={busyId === current.id}
-                  onClick={() => void transition(current, "complete-checks")}
-                >
-                  Confirm checks complete
-                </button>
-                <button
-                  type="button"
-                  className="break-recovery-v2__disabled"
-                  disabled
-                >
-                  Resume line
-                  <small>Complete checks first</small>
-                </button>
-              </>
+              <button
+                type="button"
+                className="break-recovery-v2__primary"
+                disabled={busyId === current.id}
+                onClick={() => void transition(current, "complete-checks")}
+              >
+                Confirm checks complete
+              </button>
             ) : null}
 
             {current.status === "checks_complete" ? (

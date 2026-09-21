@@ -278,6 +278,9 @@ describe("daily plan and break opportunity workspace", () => {
       screen.getByRole("tab", { name: "Current opportunity" }),
     ).toHaveAttribute("aria-selected", "true");
     expect(
+      screen.getByLabelText("Select break recovery line"),
+    ).toHaveDisplayValue("Line 3 · Printer fault · Review required");
+    expect(
       screen.getByRole("heading", { name: /Current event · Line/ }),
     ).toBeInTheDocument();
     expect(screen.getByText("08:05 · Printer fault")).toBeInTheDocument();
@@ -307,6 +310,85 @@ describe("daily plan and break opportunity workspace", () => {
     );
     expect(onSaved).toHaveBeenCalledWith(
       "Break confirmed. The full 40-minute return time is protected.",
+    );
+  });
+
+  it("switches between active opportunities on assigned lines", async () => {
+    const secondAssignment = {
+      ...assignment,
+      id: 8,
+      production_line: 4,
+      production_line_code: "LINE-04",
+      production_line_name: "Desserts",
+    };
+    const secondOpportunity: BreakOpportunity = {
+      ...opportunity,
+      id: 14,
+      assignment: secondAssignment.id,
+      production_line: secondAssignment.production_line,
+      production_line_code: secondAssignment.production_line_code,
+      production_line_name: secondAssignment.production_line_name,
+      issue_summary: "Conveyor fault",
+      status: "confirmed",
+      confirmed_at: "2026-09-04T08:10:00Z",
+    };
+    const actor = userEvent.setup();
+
+    render(
+      <BreakRecoveryPanel
+        assignments={[assignment, secondAssignment]}
+        opportunities={[opportunity, secondOpportunity]}
+        onSaved={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    const selector = screen.getByLabelText("Select break recovery line");
+    expect(selector).toHaveDisplayValue(
+      "Line 4 · Conveyor fault · Break confirmed",
+    );
+    await actor.selectOptions(selector, String(opportunity.id));
+    expect(
+      screen.getByRole("heading", { name: "Current event · Line 3" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Confirm opportunity" }),
+    ).toBeEnabled();
+  });
+
+  it("loads genuine 7 and 30 day recovery history", async () => {
+    const recovered: BreakOpportunity = {
+      ...opportunity,
+      id: 15,
+      assignment: 71,
+      assignment_date: "2026-09-01",
+      status: "recovered",
+      run_resumed_at: "2026-09-01T09:00:00Z",
+      recovery_notes: "Safety, quality and technical checks completed.",
+    };
+    const listSpy = vi.spyOn(api, "apiList").mockResolvedValue([recovered]);
+    const actor = userEvent.setup();
+
+    render(
+      <BreakRecoveryPanel
+        assignments={[assignment]}
+        opportunities={[opportunity]}
+        onSaved={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    await actor.click(screen.getByRole("tab", { name: "Recovery history" }));
+    await waitFor(() =>
+      expect(listSpy).toHaveBeenCalledWith(
+        "/break-opportunities/?date_from=2026-08-29&date_to=2026-09-04",
+      ),
+    );
+    expect(screen.getByText(/1 Sept? · Printer fault/)).toBeInTheDocument();
+
+    await actor.selectOptions(screen.getByLabelText("History range"), "30");
+    await waitFor(() =>
+      expect(listSpy).toHaveBeenLastCalledWith(
+        "/break-opportunities/?date_from=2026-08-06&date_to=2026-09-04",
+      ),
     );
   });
 

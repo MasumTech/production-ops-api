@@ -7925,6 +7925,53 @@ td span {
   font-weight: 800;
 }
 
+.break-recovery-v2__selector,
+.break-recovery-v2__filters label {
+  display: grid;
+  gap: 6px;
+  color: #294566;
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.break-recovery-v2__selector {
+  width: min(100%, 560px);
+}
+
+.break-recovery-v2__selector select,
+.break-recovery-v2__filters select {
+  min-height: 44px;
+  padding: 0 38px 0 12px;
+  border: 1px solid #b9cadc;
+  border-radius: 7px;
+  color: #15365f;
+  background: #fff;
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.break-recovery-v2__filters {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid #d7e1ec;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.break-recovery-v2__filters label {
+  width: min(100%, 230px);
+}
+
+.break-recovery-v2__filters > span {
+  padding-bottom: 12px;
+  color: #617590;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
 .break-recovery-v2__top-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.06fr) minmax(0, 1fr);
@@ -8377,6 +8424,20 @@ td span {
   .break-recovery-v2__review {
     width: 100%;
     justify-content: center;
+  }
+
+  .break-recovery-v2__selector,
+  .break-recovery-v2__filters label {
+    width: 100%;
+  }
+
+  .break-recovery-v2__filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .break-recovery-v2__filters > span {
+    padding-bottom: 0;
   }
 
   .break-recovery-v2__event dl > div {

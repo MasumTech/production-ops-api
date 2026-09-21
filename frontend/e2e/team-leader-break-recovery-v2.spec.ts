@@ -46,6 +46,7 @@ test("Break Recovery matches the approved current-opportunity reference", async 
   await expect(
     page.getByRole("tab", { name: "Recovery history" }),
   ).toBeVisible();
+  await expect(page.getByLabel("Select break recovery line")).toBeVisible();
 
   const event = page.locator(".break-recovery-v2__event");
   await expect(
@@ -86,9 +87,7 @@ test("Break Recovery matches the approved current-opportunity reference", async 
   await expect(
     page.getByRole("button", { name: "Confirm opportunity" }),
   ).toBeEnabled();
-  await expect(
-    page.getByRole("button", { name: /Resume line Complete checks first/ }),
-  ).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Resume line" })).toHaveCount(0);
 
   await expect(page.locator(".toast")).toBeHidden({ timeout: 5000 });
 
@@ -108,6 +107,11 @@ test("Recovery history shows completed evidence without changing current state",
 
   await page.getByRole("tab", { name: "Recovery history" }).click();
 
+  await expect(page.getByLabel("History range")).toHaveValue("7");
   await expect(page.getByText("Recovered", { exact: true })).toBeVisible();
   await expect(page.getByText(/Safety, quality and technical checks completed/)).toBeVisible();
+
+  await page.getByLabel("History range").selectOption("30");
+  await expect(page.getByLabel("History range")).toHaveValue("30");
+  await expect(page.getByText("Recovered", { exact: true })).toBeVisible();
 });

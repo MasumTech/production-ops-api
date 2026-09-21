@@ -2509,6 +2509,80 @@ def test_manager_plan_and_break_opportunities_filter_by_shift_type(
 
 
 @pytest.mark.django_db
+def test_break_opportunities_filter_by_inclusive_date_range(
+    authenticated_client,
+    api_user,
+    production_line,
+    api_break_opportunity,
+):
+    created = []
+    for days_ago in (5, 10):
+        assignment = TeamLeaderAssignment.objects.create(
+            team_leader=api_user,
+            production_line=production_line,
+            date=timezone.localdate() - timedelta(days=days_ago),
+            shift_type=Shift.ShiftType.DAY,
+        )
+        break_block = DailyPlanBlock.objects.create(
+            assignment=assignment,
+            sequence_number=1,
+            block_type=DailyPlanBlock.BlockType.BREAK,
+            break_number=1,
+            planned_start_at=at_assignment_time(assignment, 9),
+            planned_end_at=at_assignment_time(assignment, 9, 40),
+            created_by=api_user,
+        )
+        fault_at = at_assignment_time(assignment, 8)
+        update = HourlyLineUpdate.objects.create(
+            assignment=assignment,
+            status=HourlyLineUpdate.Status.RED,
+            issue_summary=f"Fault from {days_ago} days ago",
+            requires_follow_up=True,
+            recorded_at=fault_at,
+            next_update_due_at=fault_at + timedelta(hours=1),
+            recorded_by=api_user,
+        )
+        created.append(
+            BreakOpportunity.objects.create(
+                assignment=assignment,
+                break_block=break_block,
+                source_update=update,
+                fault_at=fault_at,
+                suggested_start_at=fault_at,
+                expected_return_at=fault_at + timedelta(minutes=40),
+            )
+        )
+
+    response = authenticated_client.get(
+        reverse("break-opportunity-list"),
+        {
+            "date_from": timezone.localdate() - timedelta(days=6),
+            "date_to": timezone.localdate(),
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    result_ids = {item["id"] for item in response.data["results"]}
+    assert api_break_opportunity.id in result_ids
+    assert created[0].id in result_ids
+    assert created[1].id not in result_ids
+    assert response.data["results"][0]["assignment_date"]
+
+
+@pytest.mark.django_db
+def test_break_opportunity_rejects_reversed_date_range(
+    authenticated_client,
+):
+    response = authenticated_client.get(
+        reverse("break-opportunity-list"),
+        {"date_from": "2026-09-05", "date_to": "2026-09-04"},
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "date_to" in response.data
+
+
+@pytest.mark.django_db
 def test_only_management_staff_can_create_daily_plan(
     authenticated_client,
     api_team_leader_assignment,
