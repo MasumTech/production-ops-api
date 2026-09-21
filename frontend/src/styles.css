@@ -1733,6 +1733,34 @@ td span {
   margin-top: 1rem;
 }
 
+.pilot-access-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid rgb(255 184 77 / 50%);
+  border-radius: 0.8rem;
+  background: rgb(255 184 77 / 9%);
+}
+
+.pilot-access-confirm > div:first-child {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.pilot-access-confirm p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.pilot-access-confirm .form-actions {
+  flex: 0 0 auto;
+}
+
 .pilot-role-list article {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(180px, auto);
@@ -1937,7 +1965,7 @@ td span {
 
 .support-metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.75rem;
 }
 
@@ -2021,6 +2049,11 @@ td span {
 .signal--danger {
   color: #ffd7d7;
   background: rgb(255 107 107 / 15%);
+}
+
+.signal--warning {
+  color: #ffd28b;
+  background: rgb(255 184 77 / 15%);
 }
 
 .support-action__details,
@@ -2447,6 +2480,19 @@ td span {
     grid-column: 1 / -1;
     justify-self: stretch;
     text-align: center;
+  }
+
+  .pilot-access-confirm {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pilot-access-confirm .form-actions {
+    justify-content: stretch;
+  }
+
+  .pilot-access-confirm .button {
+    flex: 1;
   }
 }
 

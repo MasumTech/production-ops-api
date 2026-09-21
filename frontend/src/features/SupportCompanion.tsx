@@ -49,6 +49,9 @@ function ActionCard({
         </div>
         <div className="support-action__signals">
           <StatusPill value={escalation.priority} />
+          {escalation.owner === null ? (
+            <span className="signal signal--warning">Unassigned</span>
+          ) : null}
           {escalation.is_overdue ? <span className="signal signal--danger">Overdue</span> : null}
         </div>
       </div>
@@ -73,7 +76,13 @@ function ActionCard({
           disabled={busy}
           onClick={() => onAcknowledge(escalation)}
         >
-          {busy ? "Acknowledging…" : "Acknowledge action"}
+          {busy
+            ? escalation.owner === null
+              ? "Claiming…"
+              : "Acknowledging…"
+            : escalation.owner === null
+              ? "Claim & acknowledge"
+              : "Acknowledge action"}
         </button>
       ) : (
         <div className="support-action__acknowledged" role="status">
@@ -115,6 +124,12 @@ export function SupportCompanion({
   const [acknowledging, setAcknowledging] = useState<number | null>(null);
   const [actionError, setActionError] = useState("");
   const openActions = data.escalations.filter((item) => item.status === "open");
+  const assignedCount = data.escalations.filter(
+    (item) => item.owner === profile.id,
+  ).length;
+  const unassignedCount = data.escalations.filter(
+    (item) => item.owner === null,
+  ).length;
   const overdueCount = data.escalations.filter((item) => item.is_overdue).length;
   const criticalCount = data.escalations.filter((item) => item.priority === "critical").length;
   const updateByAssignment = useMemo(
@@ -184,7 +199,7 @@ export function SupportCompanion({
         summary={
           <>
             <span className="eyebrow">Assigned response</span>
-            <strong>{data.escalations.length} active actions</strong>
+            <strong>{assignedCount} assigned · {unassignedCount} available</strong>
             <span>{overdueCount} overdue · {criticalCount} critical</span>
           </>
         }
@@ -206,7 +221,8 @@ export function SupportCompanion({
               </span>
             </section>
             <section className="support-metrics" aria-label="Support response summary">
-              <article><span>Open</span><strong>{openActions.length}</strong></article>
+              <article><span>Open queue</span><strong>{openActions.length}</strong></article>
+              <article><span>Available to claim</span><strong>{unassignedCount}</strong></article>
               <article className="support-metric--danger"><span>Overdue</span><strong>{overdueCount}</strong></article>
               <article><span>Critical</span><strong>{criticalCount}</strong></article>
               <article><span>Material risks</span><strong>{data.materials.length}</strong></article>

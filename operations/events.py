@@ -1,9 +1,11 @@
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.db.models import OuterRef, Subquery
 from django.utils import timezone
 
+from .access import OPERATIONAL_SUPPORT_GROUP
 from .models import (
     BreakRecovery,
     HourlyLineUpdate,
@@ -26,6 +28,7 @@ EVENT_MODELS = (
     ShiftHandover,
     BreakRecovery,
 )
+User = get_user_model()
 
 
 def serialize_event(event):
@@ -218,6 +221,13 @@ def _recipients(instance, assignment):
         recipients.add(assignment.team_leader)
     if isinstance(instance, OperationalEscalation) and instance.owner:
         recipients.add(instance.owner)
+    if isinstance(instance, OperationalEscalation) and not instance.owner:
+        recipients.update(
+            User.objects.filter(
+                is_active=True,
+                groups__name=OPERATIONAL_SUPPORT_GROUP,
+            )
+        )
     if isinstance(instance, ShiftHandover):
         recipients.add(instance.outgoing_assignment.team_leader)
         recipients.add(instance.incoming_assignment.team_leader)

@@ -15,6 +15,7 @@ from operations.models import (
     DailyPlanBlock,
     HourlyLineUpdate,
     OperationalEscalation,
+    OperationalEvent,
     ProductionLine,
     ProductMaterialReadiness,
     QualityIncident,
@@ -1779,7 +1780,7 @@ def test_assigned_owner_can_see_escalation(
 
 
 @pytest.mark.django_db
-def test_support_companion_returns_only_assigned_operational_context(
+def test_support_companion_returns_assigned_and_unassigned_operational_context(
     api_client,
     other_user,
     api_user,
@@ -1805,6 +1806,15 @@ def test_support_companion_returns_only_assigned_operational_context(
         owner=other_user,
         raised_by=api_user,
         response_due_at=now - timedelta(minutes=10),
+    )
+    unassigned = OperationalEscalation.objects.create(
+        assignment=api_team_leader_assignment,
+        category=OperationalEscalation.Category.EQUIPMENT,
+        priority=OperationalEscalation.Priority.MEDIUM,
+        summary="Unassigned engineering response.",
+        owner=None,
+        raised_by=api_user,
+        response_due_at=now + timedelta(minutes=20),
     )
     hidden_owner = get_user_model().objects.create_user(
         username="unrelated.support",
@@ -1851,8 +1861,14 @@ def test_support_companion_returns_only_assigned_operational_context(
     assert [item["id"] for item in response.data["escalations"]] == [
         critical.id,
         overdue.id,
+        unassigned.id,
     ]
     assert hidden.id not in {item["id"] for item in response.data["escalations"]}
+    assert OperationalEvent.objects.filter(
+        resource_type="operationalescalation",
+        resource_id=unassigned.id,
+        audiences=other_user,
+    ).exists()
     assert [item["id"] for item in response.data["updates"]] == [update.id]
     assert [item["id"] for item in response.data["materials"]] == [material.id]
     assert [item["id"] for item in response.data["assignments"]] == [
@@ -1888,6 +1904,66 @@ def test_assigned_owner_can_acknowledge_escalation(
     assert response.status_code == status.HTTP_200_OK
     assert response.data["status"] == (OperationalEscalation.Status.ACKNOWLEDGED)
     assert response.data["acknowledged_by"] == other_user.id
+
+
+@pytest.mark.django_db
+def test_operational_support_can_claim_and_acknowledge_unassigned_escalation(
+    api_client,
+    other_user,
+    api_user,
+    api_team_leader_assignment,
+):
+    support_group = Group.objects.create(name=OPERATIONAL_SUPPORT_GROUP)
+    other_user.groups.add(support_group)
+    escalation = OperationalEscalation.objects.create(
+        assignment=api_team_leader_assignment,
+        category=OperationalEscalation.Category.EQUIPMENT,
+        priority=OperationalEscalation.Priority.HIGH,
+        summary="Unassigned engineering response is required.",
+        raised_by=api_user,
+        response_due_at=timezone.now() + timedelta(minutes=15),
+    )
+    api_client.force_authenticate(user=other_user)
+
+    response = api_client.post(
+        reverse(
+            "operational-escalation-acknowledge",
+            args=(escalation.id,),
+        ),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["status"] == OperationalEscalation.Status.ACKNOWLEDGED
+    assert response.data["owner"] == other_user.id
+    assert response.data["acknowledged_by"] == other_user.id
+
+
+@pytest.mark.django_db
+def test_team_leader_cannot_claim_unassigned_escalation(
+    authenticated_client,
+    api_user,
+    api_team_leader_assignment,
+):
+    escalation = OperationalEscalation.objects.create(
+        assignment=api_team_leader_assignment,
+        category=OperationalEscalation.Category.EQUIPMENT,
+        priority=OperationalEscalation.Priority.HIGH,
+        summary="Unassigned engineering response is required.",
+        raised_by=api_user,
+        response_due_at=timezone.now() + timedelta(minutes=15),
+    )
+
+    response = authenticated_client.post(
+        reverse(
+            "operational-escalation-acknowledge",
+            args=(escalation.id,),
+        ),
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    escalation.refresh_from_db()
+    assert escalation.owner is None
+    assert escalation.status == OperationalEscalation.Status.OPEN
 
 
 @pytest.mark.django_db

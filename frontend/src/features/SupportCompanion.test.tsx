@@ -155,4 +155,39 @@ describe("mobile support companion", () => {
       );
     });
   });
+
+  it("shows and claims an unassigned support action", async () => {
+    const unassigned = {
+      ...data.escalations[0],
+      id: 12,
+      owner: null,
+      owner_username: null,
+      summary: "Available engineering response",
+    };
+    const postSpy = vi.spyOn(api, "postJson").mockResolvedValue({});
+    const onSaved = vi.fn().mockResolvedValue(undefined);
+    const actor = userEvent.setup();
+    render(
+      <SupportCompanion
+        {...defaultProps}
+        data={{ ...data, escalations: [unassigned] }}
+        onSaved={onSaved}
+      />,
+    );
+
+    expect(screen.getByText("Unassigned")).toBeInTheDocument();
+    expect(screen.getByText(/1 available/)).toBeInTheDocument();
+    await actor.click(
+      screen.getByRole("button", { name: "Claim & acknowledge" }),
+    );
+
+    await waitFor(() =>
+      expect(postSpy).toHaveBeenCalledWith(
+        "/operational-escalations/12/acknowledge/",
+      ),
+    );
+    expect(onSaved).toHaveBeenCalledWith(
+      "Action acknowledged. The Team Leader can see your response.",
+    );
+  });
 });
