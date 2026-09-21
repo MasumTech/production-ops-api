@@ -39,10 +39,7 @@ for (const viewport of viewports) {
     await expect(attention.getByText("4 open actions")).toBeVisible();
     await expect(attention.getByText("0 missing updates")).toBeVisible();
 
-    const priorities = page
-      .getByRole("heading", { name: "Suggested priorities" })
-      .locator("..")
-      .locator("..");
+    const priorities = page.getByRole("region", { name: "Suggested priorities" });
     await expect(
       priorities.getByText("Line 1: Filler pressure repeatedly dropping"),
     ).toBeVisible();
