@@ -79,7 +79,9 @@ test("Team Leader escalation becomes visible to Operations Manager", async ({
   await expect(
     page.getByRole("heading", { name: "Team Leaders & line control" }),
   ).toBeVisible();
-  const lineOneRow = page.getByRole("row", { name: /Line 1/ }).first();
+  const lineOneRow = page.getByRole("row", {
+    name: "Open details for DEMO-LINE-01",
+  });
   await lineOneRow.click();
   const lineOneDrawer = page.getByLabel("Line 1 details");
   await expect(lineOneDrawer).toContainText(
