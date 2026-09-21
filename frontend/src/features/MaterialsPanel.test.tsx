@@ -160,6 +160,7 @@ describe("Team Leader Materials v2", () => {
     expect(within(detail).getByRole("heading", { name: /Oat Milk Chai · Line 2/ })).toBeInTheDocument();
     expect(within(detail).getByText("640 packs short")).toBeInTheDocument();
     expect(within(detail).getByText("Responsible: Materials")).toBeInTheDocument();
+    expect(within(detail).getByText("ETA 10:30")).toBeInTheDocument();
     expect(within(detail).getByText("Next action: Confirm replenishment")).toBeInTheDocument();
     expect(within(detail).getByText("Carton stock below next-hour demand.")).toBeInTheDocument();
     expect(
@@ -240,6 +241,23 @@ describe("Team Leader Materials v2", () => {
       next_action: "Confirm replenishment",
     });
     expect(onSaved).toHaveBeenCalledWith("Material readiness item updated.");
+  });
+
+  it("requires needed-by and responsibility fields in the readiness form", async () => {
+    const actor = userEvent.setup();
+    render(
+      <MaterialsPanel
+        assignments={assignments}
+        materials={materials}
+        users={users}
+        onRaiseIssue={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    await actor.click(screen.getByRole("button", { name: "Add item" }));
+    expect(screen.getByLabelText("Needed by")).toBeRequired();
+    expect(screen.getByLabelText("Responsible role")).toBeRequired();
   });
 
   it("does not let a Team Leader release an existing Held record", async () => {

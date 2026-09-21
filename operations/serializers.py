@@ -733,6 +733,14 @@ class ProductMaterialReadinessSerializer(serializers.ModelSerializer):
             "expected_available_at",
             getattr(instance, "expected_available_at", None),
         )
+        needed_by_at = attrs.get(
+            "needed_by_at",
+            getattr(instance, "needed_by_at", None),
+        )
+        responsible_role = attrs.get(
+            "responsible_role",
+            getattr(instance, "responsible_role", ""),
+        )
         hold_reason = attrs.get(
             "hold_reason",
             getattr(instance, "hold_reason", ""),
@@ -761,6 +769,16 @@ class ProductMaterialReadinessSerializer(serializers.ModelSerializer):
             and not (hold_reason or "").strip()
         ):
             errors["hold_reason"] = "Held material must include a hold reason."
+
+        if status_value != ProductMaterialReadiness.Status.READY:
+            if needed_by_at is None:
+                errors["needed_by_at"] = (
+                    "At-risk material must include the time it is needed."
+                )
+            if not (responsible_role or "").strip():
+                errors["responsible_role"] = (
+                    "At-risk material must include a responsible role."
+                )
 
         if (
             instance

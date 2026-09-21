@@ -137,6 +137,7 @@ export function HandoversPanel({
     (handover) =>
       handover.incoming_team_leader_username === profile.username,
   );
+  const incomingPreview = pendingHandovers[0]?.incoming_team_leader_username;
 
   const latestSavedRecord = [...relevantHandovers].sort(
     (left, right) =>
@@ -380,8 +381,8 @@ export function HandoversPanel({
           <strong>
             Incoming: Night shift ·{" "}
             <em>
-              {pendingHandovers.length
-                ? "Acceptance required"
+              {incomingPreview
+                ? `${incomingPreview} · Acceptance required`
                 : "Not yet sent"}
             </em>
           </strong>

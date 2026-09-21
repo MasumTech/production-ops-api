@@ -103,6 +103,7 @@ const data: ManagerWorkspaceData = {
       owner: 21,
       owner_username: "materials.owner",
       expected_available_at: "2026-09-01T10:30:00Z",
+      needed_by_at: "2026-09-01T09:45:00Z",
       hold_reason: "",
       notes: "",
     },
@@ -392,6 +393,14 @@ describe("manager console", () => {
 
     await actor.click(within(navigation).getByRole("button", { name: "Materials" }));
     expect(screen.getByRole("heading", { name: "Materials & actions" })).toBeInTheDocument();
+    const time = (value: string) => new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(new Date(value));
+    const materialsTable = screen.getByRole("table");
+    expect(materialsTable).toHaveTextContent(time("2026-09-01T09:45:00Z"));
+    expect(materialsTable).toHaveTextContent(`ETA ${time("2026-09-01T10:30:00Z")}`);
     expect(screen.getByRole("tab", { name: /Materials/ })).toBeInTheDocument();
     await actor.click(screen.getByRole("tab", { name: /Open actions/ }));
     expect(screen.getByRole("heading", { name: "Open actions" })).toBeInTheDocument();

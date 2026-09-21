@@ -66,6 +66,7 @@ test("Materials matches the approved readiness reference", async ({
   await expect(shortRow).toContainText("SHORT");
   await expect(shortRow).toContainText("640 packs");
   await expect(shortRow).toContainText("Materials");
+  await expect(shortRow).toContainText("ETA 11:30");
   await expect(shortRow).toContainText("Decision due 10:20");
 
   await expect(heldRow).toContainText("14:00");
@@ -78,6 +79,7 @@ test("Materials matches the approved readiness reference", async ({
   await expect(detail).toContainText("Oat Milk Chai · Line 2");
   await expect(detail).toContainText("640 packs short");
   await expect(detail).toContainText("Needed by 10:30");
+  await expect(detail).toContainText("ETA 11:30");
   await expect(detail).toContainText("Responsible: Materials");
   await expect(detail).toContainText("Next action: Confirm replenishment");
   await expect(detail).toContainText("Carton stock below next-hour demand.");

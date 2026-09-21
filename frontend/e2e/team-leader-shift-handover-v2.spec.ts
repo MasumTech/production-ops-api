@@ -43,7 +43,7 @@ test("Shift Handover matches the approved unresolved-work reference", async ({
   const transfer = page.getByLabel("Shift responsibility transfer");
   await expect(transfer).toContainText("Outgoing: Day shift · Imran Khan");
   await expect(transfer).toContainText(
-    "Incoming: Night shift · Acceptance required",
+    "Incoming: Night shift · demo.leader.two · Acceptance required",
   );
   await expect(transfer).toContainText("Draft saved");
 
