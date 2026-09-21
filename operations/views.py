@@ -2055,7 +2055,7 @@ class DailyPlanBlockViewSet(viewsets.ModelViewSet):
     queryset = DailyPlanBlock.objects.all()
     serializer_class = DailyPlanBlockSerializer
     permission_classes = (IsStaffOrReadOnly,)
-    http_method_names = ("get", "post", "head", "options")
+    http_method_names = ("get", "post", "patch", "head", "options")
     ordering = ("planned_start_at", "sequence_number")
 
     def get_queryset(self):

@@ -2564,6 +2564,43 @@ def test_staff_can_create_approved_daily_plan_block(
 
 
 @pytest.mark.django_db
+def test_staff_can_update_approved_daily_plan_block(
+    staff_client,
+    api_daily_break_block,
+):
+    response = staff_client.patch(
+        reverse("daily-plan-block-detail", args=(api_daily_break_block.id,)),
+        {
+            "planned_start_at": at_assignment_time(
+                api_daily_break_block.assignment, 10
+            ).isoformat(),
+            "planned_end_at": at_assignment_time(
+                api_daily_break_block.assignment, 10, 40
+            ).isoformat(),
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    api_daily_break_block.refresh_from_db()
+    assert timezone.localtime(api_daily_break_block.planned_start_at).hour == 10
+
+
+@pytest.mark.django_db
+def test_team_leader_cannot_update_daily_plan_block(
+    authenticated_client,
+    api_daily_break_block,
+):
+    response = authenticated_client.patch(
+        reverse("daily-plan-block-detail", args=(api_daily_break_block.id,)),
+        {"sequence_number": 4},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
 def test_break_opportunity_confirmation_preserves_full_break(
     authenticated_client,
     api_break_opportunity,
