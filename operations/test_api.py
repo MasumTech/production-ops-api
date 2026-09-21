@@ -1430,6 +1430,8 @@ def test_short_readiness_requires_material_recovery_details(
     assert "shortage_quantity" in response.data
     assert "owner" in response.data
     assert "expected_available_at" in response.data
+    assert "needed_by_at" in response.data
+    assert "responsible_role" in response.data
 
 
 @pytest.mark.django_db

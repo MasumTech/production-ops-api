@@ -229,7 +229,7 @@ describe("Team Leader Shift Handover v2", () => {
     const transfer = screen.getByLabelText("Shift responsibility transfer");
     expect(transfer).toHaveTextContent("Outgoing: Day shift · Imran Khan");
     expect(transfer).toHaveTextContent(
-      "Incoming: Night shift · Acceptance required",
+      "Incoming: Night shift · demo.leader.two · Acceptance required",
     );
     expect(transfer).toHaveTextContent("Draft saved");
 

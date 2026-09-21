@@ -30,7 +30,7 @@ function clock(value: string | null | undefined): string {
 function wallClockIso(value: string): string | null {
   if (!value) return null;
   const normalized = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value);
-  return normalized ? `${value}:00Z` : null;
+  return normalized ? new Date(value).toISOString() : null;
 }
 
 function statusLabel(status: MaterialStatus): string {
@@ -60,6 +60,10 @@ function responsibleCopy(item: MaterialReadiness): string {
 }
 
 function expectedActionCopy(item: MaterialReadiness): string {
+  if (item.expected_available_at) {
+    const action = item.expected_action?.trim();
+    return `ETA ${clock(item.expected_available_at)}${action && !/^eta\b/i.test(action) ? ` · ${action}` : ""}`;
+  }
   if (item.expected_action?.trim()) return item.expected_action.trim();
   if (item.status === "ready") return "Available";
   if (item.status === "held") return "Do not use";
@@ -381,6 +385,7 @@ export function MaterialsPanel({
               type="datetime-local"
               value={neededBy}
               onChange={(event) => setNeededBy(event.target.value)}
+              required
             />
           </label>
           <label>
@@ -399,6 +404,7 @@ export function MaterialsPanel({
               value={responsibleRole}
               onChange={(event) => setResponsibleRole(event.target.value)}
               placeholder="Operations, Materials, QA…"
+              required
             />
           </label>
           <label>
@@ -559,7 +565,7 @@ export function MaterialsPanel({
                     <th>Status</th>
                     <th>Shortage</th>
                     <th>Responsible</th>
-                    <th>Expected / action</th>
+                    <th>ETA / expected action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -595,7 +601,7 @@ export function MaterialsPanel({
                       <td data-label="Responsible">
                         {responsibleCopy(item)}
                       </td>
-                      <td data-label="Expected / action">
+                      <td data-label="ETA / expected action">
                         {expectedActionCopy(item)}
                       </td>
                     </tr>
@@ -654,6 +660,10 @@ export function MaterialsPanel({
                 <article>
                   <strong>Needed by {clock(selected.needed_by_at)}</strong>
                   <span>Needed by</span>
+                </article>
+                <article>
+                  <strong>ETA {clock(selected.expected_available_at)}</strong>
+                  <span>Expected available</span>
                 </article>
                 <article>
                   <strong>Responsible: {responsibleCopy(selected)}</strong>
