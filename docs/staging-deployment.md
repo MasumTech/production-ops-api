@@ -35,10 +35,14 @@ records until the data owner approves the staging dataset.
 
 ## Publish an immutable release
 
-1. Merge a fully green pull request into `main`.
+1. Merge a fully green pull request into `main` and wait for the push-triggered
+   **CI** workflow on that exact commit to complete successfully.
 2. Open **Actions → Publish staging release → Run workflow** on `main`.
-3. Complete the GitHub Environment approval.
-4. Copy the exact backend and frontend SHA-tagged image names from the workflow
+3. The release workflow verifies that its exact `GITHUB_SHA` has a successful
+   completed push CI run. A missing, pending, cancelled, or failed result blocks
+   image publication.
+4. Complete the GitHub Environment approval.
+5. Copy the exact backend and frontend SHA-tagged image names from the workflow
    summary. Never replace them with `latest`.
 
 The workflow builds from the selected `main` commit and publishes:
