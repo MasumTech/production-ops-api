@@ -385,7 +385,8 @@ describe("manager console", () => {
     expect(screen.getByRole("heading", { name: "Daily plans" })).toBeInTheDocument();
     expect(screen.getByLabelText("Filter daily plans by line")).toBeInTheDocument();
     expect(screen.getByLabelText("Filter daily plans by Team Leader")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Edit plan" })).toBeInTheDocument();
+    expect(screen.getByText("Read-only snapshot")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add plan block" })).not.toBeInTheDocument();
     expect(screen.getByText("Full-day completion")).toBeInTheDocument();
     expect(screen.getByText("Position now")).toBeInTheDocument();
 
@@ -442,6 +443,64 @@ describe("manager console", () => {
 
     expect(request).toHaveBeenCalledWith("/downtime-events/1/", expect.objectContaining({ method: "PATCH" }));
     expect(onRefresh).toHaveBeenCalled();
+  });
+
+  it("adds and edits plan blocks for the current operational date", async () => {
+    const actor = userEvent.setup();
+    const request = vi.mocked(api.apiRequest);
+    request.mockResolvedValue({} as never);
+    const today = new Date().toISOString().slice(0, 10);
+    const planBlock = {
+      id: 70,
+      assignment: 1,
+      assignment_date: today,
+      production_line: 101,
+      production_line_code: "LINE-01",
+      sequence_number: 1,
+      block_type: "production" as const,
+      planned_start_at: `${today}T07:00:00Z`,
+      planned_end_at: `${today}T09:00:00Z`,
+      product_code: "PROD-A",
+      product_name: "Product A",
+      target_units_per_hour: 100,
+      planned_units: 200,
+      break_number: null,
+    };
+
+    render(
+      <ManagerConsole
+        profile={profile}
+        data={{ ...data, planBlocks: [planBlock] }}
+        operationalDate={today}
+        shiftPattern="day"
+        lastUpdatedAt={`${today}T10:00:00Z`}
+        online
+        liveState="live"
+        busy={false}
+        error=""
+        onDateChange={vi.fn()}
+        onShiftPatternChange={vi.fn()}
+        onRefresh={vi.fn()}
+        onSignOut={vi.fn()}
+      />,
+    );
+
+    await actor.click(within(screen.getByRole("navigation", { name: "Manager sections" })).getByRole("button", { name: "Daily plans" }));
+    await actor.click(screen.getByRole("button", { name: "Add plan block" }));
+    const addDialog = screen.getByRole("dialog", { name: "Add plan block" });
+    await actor.type(within(addDialog).getByLabelText("Product code"), "NEW-01");
+    await actor.type(within(addDialog).getByLabelText("Product name"), "New product");
+    await actor.type(within(addDialog).getByLabelText("Target units / hour"), "120");
+    await actor.click(within(addDialog).getByRole("button", { name: "Add block" }));
+    expect(request).toHaveBeenCalledWith("/daily-plan-blocks/", expect.objectContaining({ method: "POST" }));
+
+    await actor.click(screen.getByRole("button", { name: /Product A/ }));
+    await actor.click(screen.getByRole("button", { name: "Edit block" }));
+    const editDialog = screen.getByRole("dialog", { name: "Edit plan block" });
+    await actor.clear(within(editDialog).getByLabelText("Product name"));
+    await actor.type(within(editDialog).getByLabelText("Product name"), "Product A revised");
+    await actor.click(within(editDialog).getByRole("button", { name: "Save changes" }));
+    expect(request).toHaveBeenCalledWith("/daily-plan-blocks/70/", expect.objectContaining({ method: "PATCH" }));
   });
 
   it("filters the board to late or missing updates", async () => {
