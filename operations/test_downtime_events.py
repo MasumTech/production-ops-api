@@ -75,10 +75,32 @@ def test_downtime_api_filters_by_date_and_exposes_line_context(
         owner_group=DowntimeEvent.OwnerGroup.OPERATIONS,
         status=DowntimeEvent.Status.RESOLVED,
     )
+    night_shift = Shift.objects.create(
+        production_line=downtime_shift.production_line,
+        supervisor=downtime_user,
+        date=downtime_shift.date,
+        shift_type=Shift.ShiftType.NIGHT,
+        start_time=time(23),
+        end_time=time(7),
+        planned_output=900,
+        actual_output=700,
+    )
+    DowntimeEvent.objects.create(
+        shift=night_shift,
+        started_at=shift_time(downtime_shift, 23),
+        ended_at=shift_time(downtime_shift, 23, 5),
+        reason_category=DowntimeEvent.ReasonCategory.EQUIPMENT,
+        description="Night event",
+        owner_group=DowntimeEvent.OwnerGroup.ENGINEERING,
+        status=DowntimeEvent.Status.RESOLVED,
+    )
     client = APIClient()
     client.force_authenticate(downtime_user)
 
-    response = client.get(reverse("downtime-event-list"), {"date": downtime_shift.date})
+    response = client.get(
+        reverse("downtime-event-list"),
+        {"date": downtime_shift.date, "shift_type": Shift.ShiftType.DAY},
+    )
 
     assert response.status_code == status.HTTP_200_OK
     assert response.data["results"] == [

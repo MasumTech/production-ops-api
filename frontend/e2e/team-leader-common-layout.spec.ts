@@ -46,6 +46,20 @@ for (const viewport of viewports) {
       await expect(page.getByLabel("Shift pattern")).toHaveValue("day");
       await expect(page.getByRole("group", { name: "Data view" })).toBeVisible();
       await expect(page.getByRole("button", { name: /Alerts/ })).toBeVisible();
+
+      const dateControl = page.locator(".team-control-date");
+      const dateInput = page.getByLabel("Operational date");
+      const controlBox = await dateControl.boundingBox();
+      const inputBox = await dateInput.boundingBox();
+      expect(controlBox).not.toBeNull();
+      expect(inputBox).not.toBeNull();
+      expect(Math.abs(inputBox!.width - controlBox!.width)).toBeLessThanOrEqual(2);
+      expect(Math.abs(inputBox!.height - controlBox!.height)).toBeLessThanOrEqual(2);
+      await dateInput.click({
+        position: { x: inputBox!.width / 2, y: inputBox!.height - 2 },
+      });
+      await expect(dateInput).toBeFocused();
+
       await expect(sidebar).toBeVisible();
       await expect(sidebar.getByRole("button")).toHaveCount(5);
       await expect(sidebar.getByRole("button", { name: "My Lines" })).toHaveAttribute(

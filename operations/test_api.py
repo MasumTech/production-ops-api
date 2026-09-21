@@ -522,6 +522,65 @@ def test_dashboard_filters_summary_by_date_range(
 
 
 @pytest.mark.django_db
+def test_dashboard_filters_summary_and_incidents_by_shift_type(
+    authenticated_client,
+    shift,
+    api_user,
+):
+    night_shift = Shift.objects.create(
+        production_line=shift.production_line,
+        supervisor=api_user,
+        date=shift.date,
+        shift_type=Shift.ShiftType.NIGHT,
+        start_time=time(23, 0),
+        end_time=time(7, 0),
+        planned_output=2400,
+        actual_output=1800,
+        downtime_minutes=12,
+    )
+    QualityIncident.objects.create(
+        shift=shift,
+        title="Day incident",
+        category=QualityIncident.Category.PRODUCT,
+        severity=QualityIncident.Severity.CRITICAL,
+        status=QualityIncident.Status.OPEN,
+        description="Day shift incident.",
+        occurred_at=timezone.now(),
+        reported_by=api_user,
+    )
+    QualityIncident.objects.create(
+        shift=night_shift,
+        title="Night incident",
+        category=QualityIncident.Category.PRODUCT,
+        severity=QualityIncident.Severity.HIGH,
+        status=QualityIncident.Status.OPEN,
+        description="Night shift incident.",
+        occurred_at=timezone.now(),
+        reported_by=api_user,
+    )
+
+    response = authenticated_client.get(
+        reverse("operations-dashboard"),
+        {
+            "date_from": shift.date.isoformat(),
+            "date_to": shift.date.isoformat(),
+            "shift_type": Shift.ShiftType.NIGHT,
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data == {
+        "total_shifts": 1,
+        "total_planned_output": 2400,
+        "total_actual_output": 1800,
+        "overall_performance_percentage": 75.0,
+        "total_downtime_minutes": 12,
+        "open_incidents": 1,
+        "critical_incidents": 0,
+    }
+
+
+@pytest.mark.django_db
 def test_dashboard_rejects_invalid_date_range(
     authenticated_client,
 ):
@@ -2384,6 +2443,67 @@ def test_team_leader_can_read_only_own_daily_plan(
     assert response.status_code == status.HTTP_200_OK
     assert response.data["count"] == 1
     assert response.data["results"][0]["id"] == api_daily_break_block.id
+
+
+@pytest.mark.django_db
+def test_manager_plan_and_break_opportunities_filter_by_shift_type(
+    staff_client,
+    staff_user,
+    api_user,
+    api_team_leader_assignment,
+    api_daily_break_block,
+    api_break_opportunity,
+):
+    night_assignment = TeamLeaderAssignment.objects.create(
+        team_leader=api_user,
+        production_line=api_team_leader_assignment.production_line,
+        date=api_team_leader_assignment.date,
+        shift_type=Shift.ShiftType.NIGHT,
+        assigned_by=staff_user,
+    )
+    night_block = DailyPlanBlock.objects.create(
+        assignment=night_assignment,
+        sequence_number=1,
+        block_type=DailyPlanBlock.BlockType.BREAK,
+        break_number=1,
+        planned_start_at=at_assignment_time(night_assignment, 23),
+        planned_end_at=at_assignment_time(night_assignment, 23, 40),
+        created_by=staff_user,
+    )
+    fault_at = at_assignment_time(night_assignment, 22)
+    night_update = HourlyLineUpdate.objects.create(
+        assignment=night_assignment,
+        status=HourlyLineUpdate.Status.RED,
+        issue_summary="Night filler stopped",
+        requires_follow_up=True,
+        recorded_at=fault_at,
+        next_update_due_at=fault_at + timedelta(hours=1),
+        recorded_by=api_user,
+    )
+    night_opportunity = BreakOpportunity.objects.create(
+        assignment=night_assignment,
+        break_block=night_block,
+        source_update=night_update,
+        fault_at=fault_at,
+        suggested_start_at=fault_at,
+        expected_return_at=fault_at + timedelta(minutes=40),
+    )
+
+    plan_response = staff_client.get(
+        reverse("daily-plan-block-list"),
+        {"date": night_assignment.date, "shift_type": Shift.ShiftType.NIGHT},
+    )
+    opportunity_response = staff_client.get(
+        reverse("break-opportunity-list"),
+        {"date": night_assignment.date, "shift_type": Shift.ShiftType.NIGHT},
+    )
+
+    assert plan_response.status_code == status.HTTP_200_OK
+    assert [item["id"] for item in plan_response.data["results"]] == [night_block.id]
+    assert opportunity_response.status_code == status.HTTP_200_OK
+    assert [item["id"] for item in opportunity_response.data["results"]] == [
+        night_opportunity.id
+    ]
 
 
 @pytest.mark.django_db

@@ -168,7 +168,10 @@ async function loadWorkspaceData(
   };
 }
 
-async function loadManagerData(operationalDate: string): Promise<ManagerWorkspaceData> {
+async function loadManagerData(
+  operationalDate: string,
+  shiftType: "day" | "night",
+): Promise<ManagerWorkspaceData> {
   const [
     assignments,
     planBlocks,
@@ -181,21 +184,21 @@ async function loadManagerData(operationalDate: string): Promise<ManagerWorkspac
     downtimeEvents,
     summary,
   ] = await Promise.all([
-    apiList<Assignment>(`/team-leader-assignments/?date=${operationalDate}`),
-    apiList<DailyPlanBlock>(`/daily-plan-blocks/?date=${operationalDate}&ordering=sequence_number`),
-    apiList<BreakOpportunity>(`/break-opportunities/?date=${operationalDate}`),
-    apiList<BreakRecovery>(`/break-recoveries/?date=${operationalDate}`),
-    apiList<LineUpdate>(`/hourly-line-updates/latest-status/?date=${operationalDate}`),
+    apiList<Assignment>(`/team-leader-assignments/?date=${operationalDate}&shift_type=${shiftType}`),
+    apiList<DailyPlanBlock>(`/daily-plan-blocks/?date=${operationalDate}&shift_type=${shiftType}&ordering=sequence_number`),
+    apiList<BreakOpportunity>(`/break-opportunities/?date=${operationalDate}&shift_type=${shiftType}`),
+    apiList<BreakRecovery>(`/break-recoveries/?date=${operationalDate}&shift_type=${shiftType}`),
+    apiList<LineUpdate>(`/hourly-line-updates/latest-status/?date=${operationalDate}&shift_type=${shiftType}`),
     apiList<MaterialReadiness>(
-      `/product-material-readiness/?date=${operationalDate}&ordering=sequence_number`,
+      `/product-material-readiness/?date=${operationalDate}&shift_type=${shiftType}&ordering=sequence_number`,
     ),
     apiList<Escalation>(
-      `/operational-escalations/?date=${operationalDate}&ordering=-raised_at`,
+      `/operational-escalations/?date=${operationalDate}&shift_type=${shiftType}&ordering=-raised_at`,
     ),
-    apiList<ShiftRecord>(`/shifts/?date=${operationalDate}&ordering=-actual_output`),
-    apiList<DowntimeEvent>(`/downtime-events/?date=${operationalDate}&ordering=started_at`),
+    apiList<ShiftRecord>(`/shifts/?date=${operationalDate}&shift_type=${shiftType}&ordering=-actual_output`),
+    apiList<DowntimeEvent>(`/downtime-events/?date=${operationalDate}&shift_type=${shiftType}&ordering=started_at`),
     apiRequest<ManagerWorkspaceData["summary"]>(
-      `/dashboard/summary/?date_from=${operationalDate}&date_to=${operationalDate}`,
+      `/dashboard/summary/?date_from=${operationalDate}&date_to=${operationalDate}&shift_type=${shiftType}`,
     ),
   ]);
 
@@ -345,6 +348,7 @@ export default function App() {
   } | null>(null);
   const [operationalDate, setOperationalDate] = useState(localDate());
   const [teamShiftPattern, setTeamShiftPattern] = useState<"day" | "night">("day");
+  const [managerShiftPattern, setManagerShiftPattern] = useState<"day" | "night">("day");
   const [teamViewMode, setTeamViewMode] = useState<"live" | "historical">("live");
   const [toast, setToast] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
@@ -360,7 +364,7 @@ export default function App() {
       bindSessionUser(currentProfile.id);
       setProfile(currentProfile);
       if (currentProfile.workspace === "manager") {
-        setManagerData(await loadManagerData(operationalDate));
+        setManagerData(await loadManagerData(operationalDate, managerShiftPattern));
       } else if (currentProfile.workspace === "support") {
         setSupportData(await loadSupportData(operationalDate));
       } else {
@@ -377,7 +381,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [operationalDate, teamShiftPattern]);
+  }, [managerShiftPattern, operationalDate, teamShiftPattern]);
 
   const refresh = useCallback(async (): Promise<boolean> => {
     if (!profile) return false;
@@ -385,7 +389,7 @@ export default function App() {
     setError("");
     try {
       if (profile.workspace === "manager") {
-        setManagerData(await loadManagerData(operationalDate));
+        setManagerData(await loadManagerData(operationalDate, managerShiftPattern));
       } else if (profile.workspace === "support") {
         setSupportData(await loadSupportData(operationalDate));
       } else {
@@ -404,7 +408,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [operationalDate, profile, teamShiftPattern]);
+  }, [managerShiftPattern, operationalDate, profile, teamShiftPattern]);
 
   useEffect(() => {
     if (hasSession()) void load();
@@ -551,12 +555,17 @@ export default function App() {
           profile={profile}
           data={managerData}
           operationalDate={operationalDate}
+          shiftPattern={managerShiftPattern}
           lastUpdatedAt={lastUpdatedAt}
           online={online}
           liveState={liveState}
           busy={loading}
           error={error}
           onDateChange={setOperationalDate}
+          onShiftPatternChange={(value) => {
+            setManagerData(EMPTY_MANAGER_DATA);
+            setManagerShiftPattern(value);
+          }}
           onRefresh={() => void refresh()}
           onSignOut={signOut}
         />
