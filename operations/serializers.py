@@ -1536,6 +1536,7 @@ class BreakOpportunitySerializer(serializers.ModelSerializer):
     production_line_name = serializers.CharField(
         source="assignment.production_line.name", read_only=True
     )
+    assignment_date = serializers.DateField(source="assignment.date", read_only=True)
 
     class Meta:
         model = BreakOpportunity
@@ -1545,6 +1546,7 @@ class BreakOpportunitySerializer(serializers.ModelSerializer):
             "production_line",
             "production_line_code",
             "production_line_name",
+            "assignment_date",
             "break_block",
             "break_number",
             "source_update",
@@ -1573,6 +1575,8 @@ class BreakOpportunitySerializer(serializers.ModelSerializer):
 
 class BreakOpportunityFilterSerializer(serializers.Serializer):
     date = serializers.DateField(required=False)
+    date_from = serializers.DateField(required=False)
+    date_to = serializers.DateField(required=False)
     shift_type = serializers.ChoiceField(
         choices=Shift.ShiftType.choices,
         required=False,
@@ -1582,6 +1586,15 @@ class BreakOpportunityFilterSerializer(serializers.Serializer):
         choices=BreakOpportunity.Status.choices,
         required=False,
     )
+
+    def validate(self, attrs):
+        date_from = attrs.get("date_from")
+        date_to = attrs.get("date_to")
+        if date_from and date_to and date_from > date_to:
+            raise serializers.ValidationError(
+                {"date_to": "Date to must be on or after date from."}
+            )
+        return attrs
 
 
 class BreakOpportunityDeclineSerializer(serializers.Serializer):
