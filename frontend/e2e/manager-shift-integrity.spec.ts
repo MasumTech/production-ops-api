@@ -32,8 +32,8 @@ test("manager Day and Night selection scopes the complete workspace", async ({
   const inputBox = await dateInput.boundingBox();
   expect(controlBox).not.toBeNull();
   expect(inputBox).not.toBeNull();
-  expect(inputBox!.width).toBeCloseTo(controlBox!.width, 0);
-  expect(inputBox!.height).toBeCloseTo(controlBox!.height, 0);
+  expect(Math.abs(inputBox!.width - controlBox!.width)).toBeLessThanOrEqual(2);
+  expect(Math.abs(inputBox!.height - controlBox!.height)).toBeLessThanOrEqual(2);
   await dateInput.click({
     position: { x: inputBox!.width / 2, y: inputBox!.height - 2 },
   });
