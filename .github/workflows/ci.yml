@@ -181,6 +181,7 @@ jobs:
           path: |
             frontend/test-results/**/login-*.png
             frontend/test-results/**/manager-shell-*.png
+            frontend/test-results/**/manager-shift-integrity-*.png
             frontend/test-results/**/team-leader-common-layout-*.png
             frontend/test-results/**/team-leader-my-lines-v2-*.png
             frontend/test-results/**/team-leader-daily-plan-v2-*.png

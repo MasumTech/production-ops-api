@@ -414,6 +414,10 @@ class OperationsDashboardSummarySerializer(serializers.Serializer):
 class OperationsDashboardFilterSerializer(serializers.Serializer):
     date_from = serializers.DateField(required=False)
     date_to = serializers.DateField(required=False)
+    shift_type = serializers.ChoiceField(
+        choices=Shift.ShiftType.choices,
+        required=False,
+    )
 
     def validate(self, attrs):
         date_from = attrs.get("date_from")
@@ -1469,6 +1473,10 @@ class DailyPlanBlockSerializer(serializers.ModelSerializer):
 
 class DailyPlanBlockFilterSerializer(serializers.Serializer):
     date = serializers.DateField(required=False)
+    shift_type = serializers.ChoiceField(
+        choices=Shift.ShiftType.choices,
+        required=False,
+    )
     assignment = serializers.IntegerField(required=False, min_value=1)
     production_line = serializers.IntegerField(required=False, min_value=1)
     block_type = serializers.ChoiceField(
@@ -1547,6 +1555,10 @@ class BreakOpportunitySerializer(serializers.ModelSerializer):
 
 class BreakOpportunityFilterSerializer(serializers.Serializer):
     date = serializers.DateField(required=False)
+    shift_type = serializers.ChoiceField(
+        choices=Shift.ShiftType.choices,
+        required=False,
+    )
     assignment = serializers.IntegerField(required=False, min_value=1)
     status = serializers.ChoiceField(
         choices=BreakOpportunity.Status.choices,

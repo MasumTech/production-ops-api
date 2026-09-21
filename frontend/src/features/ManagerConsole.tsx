@@ -92,13 +92,14 @@ function shiftKey(shift: ShiftRecord): string {
 
 export function buildManagerRows(
   data: ManagerWorkspaceData,
+  shiftPattern: ManagerShiftPattern = "day",
   now = Date.now(),
 ): ManagerLineRow[] {
   const updateByAssignment = new Map(data.updates.map((item) => [item.assignment, item]));
   const shiftByLine = new Map(data.shifts.map((item) => [shiftKey(item), item]));
 
   return data.assignments
-    .filter((assignment) => assignment.shift_type === "day")
+    .filter((assignment) => assignment.shift_type === shiftPattern)
     .map((assignment) => {
       const update = updateByAssignment.get(assignment.id) ?? null;
       const openActions = data.escalations.filter(
@@ -280,24 +281,28 @@ export function ManagerConsole({
   profile,
   data,
   operationalDate,
+  shiftPattern,
   lastUpdatedAt,
   online,
   liveState,
   busy,
   error,
   onDateChange,
+  onShiftPatternChange,
   onRefresh,
   onSignOut,
 }: {
   profile: UserSummary;
   data: ManagerWorkspaceData;
   operationalDate: string;
+  shiftPattern: ManagerShiftPattern;
   lastUpdatedAt: string | null;
   online: boolean;
   liveState: LiveConnectionState;
   busy: boolean;
   error: string;
   onDateChange: (value: string) => void;
+  onShiftPatternChange: (value: ManagerShiftPattern) => void;
   onRefresh: () => void;
   onSignOut: () => void;
 }) {
@@ -305,7 +310,6 @@ export function ManagerConsole({
   const [filter, setFilter] = useState<BoardFilter>("all");
   const [selectedDowntimeLine, setSelectedDowntimeLine] = useState<number | null>(null);
   const [selectedLineId, setSelectedLineId] = useState<number | null>(null);
-  const [shiftPattern, setShiftPattern] = useState<ManagerShiftPattern>("day");
   const [viewMode, setViewMode] = useState<ManagerViewMode>(
     operationalDate === localDate() ? "live" : "historical",
   );
@@ -346,7 +350,7 @@ export function ManagerConsole({
   const [managerComment, setManagerComment] = useState("");
   const [downtimeSaving, setDowntimeSaving] = useState(false);
   const [downtimeMessage, setDowntimeMessage] = useState("");
-  const rows = useMemo(() => buildManagerRows(data), [data]);
+  const rows = useMemo(() => buildManagerRows(data, shiftPattern), [data, shiftPattern]);
   const isHistorical = operationalDate !== localDate();
   const visibleRows = useMemo(
     () => rows.filter((row) => matchesFilter(row, filter) && (lineFilter === "all" || String(row.assignment.production_line) === lineFilter)),
@@ -412,6 +416,15 @@ export function ManagerConsole({
   const recordedDowntime = data.downtimeEvents.filter((event) => recoveryLineFilter === "all" || String(event.production_line) === recoveryLineFilter).reduce((total, event) => total + event.duration_minutes, 0);
   const recoveredMinutes = recoveryOpportunities.filter((item) => item.status === "recovered" && item.checks_completed_at).reduce((total, item) => total + Math.max(0, Math.round((new Date(item.checks_completed_at!).getTime() - new Date(item.suggested_start_at).getTime()) / 60000)), 0);
   const remainingLoss = Math.max(0, recordedDowntime - recoveredMinutes);
+
+  useEffect(() => {
+    setSelectedLineId(null);
+    setSelectedDowntimeLine(null);
+    setSelectedDowntimeEventId(null);
+    setSelectedMaterialId(null);
+    setSelectedPlanBlock(null);
+    setSelectedRecovery(null);
+  }, [operationalDate, shiftPattern]);
 
   useEffect(() => {
     if (!shiftEditorOpen) {
@@ -607,7 +620,7 @@ export function ManagerConsole({
             <select
               aria-label="Shift pattern"
               value={shiftPattern}
-              onChange={(event) => setShiftPattern(event.target.value as ManagerShiftPattern)}
+              onChange={(event) => onShiftPatternChange(event.target.value as ManagerShiftPattern)}
             >
               <option value="day">Day · {shiftPattern === "day" ? shiftLabel : getShiftWindow(operationalDate, data.shifts, "day").startLabel + "–" + getShiftWindow(operationalDate, data.shifts, "day").endLabel}</option>
               <option value="night">Night · {shiftPattern === "night" ? shiftLabel : getShiftWindow(operationalDate, data.shifts, "night").startLabel + "–" + getShiftWindow(operationalDate, data.shifts, "night").endLabel}</option>

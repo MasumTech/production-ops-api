@@ -306,6 +306,66 @@ describe("tablet workspace", () => {
     expect(screen.queryByText("My Lines")).not.toBeInTheDocument();
   });
 
+  it("reloads every manager dataset for the selected shift", async () => {
+    sessionStorage.setItem(
+      "production-ops-session",
+      JSON.stringify({ access: "test-access", refresh: "test-refresh" }),
+    );
+    const listSpy = vi.spyOn(api, "apiList").mockResolvedValue([]);
+    const requestSpy = vi.spyOn(api, "apiRequest").mockImplementation(async (path) => {
+      if (path === "/auth/me/") return manager as never;
+      return {
+        total_shifts: 0,
+        total_planned_output: 0,
+        total_actual_output: 0,
+        overall_performance_percentage: null,
+        total_downtime_minutes: 0,
+        open_incidents: 0,
+        critical_incidents: 0,
+      } as never;
+    });
+    const actor = userEvent.setup();
+
+    render(<App />);
+
+    const shiftSelector = await screen.findByLabelText("Shift pattern");
+    await waitFor(() =>
+      expect(listSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/^\/team-leader-assignments\/\?date=.*&shift_type=day$/),
+      ),
+    );
+
+    listSpy.mockClear();
+    requestSpy.mockClear();
+    await actor.selectOptions(shiftSelector, "night");
+
+    const nightListPaths = [
+      "/team-leader-assignments/",
+      "/daily-plan-blocks/",
+      "/break-opportunities/",
+      "/break-recoveries/",
+      "/hourly-line-updates/latest-status/",
+      "/product-material-readiness/",
+      "/operational-escalations/",
+      "/shifts/",
+      "/downtime-events/",
+    ];
+    await waitFor(() => {
+      for (const path of nightListPaths) {
+        expect(listSpy).toHaveBeenCalledWith(
+          expect.stringMatching(
+            new RegExp(`^${path.replaceAll("/", "\\/")}\\?date=.*shift_type=night`),
+          ),
+        );
+      }
+      expect(requestSpy).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /^\/dashboard\/summary\/\?date_from=.*&date_to=.*&shift_type=night$/,
+        ),
+      );
+    });
+  });
+
   it("routes approved support users to the mobile companion", async () => {
     sessionStorage.setItem(
       "production-ops-session",

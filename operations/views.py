@@ -939,9 +939,16 @@ class OperationsDashboardView(APIView):
 
         date_from = filter_serializer.validated_data.get("date_from")
         date_to = filter_serializer.validated_data.get("date_to")
+        shift_type = filter_serializer.validated_data.get("shift_type")
 
         shift_queryset = Shift.objects.all()
         incident_queryset = QualityIncident.objects.all()
+
+        if shift_type:
+            shift_queryset = shift_queryset.filter(shift_type=shift_type)
+            incident_queryset = incident_queryset.filter(
+                shift__shift_type=shift_type,
+            )
 
         if date_from:
             shift_queryset = shift_queryset.filter(
@@ -1122,11 +1129,14 @@ class DowntimeEventViewSet(viewsets.ModelViewSet):
             "shift__production_line",
         )
         shift_date = self.request.query_params.get("date")
+        shift_type = self.request.query_params.get("shift_type")
         production_line = self.request.query_params.get("production_line")
         event_status = self.request.query_params.get("status")
 
         if shift_date:
             queryset = queryset.filter(shift__date=shift_date)
+        if shift_type:
+            queryset = queryset.filter(shift__shift_type=shift_type)
         if production_line:
             queryset = queryset.filter(shift__production_line_id=production_line)
         if event_status:
@@ -2065,6 +2075,10 @@ class DailyPlanBlockViewSet(viewsets.ModelViewSet):
         filters_data = filter_serializer.validated_data
         if filters_data.get("date"):
             queryset = queryset.filter(assignment__date=filters_data["date"])
+        if filters_data.get("shift_type"):
+            queryset = queryset.filter(
+                assignment__shift_type=filters_data["shift_type"]
+            )
         if filters_data.get("assignment"):
             queryset = queryset.filter(assignment_id=filters_data["assignment"])
         if filters_data.get("production_line"):
@@ -2106,6 +2120,10 @@ class BreakOpportunityViewSet(viewsets.ReadOnlyModelViewSet):
         filters_data = filter_serializer.validated_data
         if filters_data.get("date"):
             queryset = queryset.filter(assignment__date=filters_data["date"])
+        if filters_data.get("shift_type"):
+            queryset = queryset.filter(
+                assignment__shift_type=filters_data["shift_type"]
+            )
         if filters_data.get("assignment"):
             queryset = queryset.filter(assignment_id=filters_data["assignment"])
         if filters_data.get("status"):

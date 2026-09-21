@@ -188,6 +188,7 @@ describe("manager console", () => {
   it("sorts urgent lines ahead of stable lines", () => {
     const rows = buildManagerRows(
       data,
+      "day",
       new Date("2026-09-01T10:00:00Z").getTime(),
     );
 
@@ -205,19 +206,45 @@ describe("manager console", () => {
     expect(rows[1].attentionLevel).toBe("stable");
   });
 
+  it("builds rows only for the selected shift", () => {
+    const nightAssignment: Assignment = {
+      ...assignments[0],
+      id: 3,
+      production_line: 103,
+      production_line_code: "LINE-03",
+      production_line_name: "Night Packing",
+      shift_type: "night",
+    };
+
+    const rows = buildManagerRows(
+      {
+        ...data,
+        assignments: [...assignments, nightAssignment],
+      },
+      "night",
+    );
+
+    expect(rows.map((row) => row.assignment.production_line_code)).toEqual([
+      "LINE-03",
+    ]);
+  });
+
   it("shows the overview and the shared manager shell", async () => {
     const actor = userEvent.setup();
+    const onShiftPatternChange = vi.fn();
     render(
       <ManagerConsole
         profile={profile}
         data={data}
         operationalDate="2026-09-01"
+        shiftPattern="day"
         lastUpdatedAt="2026-09-01T10:00:00Z"
         online
         liveState="live"
         busy={false}
         error=""
         onDateChange={vi.fn()}
+        onShiftPatternChange={onShiftPatternChange}
         onRefresh={vi.fn()}
         onSignOut={vi.fn()}
       />,
@@ -279,7 +306,7 @@ describe("manager console", () => {
     ).toBeInTheDocument();
 
     await actor.selectOptions(within(controls).getByLabelText("Shift pattern"), "night");
-    expect(screen.getByText(/Night shift 23:00–07:00/)).toBeInTheDocument();
+    expect(onShiftPatternChange).toHaveBeenCalledWith("night");
 
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Daily risk briefing" })).not.toBeInTheDocument();
@@ -295,12 +322,14 @@ describe("manager console", () => {
         profile={profile}
         data={data}
         operationalDate="2026-09-01"
+        shiftPattern="day"
         lastUpdatedAt="2026-09-01T10:00:00Z"
         online
         liveState="live"
         busy={false}
         error=""
         onDateChange={vi.fn()}
+        onShiftPatternChange={vi.fn()}
         onRefresh={vi.fn()}
         onSignOut={vi.fn()}
       />,
@@ -350,12 +379,14 @@ describe("manager console", () => {
         profile={profile}
         data={data}
         operationalDate="2026-09-01"
+        shiftPattern="day"
         lastUpdatedAt="2026-09-01T10:00:00Z"
         online
         liveState="live"
         busy={false}
         error=""
         onDateChange={vi.fn()}
+        onShiftPatternChange={vi.fn()}
         onRefresh={onRefresh}
         onSignOut={vi.fn()}
       />,
@@ -393,12 +424,14 @@ describe("manager console", () => {
           updates: [currentUpdate],
         }}
         operationalDate="2026-09-01"
+        shiftPattern="day"
         lastUpdatedAt="2026-09-01T10:00:00Z"
         online
         liveState="live"
         busy={false}
         error=""
         onDateChange={vi.fn()}
+        onShiftPatternChange={vi.fn()}
         onRefresh={vi.fn()}
         onSignOut={vi.fn()}
       />,
