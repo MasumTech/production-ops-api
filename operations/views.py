@@ -2121,13 +2121,9 @@ class BreakOpportunityViewSet(viewsets.ReadOnlyModelViewSet):
         if filters_data.get("date"):
             queryset = queryset.filter(assignment__date=filters_data["date"])
         if filters_data.get("date_from"):
-            queryset = queryset.filter(
-                assignment__date__gte=filters_data["date_from"]
-            )
+            queryset = queryset.filter(assignment__date__gte=filters_data["date_from"])
         if filters_data.get("date_to"):
-            queryset = queryset.filter(
-                assignment__date__lte=filters_data["date_to"]
-            )
+            queryset = queryset.filter(assignment__date__lte=filters_data["date_to"])
         if filters_data.get("shift_type"):
             queryset = queryset.filter(
                 assignment__shift_type=filters_data["shift_type"]

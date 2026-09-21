@@ -1536,9 +1536,7 @@ class BreakOpportunitySerializer(serializers.ModelSerializer):
     production_line_name = serializers.CharField(
         source="assignment.production_line.name", read_only=True
     )
-    assignment_date = serializers.DateField(
-        source="assignment.date", read_only=True
-    )
+    assignment_date = serializers.DateField(source="assignment.date", read_only=True)
 
     class Meta:
         model = BreakOpportunity
