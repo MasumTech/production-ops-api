@@ -10,6 +10,7 @@ import type {
   UserSummary,
 } from "../types";
 import {
+  buildManagerPriorities,
   buildManagerRows,
   ManagerConsole,
 } from "./ManagerConsole";
@@ -229,6 +230,31 @@ describe("manager console", () => {
     ]);
   });
 
+  it("builds priorities from real issues and exposes missing updates", () => {
+    const issueRows = buildManagerRows(
+      {
+        ...data,
+        updates: [updates[1]],
+      },
+      "day",
+      new Date("2026-09-01T10:00:00Z").getTime(),
+    );
+
+    expect(buildManagerPriorities(issueRows)).toEqual([
+      expect.objectContaining({
+        title: "Line 2: Filler stopped",
+        detail: "Line made safe",
+      }),
+      expect.objectContaining({
+        title: "Line 2: Product B short",
+      }),
+      expect.objectContaining({
+        title: "Line 1: status update missing",
+        detail: "No update recorded for the Day shift.",
+      }),
+    ]);
+  });
+
   it("shows the overview and the shared manager shell", async () => {
     const actor = userEvent.setup();
     const onShiftPatternChange = vi.fn();
@@ -269,6 +295,18 @@ describe("manager console", () => {
     expect(
       within(summary).getByText("45 min"),
     ).toBeInTheDocument();
+
+    const attention = screen.getByRole("region", { name: "Attention summary" });
+    expect(within(attention).getByText("1 critical issue")).toBeInTheDocument();
+    expect(within(attention).getByText("1 material risk")).toBeInTheDocument();
+    expect(within(attention).getByText("1 open action")).toBeInTheDocument();
+    expect(within(attention).getByText("0 missing updates")).toBeInTheDocument();
+
+    const priorities = screen.getByRole("heading", { name: "Suggested priorities" }).closest("section");
+    expect(priorities).not.toBeNull();
+    expect(within(priorities as HTMLElement).getByText("Line 2: Filler stopped")).toBeInTheDocument();
+    expect(within(priorities as HTMLElement).getByText("Line made safe")).toBeInTheDocument();
+    expect(within(priorities as HTMLElement).queryByText(/conveyor reset/i)).not.toBeInTheDocument();
 
     const coverage = screen.getByRole("region", { name: "Team Leaders and production lines" });
     expect(within(coverage).getByText("Team Leader 1")).toBeInTheDocument();
