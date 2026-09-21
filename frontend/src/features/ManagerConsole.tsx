@@ -70,6 +70,13 @@ export interface ManagerLineRow {
   attentionLevel: AttentionLevel;
 }
 
+export interface ManagerPriority {
+  key: string;
+  title: string;
+  detail: string;
+  view: "lines" | "actions";
+}
+
 const EMPTY_SUMMARY = {
   total_shifts: 0,
   total_planned_output: 0,
@@ -141,6 +148,84 @@ export function buildManagerRows(
         )
       );
     });
+}
+
+export function buildManagerPriorities(rows: ManagerLineRow[]): ManagerPriority[] {
+  const priorities: ManagerPriority[] = [];
+  const actionRank: Record<Escalation["priority"], number> = {
+    critical: 0,
+    high: 1,
+    medium: 2,
+    low: 3,
+  };
+
+  const actions = rows
+    .flatMap((row) => row.openActions.map((action) => ({ action, row })))
+    .sort(
+      (left, right) =>
+        actionRank[left.action.priority] - actionRank[right.action.priority] ||
+        Number(right.action.is_overdue) - Number(left.action.is_overdue),
+    );
+
+  actions.forEach(({ action, row }) => {
+    const line = displayLine(row.assignment.production_line_code);
+    const owner = action.owner_username
+      ? `Owner: ${action.owner_username}`
+      : `Owner group: ${escalationRole(action.category)}`;
+    priorities.push({
+      key: `action-${action.id}`,
+      title: `${line}: ${action.summary}`,
+      detail: action.immediate_action || `${owner} · Due ${formatDateTime(action.response_due_at)}`,
+      view: "actions",
+    });
+  });
+
+  rows.forEach((row) => {
+    if (row.update?.status === "red" && !row.openActions.some(
+      (action) => action.summary.trim().toLowerCase() === row.update?.issue_summary.trim().toLowerCase(),
+    )) {
+      priorities.push({
+        key: `line-${row.assignment.id}`,
+        title: `${displayLine(row.assignment.production_line_code)}: ${row.update.issue_summary || "Stopped"}`,
+        detail: row.update.action_taken || row.update.support_required || "Review the latest line update.",
+        view: "lines",
+      });
+    }
+  });
+
+  rows.flatMap((row) => row.materialRisks.map((material) => ({ material, row }))).forEach(
+    ({ material, row }) => {
+      const availability = material.expected_available_at
+        ? `ETA ${formatDateTime(material.expected_available_at)}`
+        : "ETA not recorded";
+      priorities.push({
+        key: `material-${material.id}`,
+        title: `${displayLine(row.assignment.production_line_code)}: ${material.product_name} ${material.status}`,
+        detail: `${material.owner_username ? `Owner: ${material.owner_username}` : "Owner not assigned"} · ${availability}`,
+        view: "actions",
+      });
+    },
+  );
+
+  rows.filter((row) => !row.update).forEach((row) => {
+    priorities.push({
+      key: `missing-${row.assignment.id}`,
+      title: `${displayLine(row.assignment.production_line_code)}: status update missing`,
+      detail: `No update recorded for the ${titleCase(row.assignment.shift_type)} shift.`,
+      view: "lines",
+    });
+  });
+
+  rows.filter((row) => row.update && row.update.status !== "red" && row.isLate).forEach((row) => {
+    priorities.push({
+      key: `late-${row.assignment.id}`,
+      title: `${displayLine(row.assignment.production_line_code)}: update overdue`,
+      detail: `Next update was due ${formatDateTime(row.update!.next_update_due_at)}.`,
+      view: "lines",
+    });
+  });
+
+  return priorities.slice(0, 3);
 }
 
 function matchesFilter(row: ManagerLineRow, filter: BoardFilter): boolean {
@@ -367,12 +452,10 @@ export function ManagerConsole({
     (planLineFilter === "all" || String(row.assignment.production_line) === planLineFilter) &&
     (planLeaderFilter === "all" || String(row.assignment.team_leader) === planLeaderFilter),
   );
-  const openActions = data.escalations
-    .filter((item) => item.status !== "resolved")
+  const openActions = rows
+    .flatMap((row) => row.openActions)
     .sort((left, right) => Number(right.needs_attention) - Number(left.needs_attention));
-  const materialRisks = data.materials.filter((item) =>
-    ["short", "held"].includes(item.status),
-  );
+  const materialRisks = rows.flatMap((row) => row.materialRisks);
   const summary = data.summary ?? EMPTY_SUMMARY;
   const hierarchyGroups = useMemo(
     () => buildHierarchyGroups(rows.map((row) => row.assignment)),
@@ -395,12 +478,9 @@ export function ManagerConsole({
   const planCompletion = summary.overall_performance_percentage ?? 0;
   const downtimeRisk = Math.min(100, Math.round((summary.total_downtime_minutes / 66) * 100));
   const materialRisk = Math.min(100, materialRisks.length * 21);
-  const highestRiskLine = rows.find((row) => row.update?.status === "red") ?? rows[0];
-  const criticalRows = rows.filter((row) => row.update?.status === "red" || row.attentionLevel === "urgent");
-  const stableLineLabels = rows
-    .filter((row) => row.update?.status === "green")
-    .map((row) => displayLine(row.assignment.production_line_code))
-    .join(", ");
+  const criticalIssueCount = openActions.filter((item) => item.priority === "critical").length;
+  const missingUpdateCount = rows.filter((row) => !row.update).length;
+  const managerPriorities = buildManagerPriorities(rows);
   const selectedShiftRecords = data.shifts.filter(
     (shift) => shift.shift_type === shiftPattern,
   );
@@ -739,11 +819,13 @@ export function ManagerConsole({
 
               <section className="manager-attention-strip" aria-label="Attention summary">
                 <AppIcon name="warning" size={26} />
-                <button type="button" onClick={() => setView("lines")}><strong>{criticalRows.length} critical issue{criticalRows.length === 1 ? "" : "s"}</strong></button>
+                <button type="button" onClick={() => setView("actions")}><strong>{criticalIssueCount} critical issue{criticalIssueCount === 1 ? "" : "s"}</strong></button>
                 <span aria-hidden="true">·</span>
                 <button type="button" onClick={() => setView("actions")}><strong>{materialRisks.length} material risk{materialRisks.length === 1 ? "" : "s"}</strong></button>
                 <span aria-hidden="true">·</span>
                 <button type="button" onClick={() => setView("actions")}><strong>{openActions.length} open action{openActions.length === 1 ? "" : "s"}</strong></button>
+                <span aria-hidden="true">·</span>
+                <button type="button" onClick={() => setView("lines")}><strong>{missingUpdateCount} missing update{missingUpdateCount === 1 ? "" : "s"}</strong></button>
                 <button className="attention-strip__open" type="button" aria-label="Open critical line control" onClick={() => setView("lines")}>›</button>
               </section>
 
@@ -801,11 +883,9 @@ export function ManagerConsole({
               <div className="overview-lower-grid">
               <section className="overview-priorities" aria-labelledby="overview-priorities-title">
                 <header><span><AppIcon name="clipboard" size={24} /></span><div><h2 id="overview-priorities-title">Suggested priorities</h2><p>Based on current performance and risks</p></div></header>
-                <ol>
-                  <li><button type="button" onClick={() => setView("lines")}><b>1</b><span><strong>Resolve {highestRiskLine ? displayLine(highestRiskLine.assignment.production_line_code) : "highest-risk line"} stop – conveyor reset</strong><small>Target restart within 15 minutes</small></span></button></li>
-                  <li><button type="button" onClick={() => setView("actions")}><b>2</b><span><strong>{materialRisks[0] ? `Check ${materialRisks[0].product_name} supply` : "Confirm material availability"}</strong><small>Confirm next delivery and responsible owner</small></span></button></li>
-                  <li><button type="button" onClick={() => setView("lines")}><b>3</b><span><strong>Prepare recovery for monitored lines</strong><small>{stableLineLabels || "Review staffing and clear minor stops"}</small></span></button></li>
-                </ol>
+                {managerPriorities.length ? <ol>
+                  {managerPriorities.map((priority, index) => <li key={priority.key}><button type="button" onClick={() => setView(priority.view)}><b>{index + 1}</b><span><strong>{priority.title}</strong><small>{priority.detail}</small></span></button></li>)}
+                </ol> : <p className="overview-priorities__empty">No immediate intervention is required for this shift.</p>}
                 <button type="button" className="button button--primary overview-priorities__cta" onClick={() => setView("briefing")}>View full briefing <span aria-hidden="true">→</span></button>
               </section>
 
