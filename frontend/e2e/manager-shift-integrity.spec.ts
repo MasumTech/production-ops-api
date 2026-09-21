@@ -26,6 +26,19 @@ test("manager Day and Night selection scopes the complete workspace", async ({
   await page.setViewportSize({ width: 1536, height: 1024 });
   await signInAsManager(page);
 
+  const dateControl = page.locator(".manager-header-date");
+  const dateInput = page.getByLabel("Operational date");
+  const controlBox = await dateControl.boundingBox();
+  const inputBox = await dateInput.boundingBox();
+  expect(controlBox).not.toBeNull();
+  expect(inputBox).not.toBeNull();
+  expect(inputBox!.width).toBeCloseTo(controlBox!.width, 0);
+  expect(inputBox!.height).toBeCloseTo(controlBox!.height, 0);
+  await dateInput.click({
+    position: { x: inputBox!.width / 2, y: inputBox!.height - 2 },
+  });
+  await expect(dateInput).toBeFocused();
+
   const summary = page.getByRole("region", { name: "Operational summary" });
   const kpis = summary.locator(".control-kpi");
   await expect(kpis.nth(0).locator("strong")).toHaveText("6");
