@@ -393,8 +393,14 @@ describe("manager console", () => {
 
     await actor.click(within(navigation).getByRole("button", { name: "Materials" }));
     expect(screen.getByRole("heading", { name: "Materials & actions" })).toBeInTheDocument();
-    expect(screen.getByRole("table")).toHaveTextContent("10:45");
-    expect(screen.getByRole("table")).toHaveTextContent("ETA 11:30");
+    const time = (value: string) => new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(new Date(value));
+    const materialsTable = screen.getByRole("table");
+    expect(materialsTable).toHaveTextContent(time("2026-09-01T09:45:00Z"));
+    expect(materialsTable).toHaveTextContent(`ETA ${time("2026-09-01T10:30:00Z")}`);
     expect(screen.getByRole("tab", { name: /Materials/ })).toBeInTheDocument();
     await actor.click(screen.getByRole("tab", { name: /Open actions/ }));
     expect(screen.getByRole("heading", { name: "Open actions" })).toBeInTheDocument();
