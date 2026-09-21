@@ -46,8 +46,18 @@ screenshot or API evidence, defect reference, and owner.
 | UAT-16 | All roles | Lose network, queue a safe action, reconnect | Outbox retries idempotently; duplicate state change is not created | [ ] |
 | UAT-17 | Unauthorised user | Request another workspace's endpoint | API returns the expected permission response and no data leak | [ ] |
 | UAT-18 | All roles | Resize to mobile, tablet, and desktop | Navigation and critical actions remain usable at each viewport | [ ] |
-| UAT-19 | Operations Manager | Review hourly downtime for every line | Each 07:00–18:00 bucket shows recorded minutes and a short reason, or an explicit no-loss state | [ ] |
-| UAT-20 | Team Leader | Open My lines and expand downtime | Exactly two assigned lines, status/quantity/timeline/progress/priority/actions, two planned 40-minute breaks, and eleven hourly downtime buckets are visible | [ ] |
+| UAT-19 | Operations Manager | Review hourly downtime for every line | The configured shift window is used: Monday–Friday defaults to 06:45–18:00, Saturday–Sunday defaults to 07:00–18:00, and a manager override is reflected without hard-coded 07:00 assumptions. The weekday 06:45–07:00 period is a real 15-minute bucket. | [ ] |
+| UAT-20 | Team Leader | Open My Lines and expand downtime | Two or three valid assigned lines are supported. Status, quantity, timeline, progress, priority, actions, two planned 40-minute breaks, and shift-derived downtime buckets remain visible. | [ ] |
+| UAT-21 | Cross-role | Team Leader raises a Red operational issue | The escalation is persisted once and becomes visible to Operations Manager line control and Open actions for the same operational date. | [ ] |
+| UAT-22 | Cross-role | Team Leader raises a material issue | The selected material context is preserved and the resulting material escalation becomes visible in Operations Manager Open actions. | [ ] |
+
+## Automated regression evidence
+
+The pull-request CI must pass the complete quality gate before UAT evidence is accepted. The gate includes Ruff formatting/linting, Django checks, migration drift, OpenAPI validation, backend coverage, frontend type/tests/build, Docker/staging validation, deterministic demo seeding, and the Playwright browser suite.
+
+The browser suite specifically covers responsive login/manager shells, Team Leader common layout, My Lines, Daily Plan, Materials, Break & Recovery, Shift Handover, Raise Issue, cross-role Team Leader-to-Operations-Manager persistence, and the final UAT smoke checks. CI retains responsive screenshots as the `responsive-ui-preview` artifact.
+
+Final timing assertions use the operational date, not the machine date: Friday 04 Sept 2026 resolves to 06:45–18:00; Saturday 05 Sept 2026 resolves to 07:00–18:00 unless an Operations Manager override exists.
 
 ## Defect and sign-off record
 
