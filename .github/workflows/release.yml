@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   packages: write
 
@@ -12,13 +13,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify-ci:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Require successful CI for this exact commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          conclusion="$(gh api             "/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&event=push&status=completed&per_page=1"             --jq '.workflow_runs[0].conclusion // ""')"
+
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::Release blocked: commit $GITHUB_SHA has no successful completed push CI run."
+            echo "Wait for CI on main to pass, then run this workflow again."
+            exit 1
+          fi
+
+          echo "Verified successful push CI for $GITHUB_SHA."
+
   publish:
+    needs: verify-ci
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: staging-release
 
     steps:
-      - name: Checkout main
+      - name: Checkout verified main commit
         uses: actions/checkout@v7
 
       - name: Authenticate to GitHub Container Registry
@@ -48,6 +69,7 @@ jobs:
           {
             echo "## Staging release images"
             echo ""
+            echo "- Verified commit: $GITHUB_SHA"
             echo "- Backend: $WEB_IMAGE"
             echo "- Frontend: $FRONTEND_IMAGE"
             echo ""
