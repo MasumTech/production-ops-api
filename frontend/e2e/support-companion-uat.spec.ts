@@ -65,11 +65,12 @@ for (const viewport of viewports) {
 
       if (section.slug === "lines") {
         await expect(page.getByText("DEMO-LINE-01")).toBeVisible();
-        await expect(page.getByText("DEMO-LINE-02")).toBeVisible();
+        await expect(page.getByText("DEMO-LINE-03")).toBeVisible();
       }
       if (section.slug === "materials") {
-        await expect(page.getByText("Oat Milk Chai")).toBeVisible();
-        await expect(page.getByText("BBQ Chicken Bites")).toBeVisible();
+        await expect(
+          page.getByText("No short or held materials on your assigned lines."),
+        ).toBeVisible();
       }
 
       const horizontalOverflow = await page.evaluate(
