@@ -47,7 +47,7 @@ for (const viewport of viewports) {
 
     await expect(page.getByText("1 assigned · 1 available")).toHaveCount(1);
     await expect(page.getByText("Filler pressure repeatedly dropping")).toBeVisible();
-    await expect(page.getByText("Carton stock below next-hour demand")).toBeVisible();
+    await expect(page.getByText("Label feed alignment issue")).toBeVisible();
     await expect(page.getByRole("button", { name: "Acknowledge action" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Claim & acknowledge" })).toBeVisible();
 

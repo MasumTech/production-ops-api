@@ -82,8 +82,8 @@ for (const viewport of viewports) {
   test(`Team Leader visual matrix is complete on ${viewport.name}`, async ({
     page,
   }, testInfo) => {
-    await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await signIn(page, "demo.leader");
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await expect(page.getByRole("heading", { name: "My Lines" })).toBeVisible();
 
     const navigation = viewport.width <= 900

@@ -294,8 +294,15 @@ def test_seed_demo_data_creates_complete_dataset():
     )
     assert set(support_escalations.values_list("summary", "owner__username")) == {
         ("Filler pressure repeatedly dropping", "demo.support"),
-        ("Carton stock below next-hour demand", None),
+        ("Label feed alignment issue", None),
     }
+    leader_open_escalations = OperationalEscalation.objects.filter(
+        assignment__date=date(2026, 9, 2),
+        assignment__team_leader__username="demo.leader",
+        status=OperationalEscalation.Status.OPEN,
+    )
+    assert leader_open_escalations.count() == 3
+    assert not leader_open_escalations.filter(owner__isnull=True).exists()
 
     handover = ShiftHandover.objects.get()
     assert handover.status == ShiftHandover.Status.PENDING
