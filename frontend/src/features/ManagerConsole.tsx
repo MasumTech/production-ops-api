@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DailyRiskBriefingPanel } from "./DailyRiskBriefingPanel";
 import { LossAnalyticsPanel } from "./LossAnalyticsPanel";
 import { PilotAdminPanel } from "./PilotAdminPanel";
@@ -408,6 +408,8 @@ export function ManagerConsole({
     operationalDate === localDate() ? "live" : "historical",
   );
   const [navigationOpen, setNavigationOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const workspaceRef = useRef<HTMLElement>(null);
   const [lineFilter, setLineFilter] = useState("all");
   const [planLineFilter, setPlanLineFilter] = useState("all");
   const [planLeaderFilter, setPlanLeaderFilter] = useState("all");
@@ -541,7 +543,22 @@ export function ManagerConsole({
   const selectView = (nextView: ManagerWorkspaceView) => {
     setView(nextView);
     setNavigationOpen(false);
+    workspaceRef.current?.focus();
   };
+
+  useEffect(() => {
+    if (!navigationOpen) return;
+    const closeNavigation = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setNavigationOpen(false);
+      menuButtonRef.current?.focus();
+    };
+    document.addEventListener("keydown", closeNavigation);
+    document.querySelector<HTMLButtonElement>(
+      "#manager-navigation button",
+    )?.focus();
+    return () => document.removeEventListener("keydown", closeNavigation);
+  }, [navigationOpen]);
 
   const selectLiveView = () => {
     if (isHistorical) onDateChange(localDate());
@@ -754,6 +771,7 @@ export function ManagerConsole({
 
   return (
     <div className="manager-shell">
+      <a className="skip-link" href="#manager-content">Skip to main content</a>
       {!online ? (
         <div className="offline-banner" role="status">
           Offline: this snapshot remains visible, but refresh needs a connection.
@@ -764,9 +782,11 @@ export function ManagerConsole({
         <div className="manager-topbar__brand">
           <button
             type="button"
+            ref={menuButtonRef}
             className="manager-menu-button"
             aria-label={navigationOpen ? "Close navigation" : "Open navigation"}
             aria-expanded={navigationOpen}
+            aria-controls="manager-navigation"
             onClick={() => setNavigationOpen((current) => !current)}
           >
             <AppIcon name="menu" size={24} />
@@ -853,12 +873,14 @@ export function ManagerConsole({
 
       <div className="manager-layout">
         <WorkspaceSidebar
+          id="manager-navigation"
           ariaLabel="Operations Manager workspace"
           navigationLabel="Manager sections"
           className={`manager-sidebar${navigationOpen ? " manager-sidebar--open" : ""}`}
           items={MANAGER_NAV_ITEMS}
           activeItem={view}
           onSelect={selectView}
+          contentId="manager-content"
           summary={
             <>
               <span className="manager-live-dot" aria-hidden="true" />
@@ -883,7 +905,12 @@ export function ManagerConsole({
           />
         ) : null}
 
-        <main className="manager-workspace">
+        <main
+          id="manager-content"
+          ref={workspaceRef}
+          className="manager-workspace"
+          tabIndex={-1}
+        >
           {error ? <ErrorBanner message={error} /> : null}
 
           {view === "overview" ? (

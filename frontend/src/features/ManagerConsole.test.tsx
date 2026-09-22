@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../api";
+import { localDate } from "../format";
 import type {
   Assignment,
   LineUpdate,
@@ -458,7 +459,7 @@ describe("manager console", () => {
     const actor = userEvent.setup();
     const request = vi.mocked(api.apiRequest);
     request.mockResolvedValue({} as never);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDate();
     const planBlock = {
       id: 70,
       assignment: 1,

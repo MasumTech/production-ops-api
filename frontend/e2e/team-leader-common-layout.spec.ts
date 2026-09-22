@@ -39,9 +39,26 @@ for (const viewport of viewports) {
     const sidebar = page.locator('aside[aria-label="Team Leader workspace"]');
     if (viewport.name === "phone") {
       await expect(page.getByRole("group", { name: "Data view" })).toBeHidden();
-      await page.getByRole("button", { name: "Open navigation" }).click();
+      const menuButton = page.getByRole("button", { name: "Open navigation" });
+      await expect(menuButton).toHaveAttribute("aria-controls", "team-leader-navigation");
+      await menuButton.click();
       await expect(sidebar).toHaveClass(/team-control-sidebar--open/);
       await expect(sidebar.getByRole("button")).toHaveCount(5);
+      await expect(
+        sidebar.getByRole("button", { name: "My Lines" }),
+      ).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(sidebar).not.toHaveClass(/team-control-sidebar--open/);
+      await expect(menuButton).toBeFocused();
+
+      const skipLink = page.getByRole("link", { name: "Skip to main content" });
+      await skipLink.focus();
+      await expect(skipLink).toBeVisible();
+      await skipLink.press("Enter");
+      await expect(page.locator("#team-leader-content")).toBeFocused();
+
+      await menuButton.click();
+      await expect(sidebar).toHaveClass(/team-control-sidebar--open/);
     } else {
       await expect(page.getByLabel("Shift pattern")).toHaveValue("day");
       await expect(page.getByRole("group", { name: "Data view" })).toBeVisible();

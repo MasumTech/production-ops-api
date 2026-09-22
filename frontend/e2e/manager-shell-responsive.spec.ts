@@ -40,8 +40,24 @@ for (const viewport of viewports) {
     });
 
     if (viewport.name === "phone") {
-      await page.getByRole("button", { name: "Open navigation" }).click();
+      const menuButton = page.getByRole("button", { name: "Open navigation" });
+      await expect(menuButton).toHaveAttribute("aria-controls", "manager-navigation");
+      await menuButton.click();
       await expect(page.locator(".manager-sidebar")).toHaveClass(/manager-sidebar--open/);
+      await expect(
+        page.locator("#manager-navigation").getByRole("button", { name: "Overview" }),
+      ).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(page.locator(".manager-sidebar")).not.toHaveClass(/manager-sidebar--open/);
+      await expect(menuButton).toBeFocused();
+
+      const skipLink = page.getByRole("link", { name: "Skip to main content" });
+      await skipLink.focus();
+      await expect(skipLink).toBeVisible();
+      await skipLink.press("Enter");
+      await expect(page.locator("#manager-content")).toBeFocused();
+
+      await menuButton.click();
       await page.screenshot({
         path: testInfo.outputPath("manager-shell-phone-navigation.png"),
         animations: "disabled",

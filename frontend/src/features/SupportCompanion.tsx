@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { ApiError, OfflineQueuedError, postJson } from "../api";
 import { ErrorBanner, StatusPill } from "../components";
 import { formatDateTime } from "../format";
 import { NotificationCentre } from "../NotificationCentre";
+import type { AppIconName } from "../AppIcon";
 import type {
   Escalation,
   SupportCompanionData,
@@ -20,12 +21,13 @@ const NAV_ITEMS: Array<{
   id: SupportTab;
   label: string;
   shortLabel: string;
+  icon: AppIconName;
 }> = [
-  { id: "overview", label: "Support Overview", shortLabel: "Overview" },
-  { id: "actions", label: "My Actions", shortLabel: "Actions" },
-  { id: "lines", label: "Line Status", shortLabel: "Lines" },
-  { id: "materials", label: "Material Risks", shortLabel: "Materials" },
-  { id: "guide", label: "Response Guide", shortLabel: "Guide" },
+  { id: "overview", label: "Support Overview", shortLabel: "Overview", icon: "home" },
+  { id: "actions", label: "My Actions", shortLabel: "Actions", icon: "clipboard" },
+  { id: "lines", label: "Line Status", shortLabel: "Lines", icon: "factory" },
+  { id: "materials", label: "Material Risks", shortLabel: "Materials", icon: "package" },
+  { id: "guide", label: "Response Guide", shortLabel: "Guide", icon: "shield" },
 ];
 
 function ActionCard({
@@ -121,6 +123,7 @@ export function SupportCompanion({
   onSaved: (message: string) => Promise<void>;
 }) {
   const [tab, setTab] = useState<SupportTab>("overview");
+  const workspaceRef = useRef<HTMLElement>(null);
   const [acknowledging, setAcknowledging] = useState<number | null>(null);
   const [actionError, setActionError] = useState("");
   const openActions = data.escalations.filter((item) => item.status === "open");
@@ -157,9 +160,14 @@ export function SupportCompanion({
   };
 
   const actions = tab === "overview" ? data.escalations.slice(0, 3) : data.escalations;
+  const selectTab = (nextTab: SupportTab) => {
+    setTab(nextTab);
+    workspaceRef.current?.focus();
+  };
 
   return (
     <div className="app-shell support-shell">
+      <a className="skip-link" href="#support-content">Skip to main content</a>
       {!online ? (
         <div className="offline-banner" role="status">
           Offline: acknowledgements are queued securely until the connection returns.
@@ -191,11 +199,13 @@ export function SupportCompanion({
       </header>
 
       <WorkspaceSidebar
+        id="support-navigation"
         ariaLabel="Operational Support workspace"
         navigationLabel="Operational Support sections"
         items={NAV_ITEMS}
         activeItem={tab}
-        onSelect={setTab}
+        onSelect={selectTab}
+        contentId="support-content"
         summary={
           <>
             <span className="eyebrow">Assigned response</span>
@@ -206,7 +216,12 @@ export function SupportCompanion({
         boundary={<>Visibility and acknowledgement only. Follow approved safety and response procedures.</>}
       />
 
-      <main className="workspace support-workspace">
+      <main
+        id="support-content"
+        ref={workspaceRef}
+        className="workspace support-workspace"
+        tabIndex={-1}
+      >
         {error ? <ErrorBanner message={error} /> : null}
         {actionError ? <ErrorBanner message={actionError} /> : null}
 
@@ -318,7 +333,8 @@ export function SupportCompanion({
         ariaLabel="Operational Support mobile workspace"
         items={NAV_ITEMS}
         activeItem={tab}
-        onSelect={setTab}
+        onSelect={selectTab}
+        contentId="support-content"
       />
     </div>
   );
