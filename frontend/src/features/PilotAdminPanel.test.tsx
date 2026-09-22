@@ -56,6 +56,13 @@ describe("pilot administration", () => {
     expect(screen.getByText("Healthy")).toBeInTheDocument();
 
     await actor.click(screen.getByRole("button", { name: "Grant Support access" }));
+    expect(postSpy).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("alertdialog", {
+        name: "Grant Operational Support access?",
+      }),
+    ).toHaveTextContent("view assigned and unassigned support actions");
+    await actor.click(screen.getByRole("button", { name: "Confirm grant" }));
 
     await waitFor(() => {
       expect(postSpy).toHaveBeenCalledWith("/workspace-roles/", {
@@ -63,7 +70,9 @@ describe("pilot administration", () => {
         workspace: "support",
       });
     });
-    expect(screen.getByRole("button", { name: "Set as Team Leader" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Revoke Support access" }),
+    ).toBeInTheDocument();
   });
 
   it("renders the cross-functional review gate and human feedback evidence", async () => {

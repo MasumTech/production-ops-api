@@ -39,6 +39,7 @@ class IsEscalationParticipantOrStaff(BasePermission):
         return (
             obj.assignment.team_leader_id == request.user.id
             or obj.owner_id == request.user.id
+            or (obj.owner_id is None and is_operational_support(request.user))
             or obj.shift_handovers.filter(
                 incoming_assignment__team_leader_id=request.user.id,
             ).exists()

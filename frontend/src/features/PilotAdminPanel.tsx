@@ -57,6 +57,9 @@ export function PilotAdminPanel() {
   const [busyUser, setBusyUser] = useState<number | null>(null);
   const [busyTrial, setBusyTrial] = useState<number | null>(null);
   const [busyApproval, setBusyApproval] = useState<PilotReviewerRole | null>(null);
+  const [pendingRoleChange, setPendingRoleChange] = useState<UserSummary | null>(
+    null,
+  );
   const [error, setError] = useState("");
   const [trialDraft, setTrialDraft] = useState({
     name: "Four-week line control pilot",
@@ -169,6 +172,7 @@ export function PilotAdminPanel() {
       });
       setUsers((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setStatus(await apiRequest<PilotStatus>("/pilot/status/"));
+      setPendingRoleChange(null);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Could not update this role.");
     } finally {
@@ -674,6 +678,54 @@ export function PilotAdminPanel() {
         <span className="eyebrow">Approved access</span>
         <h2 id="role-admin-title">Workspace roles</h2>
         <p>Assign Operational Support only after the approved identity and access process is complete.</p>
+        {pendingRoleChange ? (
+          <div
+            className="pilot-access-confirm"
+            role="alertdialog"
+            aria-labelledby="pilot-access-confirm-title"
+            aria-describedby="pilot-access-confirm-body"
+          >
+            <div>
+              <strong id="pilot-access-confirm-title">
+                {pendingRoleChange.workspace === "support"
+                  ? "Revoke Operational Support access?"
+                  : "Grant Operational Support access?"}
+              </strong>
+              <p id="pilot-access-confirm-body">
+                {pendingRoleChange.display_name} ({pendingRoleChange.username}) will
+                {pendingRoleChange.workspace === "support"
+                  ? " return to the Team Leader workspace."
+                  : " be able to view assigned and unassigned support actions and claim work."}
+              </p>
+            </div>
+            <div className="form-actions">
+              <button
+                type="button"
+                className="button button--ghost"
+                disabled={busyUser === pendingRoleChange.id}
+                onClick={() => setPendingRoleChange(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={
+                  pendingRoleChange.workspace === "support"
+                    ? "button button--danger"
+                    : "button button--primary"
+                }
+                disabled={busyUser === pendingRoleChange.id}
+                onClick={() => void changeRole(pendingRoleChange)}
+              >
+                {busyUser === pendingRoleChange.id
+                  ? "Saving…"
+                  : pendingRoleChange.workspace === "support"
+                    ? "Confirm revoke"
+                    : "Confirm grant"}
+              </button>
+            </div>
+          </div>
+        ) : null}
         <div className="pilot-role-list">
           {users.map((user) => (
             <article key={user.id}>
@@ -687,12 +739,12 @@ export function PilotAdminPanel() {
                   type="button"
                   className="button button--ghost"
                   disabled={busyUser === user.id}
-                  onClick={() => void changeRole(user)}
+                  onClick={() => setPendingRoleChange(user)}
                 >
                   {busyUser === user.id
                     ? "Saving…"
                     : user.workspace === "support"
-                      ? "Set as Team Leader"
+                      ? "Revoke Support access"
                       : "Grant Support access"}
                 </button>
               ) : <span className="pilot-managed-elsewhere">Managed in Django Admin</span>}

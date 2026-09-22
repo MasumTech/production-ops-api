@@ -93,7 +93,7 @@ test("final UAT keeps all Operations Manager workspaces reachable", async ({
   const workspace = page.locator(
     'aside[aria-label="Operations Manager workspace"]',
   );
-  await expect(workspace.getByRole("button")).toHaveCount(6);
+  await expect(workspace.getByRole("button")).toHaveCount(7);
 
   await workspace.getByRole("button", { name: "Team Leaders" }).click();
   await expect(
@@ -119,6 +119,11 @@ test("final UAT keeps all Operations Manager workspaces reachable", async ({
   await workspace.getByRole("button", { name: "Risk briefing" }).click();
   await expect(
     page.getByRole("heading", { name: "AI Daily Risk Briefing" }),
+  ).toBeVisible();
+
+  await workspace.getByRole("button", { name: "Pilot admin" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Pilot readiness" }),
   ).toBeVisible();
 
   await workspace.getByRole("button", { name: "Overview" }).click();

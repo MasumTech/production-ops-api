@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { DailyRiskBriefingPanel } from "./DailyRiskBriefingPanel";
 import { LossAnalyticsPanel } from "./LossAnalyticsPanel";
+import { PilotAdminPanel } from "./PilotAdminPanel";
 import { EmptyState, ErrorBanner, StatusPill } from "../components";
 import { formatDateTime, localDate, titleCase } from "../format";
 import { escalationRole } from "../operationalRoles";
@@ -42,7 +43,8 @@ type ManagerWorkspaceView =
   | "plans"
   | "actions"
   | "briefing"
-  | "recovery";
+  | "recovery"
+  | "pilot";
 type ManagerShiftPattern = "day" | "night";
 type ManagerViewMode = "live" | "historical";
 
@@ -58,6 +60,7 @@ const MANAGER_NAV_ITEMS: Array<{
   { id: "actions", label: "Materials", shortLabel: "Materials", icon: "package" },
   { id: "recovery", label: "Break recovery", shortLabel: "Recovery", icon: "coffee" },
   { id: "briefing", label: "Risk briefing", shortLabel: "Risks", icon: "warning" },
+  { id: "pilot", label: "Pilot admin", shortLabel: "Pilot", icon: "shield" },
 ];
 
 export interface ManagerLineRow {
@@ -1241,6 +1244,8 @@ export function ManagerConsole({
               }} />
             </>
           ) : null}
+
+          {view === "pilot" ? <PilotAdminPanel /> : null}
 
           {view === "recovery" ? (
             <>

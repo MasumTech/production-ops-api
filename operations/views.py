@@ -28,7 +28,7 @@ from rest_framework.views import APIView
 
 from config.health import database_is_available, redis_is_available
 
-from .access import OPERATIONAL_SUPPORT_GROUP, WorkspaceRole
+from .access import OPERATIONAL_SUPPORT_GROUP, WorkspaceRole, is_operational_support
 from .break_opportunities import detect_break_opportunity
 from .events import create_operational_event, event_queryset_for_user
 from .models import (
@@ -773,7 +773,7 @@ class SupportCompanionView(APIView):
         )
         escalations = list(
             OperationalEscalation.objects.filter(
-                owner=request.user,
+                Q(owner=request.user) | Q(owner__isnull=True),
                 assignment__date=operational_date,
                 status__in=unresolved_statuses,
             )
@@ -1634,15 +1634,20 @@ class OperationalEscalationViewSet(viewsets.ModelViewSet):
         )
 
         if not self.request.user.is_staff:
-            queryset = queryset.filter(
-                Q(assignment__team_leader=self.request.user)
-                | Q(owner=self.request.user)
-                | Q(
-                    shift_handovers__incoming_assignment__team_leader=(
-                        self.request.user
+            if is_operational_support(self.request.user):
+                queryset = queryset.filter(
+                    Q(owner=self.request.user) | Q(owner__isnull=True)
+                )
+            else:
+                queryset = queryset.filter(
+                    Q(assignment__team_leader=self.request.user)
+                    | Q(owner=self.request.user)
+                    | Q(
+                        shift_handovers__incoming_assignment__team_leader=(
+                            self.request.user
+                        )
                     )
                 )
-            )
         filter_serializer = OperationalEscalationFilterSerializer(
             data=self.request.query_params,
         )
@@ -1726,10 +1731,44 @@ class OperationalEscalationViewSet(viewsets.ModelViewSet):
                 {"status": ("Only an open escalation can be acknowledged.")}
             )
 
-        if not request.user.is_staff and escalation.owner_id != request.user.id:
+        can_claim_unassigned = escalation.owner_id is None and is_operational_support(
+            request.user
+        )
+        if (
+            not request.user.is_staff
+            and escalation.owner_id != request.user.id
+            and not can_claim_unassigned
+        ):
             raise PermissionDenied(
                 "Only the assigned owner or management staff can acknowledge."
             )
+
+        if can_claim_unassigned:
+            with transaction.atomic():
+                escalation = OperationalEscalation.objects.select_for_update().get(
+                    pk=escalation.pk,
+                )
+                if (
+                    escalation.owner_id is not None
+                    or escalation.status != OperationalEscalation.Status.OPEN
+                ):
+                    raise ValidationError(
+                        {"status": "This action was already claimed or acknowledged."}
+                    )
+                escalation.owner = request.user
+                escalation.status = OperationalEscalation.Status.ACKNOWLEDGED
+                escalation.acknowledged_at = timezone.now()
+                escalation.acknowledged_by = request.user
+                escalation.save(
+                    update_fields=(
+                        "owner",
+                        "status",
+                        "acknowledged_at",
+                        "acknowledged_by",
+                        "updated_at",
+                    )
+                )
+            return Response(self.get_serializer(escalation).data)
 
         update_fields = [
             "status",
