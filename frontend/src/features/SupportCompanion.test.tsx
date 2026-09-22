@@ -119,10 +119,17 @@ describe("mobile support companion", () => {
     expect(screen.getByText("Filler pressure requires engineering support")).toBeInTheDocument();
     expect(screen.getAllByText("Overdue").length).toBeGreaterThan(0);
     expect(screen.getByRole("navigation", { name: "Operational Support mobile workspace" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Skip to main content" })).toHaveAttribute(
+      "href",
+      "#support-content",
+    );
 
-    await actor.click(screen.getByRole("button", { name: "Line Status" }));
+    const lineStatus = screen.getByRole("button", { name: "Line Status" });
+    expect(lineStatus).toHaveAttribute("aria-controls", "support-content");
+    await actor.click(lineStatus);
     expect(screen.getByRole("heading", { name: "Line status" })).toBeInTheDocument();
     expect(screen.getByText("Chicken Curry")).toBeInTheDocument();
+    expect(document.querySelector("#support-content")).toHaveFocus();
   });
 
   it("acknowledges an assigned action through the idempotent post helper", async () => {

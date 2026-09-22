@@ -55,9 +55,39 @@ select {
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
   outline: 3px solid rgb(21 87 176 / 28%);
   outline-offset: 2px;
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 1000;
+  top: max(0.75rem, env(safe-area-inset-top));
+  left: max(0.75rem, env(safe-area-inset-left));
+  padding: 0.75rem 1rem;
+  border-radius: 0.6rem;
+  color: #ffffff;
+  background: #082b50;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
+  font-weight: 800;
+  transform: translateY(calc(-100% - 2rem));
+  transition: transform 140ms ease;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+main[tabindex="-1"] {
+  scroll-margin-top: 8rem;
+}
+
+main[tabindex="-1"]:focus {
+  outline: none;
 }
 
 h1,
@@ -360,8 +390,11 @@ h3 {
 
 .sidebar nav {
   display: grid;
+  min-height: 0;
   gap: 0.35rem;
   margin-top: 1.25rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .nav-item {
@@ -2560,7 +2593,10 @@ td span {
   }
 
   .responsive-table {
-    overflow: visible;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   table,
@@ -9567,5 +9603,23 @@ td span {
 
   .issue-action {
     width: 100%;
+  }
+}
+
+/* Shared keyboard and high-contrast safeguards. These rules intentionally sit
+   after feature-specific styling so later visual variants cannot hide focus. */
+:is(button, input, select, textarea, a, summary, [tabindex]:not(main)):focus-visible {
+  outline: 3px solid #2b83c9 !important;
+  outline-offset: 3px !important;
+}
+
+@media (forced-colors: active) {
+  .nav-item--active,
+  .bottom-nav__item--active {
+    border: 2px solid currentColor;
+  }
+
+  .skip-link {
+    border: 2px solid currentColor;
   }
 }

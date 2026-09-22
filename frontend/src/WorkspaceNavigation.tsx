@@ -14,9 +14,11 @@ interface NavigationProps<Id extends string> {
   items: Array<WorkspaceNavigationItem<Id>>;
   activeItem: Id;
   onSelect: (item: Id) => void;
+  contentId?: string;
 }
 
 export function WorkspaceSidebar<Id extends string>({
+  id,
   ariaLabel,
   navigationLabel,
   summary,
@@ -25,7 +27,9 @@ export function WorkspaceSidebar<Id extends string>({
   items,
   activeItem,
   onSelect,
+  contentId,
 }: NavigationProps<Id> & {
+  id?: string;
   ariaLabel: string;
   navigationLabel: string;
   summary?: ReactNode;
@@ -33,7 +37,7 @@ export function WorkspaceSidebar<Id extends string>({
   className?: string;
 }) {
   return (
-    <aside className={`sidebar ${className}`.trim()} aria-label={ariaLabel}>
+    <aside id={id} className={`sidebar ${className}`.trim()} aria-label={ariaLabel}>
       {summary ? <div className="shift-summary">{summary}</div> : null}
       <nav aria-label={navigationLabel}>
         {items.map((item) => (
@@ -43,6 +47,7 @@ export function WorkspaceSidebar<Id extends string>({
             className={activeItem === item.id ? "nav-item nav-item--active" : "nav-item"}
             onClick={() => onSelect(item.id)}
             aria-current={activeItem === item.id ? "page" : undefined}
+            aria-controls={contentId}
             title={item.label}
           >
             {item.icon ? (
@@ -64,6 +69,7 @@ export function WorkspaceBottomNavigation<Id extends string>({
   items,
   activeItem,
   onSelect,
+  contentId,
 }: NavigationProps<Id> & { ariaLabel: string }) {
   return (
     <nav
@@ -82,6 +88,7 @@ export function WorkspaceBottomNavigation<Id extends string>({
           }
           onClick={() => onSelect(item.id)}
           aria-current={activeItem === item.id ? "page" : undefined}
+          aria-controls={contentId}
         >
           {item.icon ? <AppIcon name={item.icon} size={19} /> : null}
           {item.shortLabel}

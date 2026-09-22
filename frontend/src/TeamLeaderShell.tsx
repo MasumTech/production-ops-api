@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { AppIcon } from "./AppIcon";
 import { NotificationCentre } from "./NotificationCentre";
@@ -79,6 +79,8 @@ export function TeamLeaderShell({
   onSignOut: () => void;
 }) {
   const [navigationOpen, setNavigationOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const workspaceRef = useRef<HTMLElement>(null);
   const activeNavigation: Exclude<WorkspaceTab, "issues"> =
     activeTab === "issues" ? "lines" : activeTab;
   const shiftWindow = getShiftWindow(operationalDate, shifts, shiftPattern);
@@ -88,17 +90,35 @@ export function TeamLeaderShell({
   const selectNavigation = (value: Exclude<WorkspaceTab, "issues">) => {
     setNavigationOpen(false);
     onSelectTab(value);
+    workspaceRef.current?.focus();
   };
+
+  useEffect(() => {
+    if (!navigationOpen) return;
+    const closeNavigation = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setNavigationOpen(false);
+      menuButtonRef.current?.focus();
+    };
+    document.addEventListener("keydown", closeNavigation);
+    document.querySelector<HTMLButtonElement>(
+      "#team-leader-navigation button",
+    )?.focus();
+    return () => document.removeEventListener("keydown", closeNavigation);
+  }, [navigationOpen]);
 
   return (
     <div className="team-control-shell">
+      <a className="skip-link" href="#team-leader-content">Skip to main content</a>
       <header className="team-control-topbar">
         <div className="team-control-brand">
           <button
             type="button"
+            ref={menuButtonRef}
             className="team-control-menu"
             aria-label={navigationOpen ? "Close navigation" : "Open navigation"}
             aria-expanded={navigationOpen}
+            aria-controls="team-leader-navigation"
             onClick={() => setNavigationOpen((current) => !current)}
           >
             <AppIcon name="menu" size={24} />
@@ -199,12 +219,14 @@ export function TeamLeaderShell({
 
       <div className="team-control-layout">
         <WorkspaceSidebar
+          id="team-leader-navigation"
           ariaLabel="Team Leader workspace"
           navigationLabel="Team Leader sections"
           className={`team-control-sidebar${navigationOpen ? " team-control-sidebar--open" : ""}`}
           items={TEAM_LEADER_NAV_ITEMS}
           activeItem={activeNavigation}
           onSelect={selectNavigation}
+          contentId="team-leader-content"
           boundary={
             <div className="team-control-sidebar__footer">
               <span className="team-control-online">
@@ -225,7 +247,14 @@ export function TeamLeaderShell({
           />
         ) : null}
 
-        <main className="team-control-workspace">{children}</main>
+        <main
+          id="team-leader-content"
+          ref={workspaceRef}
+          className="team-control-workspace"
+          tabIndex={-1}
+        >
+          {children}
+        </main>
       </div>
 
       <WorkspaceBottomNavigation
@@ -233,6 +262,7 @@ export function TeamLeaderShell({
         items={TEAM_LEADER_NAV_ITEMS}
         activeItem={activeNavigation}
         onSelect={selectNavigation}
+        contentId="team-leader-content"
       />
     </div>
   );
