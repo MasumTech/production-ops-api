@@ -714,10 +714,11 @@ The default local accounts are:
 | Team Leader 1 — Lines 1 and 2 | `demo.leader` |
 | Team Leader 2 — Lines 3 and 4 | `demo.leader.two` |
 | Team Leader 3 — Lines 5 and 6 | `demo.leader.three` |
+| Operational Support | `demo.support` |
 
 Set a local demo password explicitly with `--password` or the `DEMO_SEED_PASSWORD` environment variable.
 
-Running the command again updates the same demo records rather than creating duplicates. The `--reset` option deletes and recreates only demo users and records identified by the `demo.` username or `DEMO-` data prefix. The dataset deliberately has no Engineer, QA, Cover, or Support login account; those remain functional responsibility labels inside the Manager and Team Leader workflows.
+Running the command again updates the same demo records rather than creating duplicates. The `--reset` option deletes and recreates only demo users and records identified by the `demo.` username or `DEMO-` data prefix. The local-only `demo.support` persona has one assigned action and one available action to exercise the scoped Operational Support workflow. Engineer, QA, Cover, and Materials remain functional responsibility labels inside the Manager and Team Leader workflows.
 
 The command refuses to run when `DJANGO_DEBUG=False`. These accounts, credentials, and records must never be used in staging or production.
 
@@ -740,7 +741,7 @@ curl http://localhost:8000/api/production-lines/ \
 
 ## Testing and Code Quality
 
-The current suite contains **216 backend tests** and **33 frontend tests** covering models, API behaviour, authentication, workspace roles, audited role administration, notification scoping and read evidence, reminder-worker heartbeat and safe error reporting, pilot monitoring, bounded trial lifecycle, cross-functional sign-off, immutable human feedback, and evidence validation, deployment boundaries, dependency-aware health checks, permissions, filters, dashboard aggregation, timestamped downtime evidence, deterministic Manager and Team Leader control-board rendering, demo-data seeding, release, escalation, handover, break/recovery auditing, support-companion scoping and acknowledgement, scoped event replay, JWT WebSockets, reminder deduplication, idempotent requests, deterministic risk evidence, missing-data disclosure, bounded briefing queries, risk-briefing rendering and retry behaviour, shared desktop/mobile navigation, offline outbox behaviour, safe cursor recovery, tablet rendering, role routing, priority ordering, pagination, token refresh, and validation.
+The current suite contains **240 backend tests**, **63 frontend component tests**, and **44 Playwright browser tests** covering models, API behaviour, authentication, workspace roles, audited role administration, notification scoping and read evidence, reminder-worker heartbeat and safe error reporting, pilot monitoring, bounded trial lifecycle, cross-functional sign-off, immutable human feedback, and evidence validation, deployment boundaries, dependency-aware health checks, permissions, filters, dashboard aggregation, timestamped downtime evidence, deterministic Manager, Team Leader, and Operational Support rendering, demo-data seeding, release, escalation, handover, break/recovery auditing, support-companion scoping and acknowledgement, scoped event replay, JWT WebSockets, reminder deduplication, idempotent requests, deterministic risk evidence, missing-data disclosure, bounded briefing queries, risk-briefing rendering and retry behaviour, cross-role persistence, desktop/tablet/phone visual regression, shared navigation, offline outbox behaviour, safe cursor recovery, role routing, priority ordering, pagination, token refresh, and validation.
 
 Run the complete test suite:
 

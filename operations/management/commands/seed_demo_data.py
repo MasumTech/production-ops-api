@@ -3,12 +3,14 @@ from datetime import datetime, time, timedelta
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from operations.access import OPERATIONAL_SUPPORT_GROUP
 from operations.models import (
     BreakOpportunity,
     BreakRecovery,
@@ -126,6 +128,7 @@ class Command(BaseCommand):
         self.stdout.write("  Team Leader 1:      demo.leader")
         self.stdout.write("  Team Leader 2:      demo.leader.two")
         self.stdout.write("  Team Leader 3:      demo.leader.three")
+        self.stdout.write("  Operational Support: demo.support")
         self.stdout.write("  Password: use the value supplied by you")
         self.stdout.write("")
         self.stdout.write("Frontend: http://localhost:5173/")
@@ -287,8 +290,15 @@ class Command(BaseCommand):
                 "last_name": "Leader Three",
                 "is_staff": False,
             },
+            "support": {
+                "username": "demo.support",
+                "first_name": "Operational",
+                "last_name": "Support",
+                "is_staff": False,
+            },
         }
         users = {}
+        support_group, _ = Group.objects.get_or_create(name=OPERATIONAL_SUPPORT_GROUP)
 
         for key, definition in definitions.items():
             user, _ = user_model.objects.update_or_create(
@@ -302,6 +312,9 @@ class Command(BaseCommand):
             )
             user.set_password(password)
             user.save(update_fields=("password",))
+            user.groups.remove(support_group)
+            if key == "support":
+                user.groups.add(support_group)
             users[key] = user
 
         return users
@@ -1019,7 +1032,7 @@ class Command(BaseCommand):
                 "summary": "Filler pressure repeatedly dropping",
                 "details": "Pressure drops during high-speed production.",
                 "immediate_action": "Line isolated and engineering contacted.",
-                "owner": users["manager"],
+                "owner": users["support"],
                 "raised_at": event_time(15, 10),
                 "response_due_at": event_time(17, 10),
                 "hourly_update": updates["red"],
@@ -1035,7 +1048,7 @@ class Command(BaseCommand):
                 "summary": "Carton stock below next-hour demand",
                 "details": "640 cartons are needed to protect the plan.",
                 "immediate_action": "Warehouse replenishment requested.",
-                "owner": users["manager"],
+                "owner": None,
                 "raised_at": event_time(16, 0),
                 "response_due_at": event_time(18, 10),
                 "loss_minutes": 8,

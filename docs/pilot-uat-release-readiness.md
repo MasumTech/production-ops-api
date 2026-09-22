@@ -85,6 +85,7 @@ Default personas:
 | Team Leader — Lines 1 and 2 | `demo.leader` |
 | Team Leader — Lines 3 and 4 | `demo.leader.two` |
 | Team Leader — Lines 5 and 6 | `demo.leader.three` |
+| Operational Support | `demo.support` |
 
 Demo credentials and data must never be used in staging or production.
 

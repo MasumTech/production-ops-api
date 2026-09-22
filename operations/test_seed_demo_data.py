@@ -4,11 +4,13 @@ from uuid import uuid4
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.test import override_settings
 
+from operations.access import OPERATIONAL_SUPPORT_GROUP
 from operations.models import (
     BreakOpportunity,
     BreakRecovery,
@@ -84,7 +86,7 @@ def test_seed_demo_data_creates_complete_dataset():
     )
 
     assert demo_counts() == {
-        "users": 4,
+        "users": 5,
         "lines": 6,
         "assets": 3,
         "assignments": 10,
@@ -108,7 +110,12 @@ def test_seed_demo_data_creates_complete_dataset():
         "demo.leader",
         "demo.leader.two",
         "demo.leader.three",
+        "demo.support",
     }
+    support = get_user_model().objects.get(username="demo.support")
+    assert support.is_staff is False
+    assert support.check_password(DEMO_PASSWORD)
+    assert Group.objects.get(name=OPERATIONAL_SUPPORT_GROUP) in support.groups.all()
 
     assert TeamLeaderAssignment.objects.filter(
         production_line__code="DEMO-LINE-01",
@@ -280,6 +287,16 @@ def test_seed_demo_data_creates_complete_dataset():
     assert printer_escalation.priority == OperationalEscalation.Priority.MEDIUM
     assert printer_escalation.immediate_action == "Temporary repair; checks passed"
 
+    support_escalations = OperationalEscalation.objects.filter(
+        assignment__date=date(2026, 9, 2),
+    ).filter(
+        Q(owner=support) | Q(owner__isnull=True),
+    )
+    assert set(support_escalations.values_list("summary", "owner__username")) == {
+        ("Filler pressure repeatedly dropping", "demo.support"),
+        ("Carton stock below next-hour demand", None),
+    }
+
     handover = ShiftHandover.objects.get()
     assert handover.status == ShiftHandover.Status.PENDING
     assert handover.handed_over_at.astimezone().date() == date(2026, 9, 2)
@@ -396,7 +413,7 @@ def test_full_reset_flushes_every_record_then_creates_persona_dataset():
 
     assert not get_user_model().objects.filter(username="old.local.user").exists()
     assert not ProductionLine.objects.filter(code="OLD-LOCAL-LINE").exists()
-    assert get_user_model().objects.count() == 4
+    assert get_user_model().objects.count() == 5
     assert ProductionLine.objects.count() == 6
     assert "Demo dataset is ready." in output
 
