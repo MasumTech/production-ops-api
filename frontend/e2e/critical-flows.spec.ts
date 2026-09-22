@@ -24,7 +24,7 @@ test("manager can open the daily risk briefing after secure sign-in", async ({ p
   ).toBeVisible();
 
   const workspace = page.locator('aside[aria-label="Operations Manager workspace"]');
-  await expect(workspace.getByRole("button")).toHaveCount(6);
+  await expect(workspace.getByRole("button")).toHaveCount(7);
   await expect(page.locator(".control-kpi")).toHaveCount(4);
   await expect(page.locator(".leader-card")).toHaveCount(3);
   await expect(page.locator(".leader-line")).toHaveCount(6);
@@ -45,6 +45,10 @@ test("manager can open the daily risk briefing after secure sign-in", async ({ p
   await workspace.getByRole("button", { name: "Risk briefing" }).click();
   await expect(
     page.getByRole("heading", { name: "AI Daily Risk Briefing" }),
+  ).toBeVisible();
+  await workspace.getByRole("button", { name: "Pilot admin" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Pilot readiness" }),
   ).toBeVisible();
 });
 
