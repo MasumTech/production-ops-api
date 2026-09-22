@@ -30,7 +30,7 @@ async function signOutTeamLeader(page: Page) {
 
 test("Team Leader escalation becomes visible to Operations Manager", async ({
   page,
-}) => {
+}, testInfo) => {
   await signIn(page, "demo.leader");
   await expect(
     page.getByRole("heading", { name: "My Lines" }),
@@ -64,6 +64,12 @@ test("Team Leader escalation becomes visible to Operations Manager", async ({
     page.getByText("Issue recorded and escalated to the attention queue."),
   ).toBeVisible();
 
+  await page.screenshot({
+    path: testInfo.outputPath("final-uat-cross-role-operational-team-leader.png"),
+    animations: "disabled",
+    fullPage: false,
+  });
+
   await signOutTeamLeader(page);
 
   await signIn(page, "demo.manager");
@@ -95,11 +101,17 @@ test("Team Leader escalation becomes visible to Operations Manager", async ({
   await expect(
     page.getByText(/E2E cross-role filler interruption/),
   ).toBeVisible();
+
+  await page.screenshot({
+    path: testInfo.outputPath("final-uat-cross-role-operational-manager.png"),
+    animations: "disabled",
+    fullPage: false,
+  });
 });
 
 test("Team Leader material escalation becomes a manager open action", async ({
   page,
-}) => {
+}, testInfo) => {
   await signIn(page, "demo.leader");
   await expect(
     page.getByRole("heading", { name: "My Lines" }),
@@ -133,6 +145,12 @@ test("Team Leader material escalation becomes a manager open action", async ({
     page.getByText("Issue recorded and escalated to the attention queue."),
   ).toBeVisible();
 
+  await page.screenshot({
+    path: testInfo.outputPath("final-uat-cross-role-material-team-leader.png"),
+    animations: "disabled",
+    fullPage: false,
+  });
+
   await signOutTeamLeader(page);
 
   await signIn(page, "demo.manager");
@@ -149,4 +167,10 @@ test("Team Leader material escalation becomes a manager open action", async ({
   await expect(
     page.getByText(/Oat Milk Chai material risk/),
   ).toBeVisible();
+
+  await page.screenshot({
+    path: testInfo.outputPath("final-uat-cross-role-material-manager.png"),
+    animations: "disabled",
+    fullPage: false,
+  });
 });

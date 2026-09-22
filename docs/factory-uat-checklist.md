@@ -55,7 +55,7 @@ screenshot or API evidence, defect reference, and owner.
 
 The pull-request CI must pass the complete quality gate before UAT evidence is accepted. The gate includes Ruff formatting/linting, Django checks, migration drift, OpenAPI validation, backend coverage, frontend type/tests/build, Docker/staging validation, deterministic demo seeding, and the Playwright browser suite.
 
-The browser suite specifically covers responsive login/manager shells, Team Leader common layout, My Lines, Daily Plan, Materials, Break & Recovery, Shift Handover, Raise Issue, cross-role Team Leader-to-Operations-Manager persistence, and the final UAT smoke checks. CI retains responsive screenshots as the `responsive-ui-preview` artifact.
+The browser suite specifically covers responsive login/manager shells, Team Leader common layout, My Lines, Daily Plan, Materials, Break & Recovery, Shift Handover, Raise Issue, cross-role Team Leader-to-Operations-Manager persistence, and the final UAT smoke checks. A final visual matrix captures every Operations Manager and Team Leader section at desktop, tablet, and phone sizes. The suite also signs in with the local-only `demo.support` persona and captures all five Operational Support sections at the same three sizes without acknowledging or claiming either seeded action. CI retains the resulting screenshots as the `responsive-ui-preview` artifact.
 
 Final timing assertions use the operational date, not the machine date: Friday 04 Sept 2026 resolves to 06:45–18:00; Saturday 05 Sept 2026 resolves to 07:00–18:00 unless an Operations Manager override exists.
 
