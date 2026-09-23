@@ -115,6 +115,7 @@ afterEach(() => {
 
 describe("daily risk briefing panel", () => {
   it("renders traceable scores, evidence, and missing-data warnings", async () => {
+    const actor = userEvent.setup();
     const request = vi.spyOn(api, "apiRequest").mockResolvedValue(briefing);
 
     render(<DailyRiskBriefingPanel operationalDate="2026-09-02" />);
@@ -130,6 +131,8 @@ describe("daily risk briefing panel", () => {
     expect(within(criticalLine as HTMLElement).getByText("Latest line status is Red.")).toBeInTheDocument();
     expect(within(criticalLine as HTMLElement).getByText(/Source: Line Update/)).toBeInTheDocument();
     expect(within(criticalLine as HTMLElement).getByText("Latest Status: red")).toBeInTheDocument();
+
+    await actor.click(screen.getByRole("button", { name: /LINE-02/ }));
 
     expect(screen.getByText("Missing evidence lowers data completeness")).toBeInTheDocument();
     expect(screen.getByText(/No shift output record exists/)).toBeInTheDocument();
@@ -159,7 +162,7 @@ describe("daily risk briefing panel", () => {
     render(<DailyRiskBriefingPanel operationalDate="2026-09-02" />);
 
     expect(await screen.findByText("Briefing service unavailable.")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Daily risk briefing" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Briefing cockpit" })).toBeInTheDocument();
 
     await actor.click(screen.getByRole("button", { name: "Retry briefing" }));
 
