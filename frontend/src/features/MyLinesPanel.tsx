@@ -42,6 +42,24 @@ function formatClock(value: string | null | undefined): string {
   }).format(new Date(value));
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function shiftDateTime(date: string, time: string): Date {
+  return new Date(`${date}T${time}`);
+}
+
+function shiftProgress(shift: ShiftRecord | undefined, referenceTime: number): number {
+  if (!shift?.start_time || !shift.end_time) return 0;
+
+  const start = shiftDateTime(shift.date, shift.start_time).getTime();
+  let end = shiftDateTime(shift.date, shift.end_time).getTime();
+  if (end <= start) end += 24 * 60 * 60 * 1000;
+
+  return clamp((referenceTime - start) / (end - start), 0, 1);
+}
+
 function latestUpdate(data: WorkspaceData, assignmentId: number): LineUpdate | undefined {
   return data.updates
     .filter((item) => item.assignment === assignmentId)
@@ -201,6 +219,28 @@ function contactCopy(line: LineView): string {
   return `${owner} · Line contact`;
 }
 
+function targetNow(line: LineView, referenceTime: number): number {
+  if (!line.planned) return 0;
+  return Math.round(line.planned * shiftProgress(line.shift, referenceTime));
+}
+
+function behindNow(line: LineView, referenceTime: number): number {
+  return Math.max(0, targetNow(line, referenceTime) - line.actual);
+}
+
+function totalBehind(line: LineView): number {
+  return Math.max(0, line.planned - line.actual);
+}
+
+function recoveryNeedCopy(line: LineView, referenceTime: number): string {
+  const gap = behindNow(line, referenceTime);
+  if (!gap || !line.planned) return "Normal pace";
+
+  const remaining = Math.max(1, line.planned - Math.max(line.actual, targetNow(line, referenceTime)));
+  const pressure = Math.ceil((gap / remaining) * 100);
+  return `+${clamp(pressure, 1, 99)}% pace`;
+}
+
 function priorityCopy(line: LineView, index: number): string {
   const label = lineLabel(line.assignment.production_line_code, index);
 
@@ -217,6 +257,26 @@ function priorityCopy(line: LineView, index: number): string {
   }
 
   return `${label} continue normal checks`;
+}
+
+function MetricCard({
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  tone?: RagStatus | "danger" | "neutral";
+}) {
+  return (
+    <div className={`team-line-metric ${tone ? `team-line-metric--${tone}` : ""}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{hint}</small>
+    </div>
+  );
 }
 
 export function MyLinesPanel({
@@ -238,13 +298,21 @@ export function MyLinesPanel({
     [lines, referenceTime],
   );
   const priorityLine = lines[0];
+  const totalBehindNow = lines.reduce(
+    (total, line) => total + behindNow(line, referenceTime),
+    0,
+  );
+  const nextDue = lines
+    .map((line) => line.update?.next_update_due_at)
+    .filter((value): value is string => Boolean(value))
+    .sort((left, right) => new Date(left).getTime() - new Date(right).getTime())[0];
 
   return (
     <section className="team-lines-v2">
       <header className="team-lines-v2__header">
         <div>
           <h1>My Lines</h1>
-          <p>Current position, ownership and next update</p>
+          <p>Output position, recovery pressure and next action by line</p>
         </div>
         {priorityLine ? (
           <div className="team-lines-v2__header-actions">
@@ -288,6 +356,11 @@ export function MyLinesPanel({
               <strong>{lines.length}</strong>
               <span>assigned</span>
             </article>
+            <article>
+              <AppIcon name="chart" size={23} />
+              <strong>{formatNumber(totalBehindNow)}</strong>
+              <span>behind now</span>
+            </article>
             <article className="is-green">
               <span className="team-summary-dot" aria-hidden="true" />
               <strong>{counts.green}</strong>
@@ -305,8 +378,8 @@ export function MyLinesPanel({
             </article>
             <article>
               <AppIcon name="clock" size={23} />
-              <strong>{counts.due}</strong>
-              <span>updates due</span>
+              <strong>{nextDue ? formatClock(nextDue) : counts.due}</strong>
+              <span>{nextDue ? "next check" : "updates due"}</span>
             </article>
           </div>
 
@@ -314,6 +387,12 @@ export function MyLinesPanel({
             {lines.map((line, index) => {
               const status = statusCopy(line.status);
               const due = dueCopy(line, referenceTime);
+              const nowTarget = targetNow(line, referenceTime);
+              const liveGap = behindNow(line, referenceTime);
+              const planGap = totalBehind(line);
+              const targetMarker = line.planned
+                ? clamp((nowTarget / line.planned) * 100, 0, 100)
+                : 0;
               return (
                 <article
                   className={`team-control-card team-control-card--${line.status}`}
@@ -321,7 +400,10 @@ export function MyLinesPanel({
                 >
                   <header className="team-control-card__header">
                     <div>
-                      <h2>{lineLabel(line.assignment.production_line_code, index)}</h2>
+                      <h2>
+                        {lineLabel(line.assignment.production_line_code, index)}
+                        <span aria-hidden="true">{line.assignment.production_line_name}</span>
+                      </h2>
                       <strong>{line.product}</strong>
                     </div>
                     <span className={`team-rag-badge team-rag-badge--${line.status}`}>
@@ -331,18 +413,27 @@ export function MyLinesPanel({
                   </header>
 
                   <div className={`team-control-state team-control-state--${line.status}`}>
-                    <span aria-hidden="true">{status.symbol}</span>
                     <div>
-                      <strong>{status.title}</strong>
+                      <strong>{liveGap ? "BEHIND NOW" : status.title}</strong>
                       <small>{status.detail}</small>
+                    </div>
+                    <div className="team-control-state__gap">
+                      <strong>{formatNumber(liveGap)}</strong>
+                      <small>units behind target now</small>
                     </div>
                   </div>
 
                   <div className="team-control-output">
-                    <div>
-                      <span>Output (packs)</span>
-                      <strong>
-                        {formatNumber(line.actual)} <b>/ {formatNumber(line.planned)}</b>
+                    <div className="team-control-output__header">
+                      <div>
+                        <span>Output position</span>
+                        <strong>
+                          Actual {formatNumber(line.actual)}
+                          <b> / plan {formatNumber(line.planned)}</b>
+                        </strong>
+                      </div>
+                      <strong className={`team-control-output__percent team-control-value--${line.status}`}>
+                        {line.progress}%
                       </strong>
                     </div>
                     <div className="team-control-progress" aria-label={`${line.progress}% complete`}>
@@ -350,40 +441,84 @@ export function MyLinesPanel({
                         className={`team-control-progress__fill team-control-progress__fill--${line.status}`}
                         style={{ width: `${Math.min(100, Math.max(0, line.progress))}%` }}
                       />
+                      <span
+                        className="team-control-progress__target"
+                        style={{ left: `${targetMarker}%` }}
+                      />
                     </div>
-                    <small>{line.progress}% complete</small>
+                    <div className="team-control-output__labels">
+                      <span>Actual {formatNumber(line.actual)}</span>
+                      <span>Target now {formatNumber(nowTarget)}</span>
+                      <span>Plan {formatNumber(line.planned)}</span>
+                    </div>
                   </div>
 
-                  <dl className="team-control-details">
-                    <div>
-                      <dt><AppIcon name="clock" size={18} />Downtime</dt>
-                      <dd className={`team-control-value team-control-value--${line.status}`}>
-                        {line.downtime} min
-                      </dd>
-                    </div>
-                    <div>
-                      <dt><AppIcon name={line.status === "green" ? "chart" : "warning"} size={18} />{issueLabel(line)}</dt>
-                      <dd>{issueCopy(line)}</dd>
-                    </div>
-                    <div>
-                      <dt><AppIcon name="settings" size={18} />Immediate control</dt>
-                      <dd>{controlCopy(line)}</dd>
-                    </div>
-                    <div>
-                      <dt><AppIcon name="users" size={18} />{supportLabel(line)}</dt>
-                      <dd>{ownerCopy(line)}</dd>
-                    </div>
-                    <div>
-                      <dt><AppIcon name="clock" size={18} />Next update</dt>
-                      <dd className={isDueSoon(line, referenceTime) ? `team-control-value team-control-value--${line.status}` : ""}>
-                        {due}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt><span className="team-contact-icon" aria-hidden="true">⌕</span>Contact</dt>
-                      <dd>{contactCopy(line)}</dd>
-                    </div>
-                  </dl>
+                  <div className="team-control-metrics" aria-label={`${line.assignment.production_line_code} output metrics`}>
+                    <MetricCard label="Planned" value={formatNumber(line.planned)} hint="shift units" />
+                    <MetricCard
+                      label="Actual"
+                      value={formatNumber(line.actual)}
+                      hint="good units"
+                      tone={line.status}
+                    />
+                    <MetricCard
+                      label="Complete"
+                      value={`${line.progress}%`}
+                      hint="of shift plan"
+                      tone={line.status}
+                    />
+                    <MetricCard
+                      label="Total behind"
+                      value={formatNumber(planGap)}
+                      hint="vs full plan"
+                      tone={planGap ? "danger" : "green"}
+                    />
+                    <MetricCard
+                      label="Downtime"
+                      value={`${line.downtime} min`}
+                      hint="recorded loss"
+                      tone={line.downtime ? "amber" : "green"}
+                    />
+                    <MetricCard
+                      label="Recovery need"
+                      value={recoveryNeedCopy(line, referenceTime)}
+                      hint="until next check"
+                      tone={liveGap ? "amber" : "green"}
+                    />
+                  </div>
+
+                  <div className="team-control-action-stack">
+                    <section>
+                      <span>
+                        <AppIcon name="settings" size={18} />
+                        Next action
+                      </span>
+                      <p>{controlCopy(line)}</p>
+                    </section>
+                    <section className={`team-control-watch team-control-watch--${line.status}`}>
+                      <span>
+                        <AppIcon name={line.status === "green" ? "chart" : "warning"} size={18} />
+                        {issueLabel(line)}
+                      </span>
+                      <p>{issueCopy(line)}</p>
+                    </section>
+                    <dl>
+                      <div>
+                        <dt>{supportLabel(line)}</dt>
+                        <dd>{ownerCopy(line)}</dd>
+                      </div>
+                      <div>
+                        <dt>Next update</dt>
+                        <dd className={isDueSoon(line, referenceTime) ? `team-control-value team-control-value--${line.status}` : ""}>
+                          {due}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Contact</dt>
+                        <dd>{contactCopy(line)}</dd>
+                      </div>
+                    </dl>
+                  </div>
 
                   <footer className="team-control-card__actions">
                     <button

@@ -7037,6 +7037,451 @@ td span {
   }
 }
 
+/* Team Leader My Lines cockpit — Mark approval desktop view. */
+.team-lines-v2 {
+  gap: 22px;
+}
+
+.team-lines-v2__header h1 {
+  letter-spacing: -0.025em;
+}
+
+.team-lines-v2__summary {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0;
+  overflow: hidden;
+  border-radius: 18px;
+  color: #fff;
+  background: #111827;
+  box-shadow: 0 12px 28px rgb(15 23 42 / 10%);
+}
+
+.team-lines-v2__summary article,
+.team-lines-v2__summary article:first-child,
+.team-lines-v2__summary article:last-child {
+  min-width: 0;
+  min-height: 78px;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 14px 24px;
+  border: 0;
+  border-right: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 0;
+  color: #dbeafe;
+  background: transparent;
+  box-shadow: none;
+}
+
+.team-lines-v2__summary article:last-child {
+  border-right: 0;
+}
+
+.team-lines-v2__summary .app-icon {
+  color: #93c5fd;
+}
+
+.team-lines-v2__summary strong {
+  color: #fff;
+  font-size: 1.28rem;
+}
+
+.team-lines-v2__summary span {
+  color: #9ca3af;
+  font-size: 0.78rem;
+  font-weight: 760;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.team-lines-v2__cards {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  align-items: stretch;
+}
+
+.team-control-card,
+.team-control-card:last-child:nth-child(odd) {
+  grid-column: auto;
+}
+
+.team-control-card {
+  min-height: 690px;
+  border-top-width: 1px;
+  border-radius: 18px;
+  box-shadow: 0 10px 24px rgb(15 23 42 / 8%);
+}
+
+.team-control-card--red {
+  border-color: #fecdd3;
+}
+
+.team-control-card--amber {
+  border-color: #fed7aa;
+}
+
+.team-control-card--green {
+  border-color: #bbf7d0;
+}
+
+.team-control-card__header {
+  min-height: 86px;
+  padding: 22px 24px 16px;
+  background: #f8fafc;
+}
+
+.team-control-card__header h2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 7px;
+  margin-bottom: 5px;
+}
+
+.team-control-card__header h2 span {
+  color: #334155;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.team-control-card__header strong {
+  max-width: min(360px, 100%);
+  color: #64748b;
+  font-size: 0.92rem;
+  font-weight: 620;
+}
+
+.team-rag-badge {
+  min-width: 84px;
+  min-height: 30px;
+  border-radius: 999px;
+}
+
+.team-rag-badge > span {
+  display: none;
+}
+
+.team-control-state {
+  min-height: 78px;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 0;
+  padding: 20px 24px;
+  border-radius: 0;
+}
+
+.team-control-state > div:first-child {
+  max-width: 58%;
+}
+
+.team-control-state__gap {
+  display: grid;
+  min-width: 178px;
+  justify-items: start;
+  padding: 13px 18px;
+  border-radius: 16px;
+  background: rgb(255 255 255 / 58%);
+}
+
+.team-control-state__gap strong {
+  font-size: 1.45rem;
+  line-height: 1.1;
+}
+
+.team-control-state__gap small,
+.team-control-state small {
+  white-space: normal;
+}
+
+.team-control-output {
+  gap: 12px;
+  padding: 24px 24px 14px;
+}
+
+.team-control-output__header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.team-control-output__header > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.team-control-output__header span {
+  color: #0f172a;
+  font-size: 0.98rem;
+  font-weight: 780;
+}
+
+.team-control-output__header strong {
+  color: #0f172a;
+  font-size: 0.9rem;
+  font-weight: 760;
+}
+
+.team-control-output__header b {
+  color: #64748b;
+  font-weight: 680;
+}
+
+.team-control-output__percent {
+  flex: 0 0 auto;
+  font-size: 1.55rem;
+  font-weight: 850;
+}
+
+.team-control-progress {
+  position: relative;
+  height: 18px;
+  overflow: visible;
+  margin-top: 2px;
+}
+
+.team-control-progress__fill {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  max-width: 100%;
+}
+
+.team-control-progress__target {
+  position: absolute;
+  top: -8px;
+  bottom: -8px;
+  width: 3px;
+  border-radius: 999px;
+  background: #111827;
+  transform: translateX(-50%);
+}
+
+.team-control-output__labels {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 740;
+}
+
+.team-control-output__labels span:nth-child(2) {
+  justify-self: center;
+  color: #111827;
+}
+
+.team-control-output__labels span:last-child {
+  justify-self: end;
+}
+
+.team-control-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  padding: 12px 24px 18px;
+}
+
+.team-line-metric {
+  display: grid;
+  min-width: 0;
+  min-height: 82px;
+  align-content: center;
+  gap: 3px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.team-line-metric span {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 820;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.team-line-metric strong {
+  overflow-wrap: anywhere;
+  color: #0f172a;
+  font-size: 1.22rem;
+  font-weight: 850;
+  line-height: 1.1;
+}
+
+.team-line-metric small {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 620;
+  line-height: 1.25;
+}
+
+.team-line-metric--green strong {
+  color: #16a34a;
+}
+
+.team-line-metric--amber strong {
+  color: #d97706;
+}
+
+.team-line-metric--red strong,
+.team-line-metric--danger strong {
+  color: #dc2626;
+}
+
+.team-control-action-stack {
+  display: grid;
+  gap: 12px;
+  padding: 4px 24px 18px;
+}
+
+.team-control-action-stack section {
+  display: grid;
+  min-height: 58px;
+  gap: 5px;
+  padding: 12px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.team-control-action-stack section span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.team-control-action-stack section p {
+  min-width: 0;
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.96rem;
+  font-weight: 760;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.team-control-watch--green {
+  border-color: #bbf7d0 !important;
+  background: #f0fdf4 !important;
+}
+
+.team-control-watch--amber {
+  border-color: #fed7aa !important;
+  background: #fff7ed !important;
+}
+
+.team-control-watch--red {
+  border-color: #fecdd3 !important;
+  background: #fff1f2 !important;
+}
+
+.team-control-action-stack dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.team-control-action-stack dl > div {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.team-control-action-stack dt,
+.team-control-action-stack dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.team-control-action-stack dt {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 780;
+}
+
+.team-control-action-stack dd {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 0.82rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-control-card__actions {
+  padding: 0 24px 24px;
+}
+
+.team-lines-v2__priority {
+  border-radius: 14px;
+}
+
+@media (max-width: 1180px) {
+  .team-lines-v2__summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .team-lines-v2__summary article:nth-child(3n) {
+    border-right: 0;
+  }
+
+  .team-lines-v2__cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .team-lines-v2__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .team-lines-v2__summary article {
+    padding-inline: 16px;
+  }
+
+  .team-control-state {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .team-control-state > div:first-child,
+  .team-control-state__gap {
+    max-width: none;
+    width: 100%;
+  }
+
+  .team-control-output__header,
+  .team-control-output__labels {
+    grid-template-columns: 1fr;
+  }
+
+  .team-control-output__labels span,
+  .team-control-output__labels span:nth-child(2),
+  .team-control-output__labels span:last-child {
+    justify-self: start;
+  }
+
+  .team-control-metrics,
+  .team-control-action-stack dl {
+    grid-template-columns: 1fr;
+  }
+}
+
 
 /* Team Leader Daily Plan v2 — approved reference hierarchy. */
 .daily-plan-page {

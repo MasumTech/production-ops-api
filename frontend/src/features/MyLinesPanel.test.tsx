@@ -122,11 +122,14 @@ describe("Team Leader My Lines v2", () => {
 
     expect(screen.getByRole("heading", { name: "My Lines" })).toBeInTheDocument();
     expect(
-      screen.getByText("Current position, ownership and next update"),
+      screen.getByText("Output position, recovery pressure and next action by line"),
     ).toBeInTheDocument();
     expect(document.querySelectorAll(".team-control-card")).toHaveLength(2);
     expect(screen.getByRole("heading", { name: "Line 1" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Line 2" })).toBeInTheDocument();
+    expect(screen.getAllByText("behind now", { exact: false }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Target now", { exact: false }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Recovery need", { exact: true })).toHaveLength(2);
     expect(screen.getAllByText("Running to plan", { exact: true }).length).toBeGreaterThan(0);
     expect(screen.getByText("Running with issues", { exact: true })).toBeInTheDocument();
     expect(screen.getByText("Seal concern", { exact: true })).toBeInTheDocument();
@@ -195,11 +198,9 @@ describe("Team Leader My Lines v2", () => {
     expect(screen.getByText("Due now", { exact: true })).toBeInTheDocument();
 
     const headings = screen.getAllByRole("heading", { level: 2 });
-    expect(headings.map((heading) => heading.textContent)).toEqual([
-      "Line 3",
-      "Line 2",
-      "Line 1",
-    ]);
+    expect(headings[0]).toHaveAccessibleName("Line 3");
+    expect(headings[1]).toHaveAccessibleName("Line 2");
+    expect(headings[2]).toHaveAccessibleName("Line 1");
   });
 
   it("routes both page-level and card-level actions to the selected priority line", async () => {
