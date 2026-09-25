@@ -179,10 +179,11 @@ describe("daily plan and break opportunity workspace", () => {
         name: "Shift schedule · 07:00–18:00",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Production")).toBeInTheDocument();
+    expect(screen.getByText("Done")).toBeInTheDocument();
+    expect(screen.getByText("Planned output left")).toBeInTheDocument();
     expect(screen.getByText("Planned break")).toBeInTheDocument();
     expect(screen.getAllByText("Salt & Pepper Chicken").length).toBeGreaterThan(0);
-    expect(screen.getByText("Break 1")).toBeInTheDocument();
+    expect(screen.getByLabelText("Break 1, 40 minutes")).toBeInTheDocument();
 
     const output = screen.getByLabelText("Output by assigned line");
     expect(output).toHaveTextContent("Current product");
@@ -216,6 +217,25 @@ describe("daily plan and break opportunity workspace", () => {
     );
 
     expect(onRequestPlanChange).toHaveBeenCalledWith(assignment.id);
+  });
+
+  it("expands the selected output row with recorded hourly actuals", async () => {
+    const actor = userEvent.setup();
+    render(
+      <DailyPlanPanel
+        assignments={[assignment]}
+        planBlocks={planBlocks}
+        shifts={[shift]}
+        updates={[update]}
+        hourlyOutputs={[{ id: 3, assignment: assignment.id, hour_start_at: "2026-09-04T07:00:00Z", actual_units: 790, updated_at: "2026-09-04T08:00:00Z" }]}
+      />,
+    );
+    await actor.click(screen.getByRole("button", { name: /Line 3 ▾/ }));
+    expect(screen.getByRole("heading", { name: "Line 3 · Hourly details" })).toBeInTheDocument();
+    expect(screen.getByText("D 790")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Line 3 ▴/ })).toHaveAttribute("aria-expanded", "true");
+    await actor.click(screen.getByRole("button", { name: "Close details" }));
+    expect(screen.queryByRole("heading", { name: "Line 3 · Hourly details" })).not.toBeInTheDocument();
   });
 
   it("supports a legitimate third assigned line", () => {

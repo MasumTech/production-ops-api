@@ -6,6 +6,7 @@ from .models import (
     DailyPlanBlock,
     DowntimeEvent,
     HourlyLineUpdate,
+    HourlyOutput,
     OperationalEscalation,
     OperationalEventReadReceipt,
     OperationalWorkerHeartbeat,
@@ -51,6 +52,14 @@ class DowntimeEventAdmin(admin.ModelAdmin):
     @admin.display(ordering="shift__production_line__code", description="Line")
     def production_line(self, obj):
         return obj.shift.production_line
+
+
+@admin.register(HourlyOutput)
+class HourlyOutputAdmin(admin.ModelAdmin):
+    list_display = ("hour_start_at", "assignment", "actual_units", "recorded_by")
+    list_filter = ("assignment__date", "assignment__production_line")
+    autocomplete_fields = ("assignment", "recorded_by")
+    readonly_fields = ("created_at", "updated_at")
 
 
 @admin.register(DailyPlanBlock)

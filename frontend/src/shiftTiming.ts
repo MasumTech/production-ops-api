@@ -65,8 +65,11 @@ export function scheduleDateTimeToShiftMinutes(
   value: string,
   window: ShiftWindow,
 ): number {
-  const date = new Date(value);
-  let minutes = date.getUTCHours() * 60 + date.getUTCMinutes();
+  // Plan records carry the operating site's wall clock and timezone offset.
+  // Keep those clock fields; UTC conversion moves breaks by an hour in summer.
+  const clock = value.match(/T(\d{2}):(\d{2})/);
+  if (!clock) return window.startMinutes;
+  let minutes = Number(clock[1]) * 60 + Number(clock[2]);
   if (window.endMinutes > 24 * 60 && minutes < window.startMinutes) {
     minutes += 24 * 60;
   }
@@ -74,9 +77,9 @@ export function scheduleDateTimeToShiftMinutes(
 }
 
 export function formatScheduleClock(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return formatClockMinutes(date.getUTCHours() * 60 + date.getUTCMinutes());
+  const clock = value.match(/T(\d{2}):(\d{2})/);
+  if (!clock) return "—";
+  return `${clock[1]}:${clock[2]}`;
 }
 
 export function timelineStyle(

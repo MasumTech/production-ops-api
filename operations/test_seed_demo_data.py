@@ -17,6 +17,7 @@ from operations.models import (
     DailyPlanBlock,
     DowntimeEvent,
     HourlyLineUpdate,
+    HourlyOutput,
     OperationalEscalation,
     ProductionAsset,
     ProductionLine,
@@ -101,6 +102,15 @@ def test_seed_demo_data_creates_complete_dataset():
         "handovers": 1,
         "incidents": 1,
     }
+
+    for shift in Shift.objects.filter(date=DEMO_DATE, shift_type="day"):
+        assert sum(
+            HourlyOutput.objects.filter(
+                assignment__date=shift.date,
+                assignment__shift_type="day",
+                assignment__production_line=shift.production_line,
+            ).values_list("actual_units", flat=True)
+        ) == shift.actual_output
 
     manager = get_user_model().objects.get(username="demo.manager")
     assert manager.is_staff is True

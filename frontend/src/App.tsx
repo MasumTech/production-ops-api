@@ -30,6 +30,7 @@ import type {
   BreakOpportunity,
   BreakRecovery,
   DailyPlanBlock,
+  HourlyOutput,
   DowntimeEvent,
   Escalation,
   LineUpdate,
@@ -56,6 +57,7 @@ const EMPTY_DATA: WorkspaceData = {
   materials: [],
   escalations: [],
   planBlocks: [],
+  hourlyOutputs: [],
   breakOpportunities: [],
   breaks: [],
   handovers: [],
@@ -118,6 +120,7 @@ async function loadWorkspaceData(
     materials,
     escalations,
     planBlocks,
+    hourlyOutputs,
     breakOpportunities,
     handovers,
     users,
@@ -137,6 +140,7 @@ async function loadWorkspaceData(
       `/operational-escalations/?date=${operationalDate}&shift_type=${shiftType}&ordering=-raised_at`,
     ),
     apiList<DailyPlanBlock>(`/daily-plan-blocks/?date=${operationalDate}`),
+    apiList<HourlyOutput>(`/hourly-outputs/?date=${operationalDate}&shift_type=${shiftType}`),
     apiList<BreakOpportunity>(`/break-opportunities/?date=${operationalDate}`),
     apiList<ShiftHandover>("/shift-handovers/?ordering=-handed_over_at"),
     apiList<UserChoice>("/active-users/"),
@@ -157,6 +161,7 @@ async function loadWorkspaceData(
     materials,
     escalations,
     planBlocks: planBlocks.filter((item) => assignmentIds.has(item.assignment)),
+    hourlyOutputs: hourlyOutputs.filter((item) => assignmentIds.has(item.assignment)),
     breakOpportunities: breakOpportunities.filter((item) =>
       assignmentIds.has(item.assignment),
     ),
@@ -672,6 +677,7 @@ export default function App() {
           <DailyPlanPanel
             assignments={data.assignments}
             planBlocks={data.planBlocks}
+            hourlyOutputs={data.hourlyOutputs}
             shifts={data.shifts}
             updates={data.updates}
             live={teamViewMode === "live"}

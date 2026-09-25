@@ -37,6 +37,7 @@ from .models import (
     DailyPlanBlock,
     DowntimeEvent,
     HourlyLineUpdate,
+    HourlyOutput,
     OperationalEscalation,
     OperationalEvent,
     OperationalEventReadReceipt,
@@ -77,6 +78,7 @@ from .serializers import (
     DowntimeEventSerializer,
     HourlyLineUpdateFilterSerializer,
     HourlyLineUpdateSerializer,
+    HourlyOutputSerializer,
     IssueCaptureResponseSerializer,
     IssueCaptureSerializer,
     NotificationInboxSerializer,
@@ -2085,6 +2087,25 @@ class ShiftHandoverViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(handover)
         return Response(serializer.data)
+
+
+class HourlyOutputViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = HourlyOutput.objects.all()
+    serializer_class = HourlyOutputSerializer
+    permission_classes = (IsAuthenticated,)
+    ordering = ("hour_start_at",)
+
+    def get_queryset(self):
+        queryset = self.queryset.select_related("assignment")
+        if not self.request.user.is_staff:
+            queryset = queryset.filter(assignment__team_leader=self.request.user)
+        date = self.request.query_params.get("date")
+        shift_type = self.request.query_params.get("shift_type")
+        if date:
+            queryset = queryset.filter(assignment__date=date)
+        if shift_type:
+            queryset = queryset.filter(assignment__shift_type=shift_type)
+        return queryset
 
 
 @extend_schema_view(

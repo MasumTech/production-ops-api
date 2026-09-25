@@ -147,6 +147,14 @@ export interface DailyPlanBlock {
   break_number: number | null;
 }
 
+export interface HourlyOutput {
+  id: number;
+  assignment: number;
+  hour_start_at: string;
+  actual_units: number;
+  updated_at: string;
+}
+
 export type BreakOpportunityStatus =
   | "suggested"
   | "confirmed"
@@ -251,6 +259,7 @@ export interface WorkspaceData {
   materials: MaterialReadiness[];
   escalations: Escalation[];
   planBlocks: DailyPlanBlock[];
+  hourlyOutputs?: HourlyOutput[];
   breakOpportunities: BreakOpportunity[];
   breaks: BreakRecovery[];
   handovers: ShiftHandover[];
