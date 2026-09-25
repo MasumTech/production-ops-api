@@ -1,6 +1,7 @@
 from datetime import date, time
 from io import StringIO
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -114,6 +115,19 @@ def test_seed_demo_data_creates_complete_dataset():
             )
             == shift.actual_output
         )
+
+    latest_line_two = (
+        HourlyLineUpdate.objects.filter(
+            assignment__date=DEMO_DATE,
+            assignment__production_line__code="DEMO-LINE-02",
+        )
+        .order_by("-recorded_at")
+        .first()
+    )
+    assert latest_line_two is not None
+    assert latest_line_two.recorded_at.astimezone(
+        ZoneInfo("Europe/London")
+    ).time() == time(16, 10)
 
     manager = get_user_model().objects.get(username="demo.manager")
     assert manager.is_staff is True

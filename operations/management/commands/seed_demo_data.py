@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -752,7 +753,10 @@ class Command(BaseCommand):
     @staticmethod
     def _seed_hourly_output(operational_date, assignments, shifts, plan_blocks):
         """Distribute sample shift totals over clock hours up to 16:10."""
-        snapshot = timezone.make_aware(datetime.combine(operational_date, time(16, 10)))
+        site_timezone = ZoneInfo("Europe/London")
+        snapshot = timezone.make_aware(
+            datetime.combine(operational_date, time(16, 10)), site_timezone
+        )
         for key, assignment in assignments.items():
             if key not in shifts:
                 continue
@@ -764,7 +768,8 @@ class Command(BaseCommand):
                 and block.block_type == DailyPlanBlock.BlockType.PRODUCTION
             ]
             hour = timezone.make_aware(
-                datetime.combine(operational_date, shift.start_time.replace(minute=0))
+                datetime.combine(operational_date, shift.start_time.replace(minute=0)),
+                site_timezone,
             )
             weighted_hours = []
             while hour < snapshot:
@@ -773,13 +778,28 @@ class Command(BaseCommand):
                     max(
                         0,
                         (
-                            min(end, block.planned_end_at)
-                            - max(hour, block.planned_start_at)
+                            min(
+                                end,
+                                timezone.make_aware(
+                                    datetime.combine(
+                                        operational_date, block.planned_end_at.time()
+                                    ),
+                                    site_timezone,
+                                ),
+                            )
+                            - max(
+                                hour,
+                                timezone.make_aware(
+                                    datetime.combine(
+                                        operational_date, block.planned_start_at.time()
+                                    ),
+                                    site_timezone,
+                                ),
+                            )
                         ).total_seconds(),
                     )
                     * (block.target_units_per_hour or 0)
                     for block in blocks
-                    if block.planned_end_at > hour and block.planned_start_at < end
                 )
                 weighted_hours.append((hour, weight))
                 hour += timedelta(hours=1)
@@ -810,6 +830,12 @@ class Command(BaseCommand):
                 datetime.combine(operational_date, time(hour, minute))
             )
 
+        def site_time(hour, minute=0):
+            return timezone.make_aware(
+                datetime.combine(operational_date, time(hour, minute)),
+                ZoneInfo("Europe/London"),
+            )
+
         definitions = {
             "red": {
                 "assignment": assignments["line_1"],
@@ -830,8 +856,8 @@ class Command(BaseCommand):
                 "action_taken": "Warehouse replenishment requested",
                 "support_required": "Confirm delivery ETA",
                 "requires_follow_up": True,
-                "recorded_at": recorded_time(16, 10),
-                "next_update_due_at": recorded_time(17, 10),
+                "recorded_at": site_time(16, 10),
+                "next_update_due_at": site_time(17, 10),
             },
             "line_2_stop": {
                 "assignment": assignments["line_2"],
@@ -852,8 +878,8 @@ class Command(BaseCommand):
                 "action_taken": "Filler reset completed",
                 "support_required": "",
                 "requires_follow_up": False,
-                "recorded_at": recorded_time(16, 0),
-                "next_update_due_at": recorded_time(17, 0),
+                "recorded_at": site_time(16, 0),
+                "next_update_due_at": site_time(17, 0),
             },
             "line_3_current": {
                 "assignment": assignments["line_3"],
@@ -863,8 +889,8 @@ class Command(BaseCommand):
                 "action_taken": "Hourly check completed",
                 "support_required": "",
                 "requires_follow_up": False,
-                "recorded_at": recorded_time(16, 5),
-                "next_update_due_at": recorded_time(17, 5),
+                "recorded_at": site_time(16, 5),
+                "next_update_due_at": site_time(17, 5),
             },
             "line_4_current": {
                 "assignment": assignments["line_4"],
@@ -874,8 +900,8 @@ class Command(BaseCommand):
                 "action_taken": "Engineering fault finding in progress",
                 "support_required": "Engineering recovery support",
                 "requires_follow_up": True,
-                "recorded_at": recorded_time(16, 15),
-                "next_update_due_at": recorded_time(16, 45),
+                "recorded_at": site_time(16, 15),
+                "next_update_due_at": site_time(16, 45),
             },
             "line_5_current": {
                 "assignment": assignments["line_5"],
@@ -885,8 +911,8 @@ class Command(BaseCommand):
                 "action_taken": "QA sample released",
                 "support_required": "",
                 "requires_follow_up": False,
-                "recorded_at": recorded_time(16, 20),
-                "next_update_due_at": recorded_time(17, 20),
+                "recorded_at": site_time(16, 20),
+                "next_update_due_at": site_time(17, 20),
             },
             "line_6_current": {
                 "assignment": assignments["line_6"],
@@ -896,8 +922,8 @@ class Command(BaseCommand):
                 "action_taken": "Machine Minder monitoring every cycle",
                 "support_required": "Engineering standby",
                 "requires_follow_up": True,
-                "recorded_at": recorded_time(16, 25),
-                "next_update_due_at": recorded_time(16, 55),
+                "recorded_at": site_time(16, 25),
+                "next_update_due_at": site_time(16, 55),
             },
         }
         updates = {}

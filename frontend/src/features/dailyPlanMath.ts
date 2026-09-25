@@ -1,5 +1,6 @@
 import {
   formatClockMinutes,
+  dateTimeToShiftMinutes,
   scheduleDateTimeToShiftMinutes,
   timeBuckets,
   type ShiftWindow,
@@ -85,7 +86,7 @@ export function hourlyPlan(
     const full = expectedUnitsNow(blocks, window, planned, to);
     const due = expectedUnitsNow(blocks, window, planned, dueUntil);
     const output = outputs.find((item) =>
-      scheduleDateTimeToShiftMinutes(item.hour_start_at, window) ===
+      dateTimeToShiftMinutes(item.hour_start_at, window) ===
       Math.floor(from / 60) * 60,
     );
     const breakMinutes = blocks.reduce((sum, block) => {

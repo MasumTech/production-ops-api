@@ -26,7 +26,7 @@ describe("Daily Plan output curve", () => {
   });
 
   it("shows shortages only where hourly actuals exist and the hour is due", () => {
-    const outputs: HourlyOutput[] = [{ id: 1, assignment: 1, hour_start_at: "2026-09-25T09:00:00Z", actual_units: 12, updated_at: "2026-09-25T09:59:00Z" }];
+    const outputs: HourlyOutput[] = [{ id: 1, assignment: 1, hour_start_at: "2026-09-25T09:00:00+01:00", actual_units: 12, updated_at: "2026-09-25T09:59:00+01:00" }];
     const hours = hourlyPlan(blocks, outputs, window, shift, 610);
     expect(hours[2]).toMatchObject({ label: "09:00–10:00", breakMinutes: 40, target: 34, done: 12, dueNow: 34 });
     expect(hours[3]).toMatchObject({ label: "10:00–11:00", current: true, done: null, dueNow: 17 });

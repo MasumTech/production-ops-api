@@ -237,7 +237,10 @@ export function DailyPlanPanel({
             >
               <div />
               <div className="tl-plan-v2__axis-track">
-                {ticks.map((minutes) => {
+                {ticks.map((minutes, index) => {
+                  // The first partial hour (for example 06:45–07:00) is too
+                  // narrow to show both clock labels without overlap.
+                  if (index === 1 && minutes - ticks[0] < 30) return null;
                   const left =
                     ((minutes - window.startMinutes) /
                       Math.max(

@@ -55,6 +55,8 @@ test("Daily Plan matches the approved timeline reference", async ({
   await expect(
     page.getByRole("heading", { name: /Shift schedule · 06:45–18:00/ }),
   ).toBeVisible();
+  await expect(page.locator(".tl-plan-v2__axis-track").getByText("07:00", { exact: true })).toHaveCount(0);
+  await expect(page.locator(".tl-plan-v2__snapshot-label")).toHaveText("Snapshot 16:10");
   await expect(page.getByText("Done", { exact: true })).toBeVisible();
   await expect(page.getByText("Planned output left", { exact: true })).toBeVisible();
   await expect(page.getByText("Planned break", { exact: true })).toBeVisible();
