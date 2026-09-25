@@ -13,6 +13,13 @@ export interface TimeBucket {
   label: string;
 }
 
+const SITE_CLOCK = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/London",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
 export function clockToMinutes(value: string | undefined, fallback: number): number {
   if (!value) return fallback;
   const [hour, minute] = value.split(":").map(Number);
@@ -54,7 +61,11 @@ export function getShiftWindow(
 
 export function dateTimeToShiftMinutes(value: string, window: ShiftWindow): number {
   const date = new Date(value);
-  let minutes = date.getHours() * 60 + date.getMinutes();
+  if (Number.isNaN(date.getTime())) return window.startMinutes;
+  const parts = SITE_CLOCK.formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value);
+  let minutes = hour * 60 + minute;
   if (window.endMinutes > 24 * 60 && minutes < window.startMinutes) {
     minutes += 24 * 60;
   }
