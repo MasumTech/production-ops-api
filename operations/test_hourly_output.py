@@ -12,9 +12,15 @@ from operations.models import HourlyOutput, ProductionLine, TeamLeaderAssignment
 @pytest.mark.django_db
 def test_hourly_output_is_private_to_assigned_team_leader():
     user_model = get_user_model()
-    leader = user_model.objects.create_user(username="hourly.leader", password="safe-test-password")
-    other = user_model.objects.create_user(username="other.leader", password="safe-test-password")
-    line = ProductionLine.objects.create(code="HOUR-LINE-01", name="Hourly output", location="A")
+    leader = user_model.objects.create_user(
+        username="hourly.leader", password="safe-test-password"
+    )
+    other = user_model.objects.create_user(
+        username="other.leader", password="safe-test-password"
+    )
+    line = ProductionLine.objects.create(
+        code="HOUR-LINE-01", name="Hourly output", location="A"
+    )
     assignment = TeamLeaderAssignment.objects.create(
         production_line=line,
         team_leader=leader,
@@ -36,7 +42,12 @@ def test_hourly_output_is_private_to_assigned_team_leader():
     result = client.get("/api/hourly-outputs/?date=2026-09-25")
     assert result.status_code == 200
     assert result.data["results"][0]["actual_units"] == 420
-    assert client.patch(f"/api/hourly-outputs/{output.id}/", {"actual_units": 999}).status_code == 405
+    assert (
+        client.patch(
+            f"/api/hourly-outputs/{output.id}/", {"actual_units": 999}
+        ).status_code
+        == 405
+    )
 
     output.hour_start_at = datetime.combine(
         date(2026, 9, 25), time(10, 5), tzinfo=timezone.get_current_timezone()

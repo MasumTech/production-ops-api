@@ -758,7 +758,8 @@ class Command(BaseCommand):
                 continue
             shift = shifts[key]
             blocks = [
-                block for block in plan_blocks.values()
+                block
+                for block in plan_blocks.values()
                 if block.assignment_id == assignment.id
                 and block.block_type == DailyPlanBlock.BlockType.PRODUCTION
             ]
@@ -769,7 +770,13 @@ class Command(BaseCommand):
             while hour < snapshot:
                 end = min(hour + timedelta(hours=1), snapshot)
                 weight = sum(
-                    max(0, (min(end, block.planned_end_at) - max(hour, block.planned_start_at)).total_seconds())
+                    max(
+                        0,
+                        (
+                            min(end, block.planned_end_at)
+                            - max(hour, block.planned_start_at)
+                        ).total_seconds(),
+                    )
                     * (block.target_units_per_hour or 0)
                     for block in blocks
                     if block.planned_end_at > hour and block.planned_start_at < end
@@ -780,15 +787,20 @@ class Command(BaseCommand):
             remaining = shift.actual_output
             for index, (hour, weight) in enumerate(weighted_hours):
                 units = (
-                    remaining if index == len(weighted_hours) - 1
+                    remaining
+                    if index == len(weighted_hours) - 1
                     else round(shift.actual_output * weight / weight_total)
-                    if weight_total else 0
+                    if weight_total
+                    else 0
                 )
                 remaining -= units
                 HourlyOutput.objects.update_or_create(
                     assignment=assignment,
                     hour_start_at=hour,
-                    defaults={"actual_units": units, "recorded_by": assignment.team_leader},
+                    defaults={
+                        "actual_units": units,
+                        "recorded_by": assignment.team_leader,
+                    },
                 )
 
     @staticmethod
