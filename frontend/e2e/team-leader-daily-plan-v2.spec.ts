@@ -55,11 +55,15 @@ test("Daily Plan matches the approved timeline reference", async ({
   await expect(
     page.getByRole("heading", { name: /Shift schedule · 06:45–18:00/ }),
   ).toBeVisible();
-  await expect(page.getByText("Production", { exact: true })).toBeVisible();
+  await expect(page.locator(".tl-plan-v2__axis-track").getByText("07:00", { exact: true })).toHaveCount(0);
+  await expect(page.locator(".tl-plan-v2__snapshot-label")).toHaveText("Snapshot 16:10");
+  await expect(page.getByText("Done", { exact: true })).toBeVisible();
+  await expect(page.getByText("Planned output left", { exact: true })).toBeVisible();
   await expect(page.getByText("Planned break", { exact: true })).toBeVisible();
   await expect(page.locator(".tl-plan-v2__row")).toHaveCount(2);
   await expect(page.locator(".tl-plan-v2__block--production")).toHaveCount(6);
   await expect(page.locator(".tl-plan-v2__block--break")).toHaveCount(4);
+  await expect(page.locator(".tl-plan-v2__line .tl-plan-v2__done-count").first()).toContainText("6,888 done");
 
   const lineOne = page.locator(".tl-plan-v2__row").filter({
     hasText: "Line 1",
@@ -111,6 +115,10 @@ test("Daily Plan matches the approved timeline reference", async ({
   await expect(output.getByText("4,020")).toBeVisible();
   await expect(output.getByText("82%")).toBeVisible();
   await expect(output.getByText("67%")).toBeVisible();
+  await output.getByRole("button", { name: /Line 1 ▾/ }).click();
+  await expect(output.getByRole("heading", { name: "Line 1 · Hourly details" })).toBeVisible();
+  await expect(output.locator(".tl-plan-v2__hour")).toHaveCount(12);
+  await expect(output.locator(".tl-plan-v2__hour").first()).toContainText("D ");
   await expect(
     page.getByText(
       /Published plans are read-only\. Request a change for Operations Manager review\./i,

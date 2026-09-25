@@ -478,6 +478,43 @@ class OperationalEvidence(TimeStampedModel):
         return f"{self.hourly_update_id} - {self.original_name}"
 
 
+class HourlyOutput(TimeStampedModel):
+    """Output recorded for one assigned line and one clock hour."""
+
+    assignment = models.ForeignKey(
+        TeamLeaderAssignment,
+        on_delete=models.PROTECT,
+        related_name="hourly_outputs",
+    )
+    hour_start_at = models.DateTimeField()
+    actual_units = models.PositiveIntegerField()
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="recorded_hourly_outputs",
+    )
+
+    class Meta:
+        ordering = ("hour_start_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("assignment", "hour_start_at"),
+                name="unique_assignment_output_hour",
+            ),
+        ]
+
+    def clean(self):
+        errors = {}
+        if self.hour_start_at:
+            hour = timezone.localtime(self.hour_start_at)
+            if hour.minute or hour.second or hour.microsecond:
+                errors["hour_start_at"] = "Output must start on a clock hour."
+            if self.assignment_id and hour.date() != self.assignment.date:
+                errors["hour_start_at"] = "Output must be on the assignment date."
+        if errors:
+            raise ValidationError(errors)
+
+
 class DailyPlanBlock(TimeStampedModel):
     class BlockType(models.TextChoices):
         PRODUCTION = "production", "Production"

@@ -9,6 +9,7 @@ from .views import (
     DailyPlanBlockViewSet,
     DowntimeEventViewSet,
     HourlyLineUpdateViewSet,
+    HourlyOutputViewSet,
     IssueCaptureView,
     NotificationInboxView,
     NotificationReadView,
@@ -68,6 +69,7 @@ router.register(
     HourlyLineUpdateViewSet,
     basename="hourly-line-update",
 )
+router.register("hourly-outputs", HourlyOutputViewSet, basename="hourly-output")
 router.register(
     "product-material-readiness",
     ProductMaterialReadinessViewSet,

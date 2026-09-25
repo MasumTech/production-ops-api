@@ -10,6 +10,7 @@ from .models import (
     DailyPlanBlock,
     DowntimeEvent,
     HourlyLineUpdate,
+    HourlyOutput,
     OperationalEscalation,
     OperationalEvent,
     OperationalEventReadReceipt,
@@ -1406,6 +1407,13 @@ class ShiftHandoverFilterSerializer(serializers.Serializer):
         allow_null=True,
         default=None,
     )
+
+
+class HourlyOutputSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HourlyOutput
+        fields = ("id", "assignment", "hour_start_at", "actual_units", "updated_at")
+        read_only_fields = fields
 
 
 class DailyPlanBlockSerializer(serializers.ModelSerializer):

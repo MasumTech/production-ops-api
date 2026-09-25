@@ -280,6 +280,7 @@ Roadmap completion is tracked by the published delivery phases and their defined
 | `GET, POST` | `/api/hourly-line-updates/` | List or create hourly line updates |
 | `GET, PUT, PATCH, DELETE` | `/api/hourly-line-updates/{id}/` | Manage one accessible hourly update |
 | `GET` | `/api/hourly-line-updates/latest-status/` | Return the latest update for every accessible assignment |
+| `GET` | `/api/hourly-outputs/?date=YYYY-MM-DD&shift_type=day` | Recorded units per clock hour for assigned lines; absent hours remain unreported |
 | `GET, POST` | `/api/product-material-readiness/` | List or create accessible product/material readiness items |
 | `GET, PUT, PATCH, DELETE` | `/api/product-material-readiness/{id}/` | Manage one accessible readiness item |
 | `POST` | `/api/product-material-readiness/{id}/release/` | Staff-only audited release of a held item |
@@ -672,7 +673,7 @@ Open http://localhost:5173/. Vite proxies `/api` to the local Django server. The
 
 ## Local Demo Dataset
 
-A repeatable management command creates realistic local demonstration data for the Team Leader PWA, Operations Manager control board, hourly line downtime, break/recovery, handover, escalation, material-readiness, and loss-analytics workflows. The seeded day shift contains three Team Leaders with two lines each, Green/Amber/Red conditions, and seven timestamped downtime events with short operational reasons.
+A repeatable management command creates realistic local demonstration data for the Team Leader PWA, Operations Manager control board, hourly line downtime, break/recovery, handover, escalation, material-readiness, and loss-analytics workflows. The seeded day shift contains three Team Leaders with two lines each, Green/Amber/Red conditions, hourly output records, and seven timestamped downtime events with short operational reasons. Hourly output can also be recorded in Django admin; the Daily Plan does not estimate actual units for missing hours.
 
 Run the command only in a local development environment where `DJANGO_DEBUG=True`.
 To remove only the previous demo records and recreate them:

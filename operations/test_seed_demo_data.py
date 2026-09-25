@@ -1,6 +1,7 @@
 from datetime import date, time
 from io import StringIO
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -17,6 +18,7 @@ from operations.models import (
     DailyPlanBlock,
     DowntimeEvent,
     HourlyLineUpdate,
+    HourlyOutput,
     OperationalEscalation,
     ProductionAsset,
     ProductionLine,
@@ -101,6 +103,31 @@ def test_seed_demo_data_creates_complete_dataset():
         "handovers": 1,
         "incidents": 1,
     }
+
+    for shift in Shift.objects.filter(date=DEMO_DATE, shift_type="day"):
+        assert (
+            sum(
+                HourlyOutput.objects.filter(
+                    assignment__date=shift.date,
+                    assignment__shift_type="day",
+                    assignment__production_line=shift.production_line,
+                ).values_list("actual_units", flat=True)
+            )
+            == shift.actual_output
+        )
+
+    latest_line_two = (
+        HourlyLineUpdate.objects.filter(
+            assignment__date=DEMO_DATE,
+            assignment__production_line__code="DEMO-LINE-02",
+        )
+        .order_by("-recorded_at")
+        .first()
+    )
+    assert latest_line_two is not None
+    assert latest_line_two.recorded_at.astimezone(
+        ZoneInfo("Europe/London")
+    ).time() == time(16, 10)
 
     manager = get_user_model().objects.get(username="demo.manager")
     assert manager.is_staff is True

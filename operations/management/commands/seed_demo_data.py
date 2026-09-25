@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -17,6 +18,7 @@ from operations.models import (
     DailyPlanBlock,
     DowntimeEvent,
     HourlyLineUpdate,
+    HourlyOutput,
     IdempotentRequest,
     OperationalEscalation,
     OperationalEvent,
@@ -189,6 +191,7 @@ class Command(BaseCommand):
         OperationalEscalation.objects.filter(demo_assignment).delete()
         ProductMaterialReadiness.objects.filter(demo_assignment).delete()
         HourlyLineUpdate.objects.filter(demo_assignment).delete()
+        HourlyOutput.objects.filter(demo_assignment).delete()
         DailyPlanBlock.objects.filter(demo_assignment).delete()
         QualityIncident.objects.filter(
             shift__production_line__code__startswith=DEMO_PREFIX
@@ -222,6 +225,7 @@ class Command(BaseCommand):
         )
         downtime_events = self._seed_downtime_events(operational_date, shifts)
         plan_blocks = self._seed_daily_plan(operational_date, users, assignments)
+        self._seed_hourly_output(operational_date, assignments, shifts, plan_blocks)
         updates = self._seed_updates(now, operational_date, users, assignments)
         break_opportunities = self._seed_break_opportunities(
             operational_date,
@@ -630,7 +634,7 @@ class Command(BaseCommand):
                     0,
                     "SPC-01",
                     "Salt & Pepper Chicken",
-                    24,
+                    1200,
                     None,
                 ),
                 ("break", 9, 0, 9, 40, "", "", None, 1),
@@ -642,7 +646,7 @@ class Command(BaseCommand):
                     0,
                     "SSC-02",
                     "Sweet & Sour Chicken",
-                    30,
+                    1100,
                     None,
                 ),
                 ("break", 12, 0, 12, 40, "", "", None, 2),
@@ -654,7 +658,7 @@ class Command(BaseCommand):
                     0,
                     "VSR-03",
                     "Vegetable Spring Rolls",
-                    20,
+                    610,
                     None,
                 ),
             ),
@@ -667,11 +671,11 @@ class Command(BaseCommand):
                     0,
                     "ODM-01",
                     "Oat Drink 1L",
-                    20,
+                    600,
                     None,
                 ),
                 ("break", 10, 0, 10, 40, "", "", None, 1),
-                ("production", 10, 40, 14, 0, "BBQ-02", "BBQ Chicken Bites", 28, None),
+                ("production", 10, 40, 14, 0, "BBQ-02", "BBQ Chicken Bites", 600, None),
                 ("break", 14, 0, 14, 40, "", "", None, 2),
                 (
                     "production",
@@ -681,7 +685,7 @@ class Command(BaseCommand):
                     0,
                     "VMF-03",
                     "Vegetable Mix Filling",
-                    24,
+                    615,
                     None,
                 ),
             ),
@@ -706,10 +710,10 @@ class Command(BaseCommand):
                     ("production", 15, 40, 18, 0, code, name, target, None),
                 )
                 for key, code, name, target in (
-                    ("line_3", "SPC-04", "Salt & Pepper Chicken", 26),
-                    ("line_4", "VSR-05", "Vegetable Spring Rolls", 22),
-                    ("line_5", "OBT-06", "Oat Milk Chai", 30),
-                    ("line_6", "BMF-07", "Baja Milk Foam", 24),
+                    ("line_3", "SPC-04", "Salt & Pepper Chicken", 726),
+                    ("line_4", "VSR-05", "Vegetable Spring Rolls", 645),
+                    ("line_5", "OBT-06", "Oat Milk Chai", 706),
+                    ("line_6", "BMF-07", "Baja Milk Foam", 585),
                 )
             }
         )
@@ -747,10 +751,89 @@ class Command(BaseCommand):
         return plan_blocks
 
     @staticmethod
+    def _seed_hourly_output(operational_date, assignments, shifts, plan_blocks):
+        """Distribute sample shift totals over clock hours up to 16:10."""
+        site_timezone = ZoneInfo("Europe/London")
+        snapshot = timezone.make_aware(
+            datetime.combine(operational_date, time(16, 10)), site_timezone
+        )
+        for key, assignment in assignments.items():
+            if key not in shifts:
+                continue
+            shift = shifts[key]
+            blocks = [
+                block
+                for block in plan_blocks.values()
+                if block.assignment_id == assignment.id
+                and block.block_type == DailyPlanBlock.BlockType.PRODUCTION
+            ]
+            hour = timezone.make_aware(
+                datetime.combine(operational_date, shift.start_time.replace(minute=0)),
+                site_timezone,
+            )
+            weighted_hours = []
+            while hour < snapshot:
+                end = min(hour + timedelta(hours=1), snapshot)
+                weight = sum(
+                    max(
+                        0,
+                        (
+                            min(
+                                end,
+                                timezone.make_aware(
+                                    datetime.combine(
+                                        operational_date, block.planned_end_at.time()
+                                    ),
+                                    site_timezone,
+                                ),
+                            )
+                            - max(
+                                hour,
+                                timezone.make_aware(
+                                    datetime.combine(
+                                        operational_date, block.planned_start_at.time()
+                                    ),
+                                    site_timezone,
+                                ),
+                            )
+                        ).total_seconds(),
+                    )
+                    * (block.target_units_per_hour or 0)
+                    for block in blocks
+                )
+                weighted_hours.append((hour, weight))
+                hour += timedelta(hours=1)
+            weight_total = sum(weight for _, weight in weighted_hours)
+            remaining = shift.actual_output
+            for index, (hour, weight) in enumerate(weighted_hours):
+                units = (
+                    remaining
+                    if index == len(weighted_hours) - 1
+                    else round(shift.actual_output * weight / weight_total)
+                    if weight_total
+                    else 0
+                )
+                remaining -= units
+                HourlyOutput.objects.update_or_create(
+                    assignment=assignment,
+                    hour_start_at=hour,
+                    defaults={
+                        "actual_units": units,
+                        "recorded_by": assignment.team_leader,
+                    },
+                )
+
+    @staticmethod
     def _seed_updates(now, operational_date, users, assignments):
         def recorded_time(hour, minute=0):
             return timezone.make_aware(
                 datetime.combine(operational_date, time(hour, minute))
+            )
+
+        def site_time(hour, minute=0):
+            return timezone.make_aware(
+                datetime.combine(operational_date, time(hour, minute)),
+                ZoneInfo("Europe/London"),
             )
 
         definitions = {
@@ -768,13 +851,13 @@ class Command(BaseCommand):
             "amber": {
                 "assignment": assignments["line_2"],
                 "status": HourlyLineUpdate.Status.AMBER,
-                "current_product": "Oat Milk Chai",
+                "current_product": "Vegetable Mix Filling",
                 "issue_summary": "Carton stock running low",
                 "action_taken": "Warehouse replenishment requested",
                 "support_required": "Confirm delivery ETA",
                 "requires_follow_up": True,
-                "recorded_at": recorded_time(16, 10),
-                "next_update_due_at": recorded_time(17, 10),
+                "recorded_at": site_time(16, 10),
+                "next_update_due_at": site_time(17, 10),
             },
             "line_2_stop": {
                 "assignment": assignments["line_2"],
@@ -790,13 +873,13 @@ class Command(BaseCommand):
             "line_1_current": {
                 "assignment": assignments["line_1"],
                 "status": HourlyLineUpdate.Status.GREEN,
-                "current_product": "Salt & Pepper Chicken",
+                "current_product": "Vegetable Spring Rolls",
                 "issue_summary": "",
                 "action_taken": "Filler reset completed",
                 "support_required": "",
                 "requires_follow_up": False,
-                "recorded_at": recorded_time(16, 0),
-                "next_update_due_at": recorded_time(17, 0),
+                "recorded_at": site_time(16, 0),
+                "next_update_due_at": site_time(17, 0),
             },
             "line_3_current": {
                 "assignment": assignments["line_3"],
@@ -806,8 +889,8 @@ class Command(BaseCommand):
                 "action_taken": "Hourly check completed",
                 "support_required": "",
                 "requires_follow_up": False,
-                "recorded_at": recorded_time(16, 5),
-                "next_update_due_at": recorded_time(17, 5),
+                "recorded_at": site_time(16, 5),
+                "next_update_due_at": site_time(17, 5),
             },
             "line_4_current": {
                 "assignment": assignments["line_4"],
@@ -817,8 +900,8 @@ class Command(BaseCommand):
                 "action_taken": "Engineering fault finding in progress",
                 "support_required": "Engineering recovery support",
                 "requires_follow_up": True,
-                "recorded_at": recorded_time(16, 15),
-                "next_update_due_at": recorded_time(16, 45),
+                "recorded_at": site_time(16, 15),
+                "next_update_due_at": site_time(16, 45),
             },
             "line_5_current": {
                 "assignment": assignments["line_5"],
@@ -828,8 +911,8 @@ class Command(BaseCommand):
                 "action_taken": "QA sample released",
                 "support_required": "",
                 "requires_follow_up": False,
-                "recorded_at": recorded_time(16, 20),
-                "next_update_due_at": recorded_time(17, 20),
+                "recorded_at": site_time(16, 20),
+                "next_update_due_at": site_time(17, 20),
             },
             "line_6_current": {
                 "assignment": assignments["line_6"],
@@ -839,8 +922,8 @@ class Command(BaseCommand):
                 "action_taken": "Machine Minder monitoring every cycle",
                 "support_required": "Engineering standby",
                 "requires_follow_up": True,
-                "recorded_at": recorded_time(16, 25),
-                "next_update_due_at": recorded_time(16, 55),
+                "recorded_at": site_time(16, 25),
+                "next_update_due_at": site_time(16, 55),
             },
         }
         updates = {}
