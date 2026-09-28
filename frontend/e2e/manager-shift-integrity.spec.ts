@@ -43,7 +43,7 @@ test("manager Day and Night selection scopes the complete workspace", async ({
   const kpis = summary.locator(".control-kpi");
   await expect(kpis.nth(0).locator("strong")).toHaveText("6");
   await expect(kpis.nth(2).locator("strong")).not.toHaveText("0%");
-  await expect(page.locator(".leader-line")).toHaveCount(6);
+  await expect(page.locator(".manager-position-row")).toHaveCount(6);
 
   await page.screenshot({
     path: testInfo.outputPath("manager-shift-integrity-day.png"),
@@ -64,8 +64,8 @@ test("manager Day and Night selection scopes the complete workspace", async ({
   await expect(kpis.nth(0).locator("strong")).toHaveText("2");
   await expect(kpis.nth(1).locator("strong")).toHaveText("1");
   await expect(kpis.nth(2).locator("strong")).toHaveText("0%");
-  await expect(kpis.nth(3).locator("strong")).toHaveText("0 min");
-  await expect(page.locator(".leader-line")).toHaveCount(2);
+  await expect(kpis.nth(4).locator("strong")).toHaveText("0 min");
+  await expect(page.locator(".manager-position-row")).toHaveCount(2);
 
   const shiftScopedEndpoints = [
     "/team-leader-assignments/",
@@ -73,6 +73,7 @@ test("manager Day and Night selection scopes the complete workspace", async ({
     "/break-opportunities/",
     "/break-recoveries/",
     "/hourly-line-updates/latest-status/",
+    "/hourly-outputs/",
     "/product-material-readiness/",
     "/operational-escalations/",
     "/shifts/",
@@ -96,7 +97,7 @@ test("manager Day and Night selection scopes the complete workspace", async ({
   );
   await workspace.getByRole("button", { name: "Team Leaders" }).click();
   await expect(page.getByRole("button", { name: "All (2)" })).toBeVisible();
-  await expect(page.locator(".manager-row")).toHaveCount(2);
+  await expect(page.locator(".manager-leader-progress-line")).toHaveCount(2);
 
   await workspace.getByRole("button", { name: "Daily plans" }).click();
   await expect(page.locator(".daily-plan-row")).toHaveCount(2);

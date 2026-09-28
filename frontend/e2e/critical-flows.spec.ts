@@ -25,15 +25,16 @@ test("manager can open the daily risk briefing after secure sign-in", async ({ p
 
   const workspace = page.locator('aside[aria-label="Operations Manager workspace"]');
   await expect(workspace.getByRole("button")).toHaveCount(7);
-  await expect(page.locator(".control-kpi")).toHaveCount(4);
-  await expect(page.locator(".leader-card")).toHaveCount(3);
-  await expect(page.locator(".leader-line")).toHaveCount(6);
+  await expect(page.locator(".control-kpi")).toHaveCount(5);
+  await expect(page.locator(".manager-position-row")).toHaveCount(6);
   // The deterministic fixture is Friday, so the configured day shift starts
   // at 06:45 and produces a 15-minute opening bucket plus 11 hourly buckets.
   await expect(page.locator(".downtime-bars article")).toHaveCount(12);
 
   await workspace.getByRole("button", { name: "Team Leaders" }).click();
   await expect(page.getByRole("heading", { name: "Team Leaders & line control" })).toBeVisible();
+  await expect(page.locator(".manager-leader-progress-card")).toHaveCount(3);
+  await expect(page.locator(".manager-leader-progress-line")).toHaveCount(6);
   await workspace.getByRole("button", { name: "Daily plans" }).click();
   await expect(page.getByRole("heading", { name: "Daily plans" })).toBeVisible();
   await workspace.getByRole("button", { name: "Materials" }).click();

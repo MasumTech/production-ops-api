@@ -287,8 +287,8 @@ describe("manager console", () => {
     const summary = screen.getByRole("region", {
       name: "Operational summary",
     });
-    expect(summary.querySelectorAll(".control-kpi")).toHaveLength(4);
-    expect(summary.querySelectorAll(".app-icon")).toHaveLength(4);
+    expect(summary.querySelectorAll(".control-kpi")).toHaveLength(5);
+    expect(summary.querySelectorAll(".app-icon")).toHaveLength(5);
 
     expect(
       within(summary).getByText("64%"),
@@ -310,15 +310,14 @@ describe("manager console", () => {
     expect(within(priorities as HTMLElement).getByText("Line made safe")).toBeInTheDocument();
     expect(within(priorities as HTMLElement).queryByText(/conveyor reset/i)).not.toBeInTheDocument();
 
-    const coverage = screen.getByRole("region", { name: "Team Leaders and production lines" });
-    expect(within(coverage).getByText("Team Leader 1")).toBeInTheDocument();
-    expect(within(coverage).getByText("Team Leader 2")).toBeInTheDocument();
+    const coverage = screen.getByRole("heading", { name: "All lines · position now" }).closest("section") as HTMLElement;
+    expect(coverage.querySelectorAll(".manager-position-row")).toHaveLength(2);
     expect(within(coverage).getByText("Line 1")).toBeInTheDocument();
     expect(within(coverage).getByText("Line 2")).toBeInTheDocument();
     expect(within(coverage).queryByText("lead.one")).not.toBeInTheDocument();
 
-    await userEvent.click(within(coverage).getByRole("button", { name: "12 min downtime" }));
-    expect(screen.getByText("Filler sensor reset")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /12 minutes/ }));
+    expect(screen.getByRole("dialog", { name: "Edit downtime & description" })).toBeInTheDocument();
 
     expect(
       within(screen.getByRole("navigation", { name: "Manager sections" })).getByRole(
@@ -379,9 +378,8 @@ describe("manager console", () => {
 
     await actor.click(within(navigation).getByRole("button", { name: "Team Leaders" }));
     expect(screen.getByRole("heading", { name: "Team Leaders & line control" })).toBeInTheDocument();
-    const table = screen.getByRole("table");
-    expect(within(table).getByText("Stopped")).toBeInTheDocument();
-    expect(within(table).getByText("64%")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Open details for LINE-/ })).toHaveLength(2);
+    expect(screen.getByText("Team Leader 2")).toBeInTheDocument();
 
     await actor.click(within(navigation).getByRole("button", { name: "Daily plans" }));
     expect(screen.getByRole("heading", { name: "Daily plans" })).toBeInTheDocument();
@@ -565,16 +563,7 @@ describe("manager console", () => {
 
     expect(priorityBoard).not.toBeNull();
 
-    const table = within(
-      priorityBoard as HTMLElement,
-    ).getByRole("table");
-
-    expect(
-      within(table).getByText("Line 2"),
-    ).toBeInTheDocument();
-
-    expect(
-      within(table).queryByText("Line 1"),
-    ).not.toBeInTheDocument();
+    expect(within(priorityBoard as HTMLElement).getByRole("button", { name: "Open details for LINE-02" })).toBeInTheDocument();
+    expect(within(priorityBoard as HTMLElement).queryByRole("button", { name: "Open details for LINE-01" })).not.toBeInTheDocument();
   });
 });

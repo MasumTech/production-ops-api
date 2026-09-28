@@ -180,6 +180,7 @@ async function loadManagerData(
   const [
     assignments,
     planBlocks,
+    hourlyOutputs,
     breakOpportunities,
     breaks,
     updates,
@@ -191,6 +192,7 @@ async function loadManagerData(
   ] = await Promise.all([
     apiList<Assignment>(`/team-leader-assignments/?date=${operationalDate}&shift_type=${shiftType}`),
     apiList<DailyPlanBlock>(`/daily-plan-blocks/?date=${operationalDate}&shift_type=${shiftType}&ordering=sequence_number`),
+    apiList<HourlyOutput>(`/hourly-outputs/?date=${operationalDate}&shift_type=${shiftType}`),
     apiList<BreakOpportunity>(`/break-opportunities/?date=${operationalDate}&shift_type=${shiftType}`),
     apiList<BreakRecovery>(`/break-recoveries/?date=${operationalDate}&shift_type=${shiftType}`),
     apiList<LineUpdate>(`/hourly-line-updates/latest-status/?date=${operationalDate}&shift_type=${shiftType}`),
@@ -210,6 +212,7 @@ async function loadManagerData(
   return {
     assignments,
     planBlocks,
+    hourlyOutputs: hourlyOutputs.filter((item) => assignments.some((assignment) => assignment.id === item.assignment)),
     breakOpportunities,
     breaks,
     updates,
