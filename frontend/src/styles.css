@@ -10322,6 +10322,7 @@ td span {
 .manager-overview-primary-grid .overview-priorities__cta { align-self: flex-end; margin-top: auto; }
 .manager-workspace:has(.manager-position-board) > .hourly-downtime { margin-top: 0; }
 .manager-workspace:has(.manager-position-board) .downtime-chart-layout { grid-template-columns: minmax(0, 1fr) 230px; min-height: 220px; }
+.manager-workspace:has(.manager-position-board) .downtime-bars { grid-template-columns: repeat(12, minmax(0, 1fr)); }
 .manager-workspace:has(.manager-position-board) .downtime-bars button { height: 200px; }
 
 .manager-leader-progress-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
@@ -10344,7 +10345,7 @@ td span {
 .manager-leader-open-hours { min-height: 40px; margin-top: auto; padding: 6px 0 0; border: 0; color: #086eb5; background: transparent; font: inherit; font-size: .85rem; font-weight: 700; text-align: left; }
 
 .daily-plan-timeline-board { margin-top: 12px; }
-.daily-plan-axis { position: relative; display: block; height: 20px; min-width: 720px; }
+.daily-plan-axis { position: relative; display: block; height: 20px; min-width: 0; }
 .daily-plan-axis > span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
 .daily-plan-axis > span:first-child { transform: none; }
 .daily-plan-axis > span:last-child { transform: translateX(-100%); }
@@ -10397,4 +10398,7 @@ td span {
   .manager-output-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .manager-output-detail > header { flex-direction: column; }
   .manager-leader-progress-label { flex-wrap: wrap; }
+}
+@media (max-width: 760px) {
+  .daily-plan-axis { min-width: 720px; }
 }

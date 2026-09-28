@@ -30,6 +30,7 @@ test("manager progress views render at desktop width with recorded hourly detail
   await page.locator(".manager-output-open").first().click();
   await expect(page.locator(".manager-output-detail")).toBeVisible();
   await expect(page.locator(".manager-output-hour").first()).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: testInfo.outputPath("manager-progress-daily-plans-desktop.png"), animations: "disabled", fullPage: true });
 
   expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
