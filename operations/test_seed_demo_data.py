@@ -19,7 +19,16 @@ from operations.models import (
     DowntimeEvent,
     HourlyLineUpdate,
     HourlyOutput,
+    IdempotentRequest,
     OperationalEscalation,
+    OperationalEvent,
+    OperationalEventReadReceipt,
+    OperationalEvidence,
+    OperationalWorkerHeartbeat,
+    PilotApproval,
+    PilotFeedback,
+    PilotObservation,
+    PilotTrial,
     ProductionAsset,
     ProductionLine,
     ProductMaterialReadiness,
@@ -32,6 +41,7 @@ from operations.models import (
 DEMO_DATE = "2026-09-02"
 DEMO_PASSWORD = f"test-{uuid4().hex}"
 FULL_RESET_CONFIRMATION = "DELETE-ALL-LOCAL-DATA"
+SITE_TIMEZONE = ZoneInfo("Europe/London")
 
 
 def run_seed(**options):
@@ -58,7 +68,11 @@ def demo_counts():
             shift__production_line__code__startswith="DEMO-"
         ).count(),
         "plan_blocks": DailyPlanBlock.objects.filter(**assignment_filter).count(),
+        "hourly_outputs": HourlyOutput.objects.filter(**assignment_filter).count(),
         "updates": HourlyLineUpdate.objects.filter(**assignment_filter).count(),
+        "evidence": OperationalEvidence.objects.filter(
+            hourly_update__assignment__production_line__code__startswith="DEMO-"
+        ).count(),
         "materials": ProductMaterialReadiness.objects.filter(
             **assignment_filter
         ).count(),
@@ -74,6 +88,19 @@ def demo_counts():
         ).count(),
         "incidents": QualityIncident.objects.filter(
             shift__production_line__code__startswith="DEMO-"
+        ).count(),
+        "pilot_trials": PilotTrial.objects.filter(name__startswith="DEMO-").count(),
+        "pilot_observations": PilotObservation.objects.filter(
+            trial__name__startswith="DEMO-"
+        ).count(),
+        "pilot_approvals": PilotApproval.objects.filter(
+            trial__name__startswith="DEMO-"
+        ).count(),
+        "pilot_feedback": PilotFeedback.objects.filter(
+            trial__name__startswith="DEMO-"
+        ).count(),
+        "idempotent_requests": IdempotentRequest.objects.filter(
+            user__username__startswith="demo."
         ).count(),
     }
 
@@ -95,13 +122,20 @@ def test_seed_demo_data_creates_complete_dataset():
         "shifts": 6,
         "downtime_events": 7,
         "plan_blocks": 30,
+        "hourly_outputs": 66,
         "updates": 8,
+        "evidence": 1,
         "materials": 4,
         "escalations": 6,
         "breaks": 2,
-        "break_opportunities": 2,
+        "break_opportunities": 3,
         "handovers": 1,
         "incidents": 1,
+        "pilot_trials": 4,
+        "pilot_observations": 5,
+        "pilot_approvals": 16,
+        "pilot_feedback": 6,
+        "idempotent_requests": 1,
     }
 
     for shift in Shift.objects.filter(date=DEMO_DATE, shift_type="day"):
@@ -171,9 +205,9 @@ def test_seed_demo_data_creates_complete_dataset():
         .first()
     )
     assert weekday_first_block is not None
-    assert weekday_first_block.planned_start_at.astimezone().time().replace(
-        tzinfo=None
-    ) == time(6, 45)
+    assert weekday_first_block.planned_start_at.astimezone(
+        SITE_TIMEZONE
+    ).time() == time(6, 45)
     assert (
         DailyPlanBlock.objects.filter(
             assignment__production_line__code="DEMO-LINE-01",
@@ -191,21 +225,36 @@ def test_seed_demo_data_creates_complete_dataset():
         "break_block",
         "source_update",
     ).get(status=BreakOpportunity.Status.SUGGESTED)
-    assert suggested_break.assignment.production_line.code == "DEMO-LINE-02"
-    assert suggested_break.break_block.break_number == 1
-    assert suggested_break.fault_at.astimezone().time().replace(tzinfo=None) == time(
-        9, 55
+    assert suggested_break.assignment.production_line.code == "DEMO-LINE-04"
+    assert suggested_break.break_block.break_number == 2
+    assert suggested_break.fault_at.astimezone(SITE_TIMEZONE).time() == time(16, 15)
+    assert suggested_break.suggested_start_at.astimezone(SITE_TIMEZONE).time() == time(
+        16, 20
     )
-    assert suggested_break.suggested_start_at.astimezone().time().replace(
-        tzinfo=None
-    ) == time(10, 0)
-    assert suggested_break.expected_return_at.astimezone().time().replace(
-        tzinfo=None
-    ) == time(10, 40)
-    assert suggested_break.source_update.issue_summary == "Printer fault"
-    assert suggested_break.source_update.next_update_due_at.astimezone().time().replace(
-        tzinfo=None
-    ) == time(10, 35)
+    assert suggested_break.expected_return_at.astimezone(SITE_TIMEZONE).time() == time(
+        17, 0
+    )
+    assert suggested_break.source_update.issue_summary == (
+        "Conveyor restart remains below target"
+    )
+    assert suggested_break.source_update.next_update_due_at.astimezone(
+        SITE_TIMEZONE
+    ).time() == time(16, 45)
+
+    day_four_recovery = BreakOpportunity.objects.get(
+        assignment__production_line__code="DEMO-LINE-02",
+        status=BreakOpportunity.Status.RECOVERED,
+    )
+    assert day_four_recovery.fault_at.astimezone(SITE_TIMEZONE).time() == time(10, 8)
+    assert day_four_recovery.expected_return_at.astimezone(
+        SITE_TIMEZONE
+    ).time() == time(10, 48)
+    assert day_four_recovery.checks_completed_at.astimezone(
+        SITE_TIMEZONE
+    ).time() == time(10, 53)
+    assert day_four_recovery.run_resumed_at.astimezone(SITE_TIMEZONE).time() == time(
+        10, 53
+    )
     assert (
         sum(
             event.duration_minutes
@@ -226,11 +275,13 @@ def test_seed_demo_data_creates_complete_dataset():
         expected_available_at=None,
     ).first()
     assert material_eta is not None
-    assert material_eta.expected_available_at.astimezone().date() == date(2026, 9, 2)
+    assert material_eta.expected_available_at.astimezone(SITE_TIMEZONE).date() == date(
+        2026, 9, 2
+    )
 
     assert all(
-        item.planned_start_at.astimezone().date() == date(2026, 9, 2)
-        and item.expected_return_at.astimezone().date() == date(2026, 9, 2)
+        item.planned_start_at.astimezone(SITE_TIMEZONE).date() == date(2026, 9, 2)
+        and item.expected_return_at.astimezone(SITE_TIMEZONE).date() == date(2026, 9, 2)
         for item in BreakRecovery.objects.all()
     )
     assert list(
@@ -280,9 +331,7 @@ def test_seed_demo_data_creates_complete_dataset():
     assert short_material.responsible_role == "Materials"
     assert short_material.expected_action == "Decision due 10:20"
     assert short_material.next_action == "Confirm replenishment"
-    assert short_material.needed_by_at.astimezone().time().replace(tzinfo=None) == time(
-        10, 30
-    )
+    assert short_material.needed_by_at.astimezone(SITE_TIMEZONE).time() == time(10, 30)
     assert short_material.notes == "Carton stock below next-hour demand."
 
     held_material = ProductMaterialReadiness.objects.get(
@@ -333,14 +382,49 @@ def test_seed_demo_data_creates_complete_dataset():
 
     handover = ShiftHandover.objects.get()
     assert handover.status == ShiftHandover.Status.PENDING
-    assert handover.handed_over_at.astimezone().date() == date(2026, 9, 2)
+    assert handover.handed_over_at.astimezone(SITE_TIMEZONE).date() == date(2026, 9, 2)
     assert handover.escalations.filter(
         status=OperationalEscalation.Status.OPEN,
     ).exists()
 
+    assert set(PilotTrial.objects.values_list("status", flat=True)) == {
+        PilotTrial.Status.PLANNED,
+        PilotTrial.Status.ACTIVE,
+        PilotTrial.Status.COMPLETED,
+        PilotTrial.Status.STOPPED,
+    }
+    assert set(PilotApproval.objects.values_list("decision", flat=True)) == {
+        PilotApproval.Decision.PENDING,
+        PilotApproval.Decision.APPROVED,
+        PilotApproval.Decision.CHANGES_REQUESTED,
+    }
+    assert set(PilotFeedback.objects.values_list("category", flat=True)) == {
+        PilotFeedback.Category.USABILITY,
+        PilotFeedback.Category.WORKFLOW,
+        PilotFeedback.Category.SAFETY_QUALITY,
+        PilotFeedback.Category.TECHNICAL,
+    }
+    assert OperationalEvent.objects.filter(
+        severity=OperationalEvent.Severity.CRITICAL
+    ).exists()
+    assert OperationalEventReadReceipt.objects.count() >= 2
+    heartbeat = OperationalWorkerHeartbeat.objects.get(
+        worker_name="operational-reminders"
+    )
+    assert heartbeat.last_completed_at is not None
+    assert heartbeat.last_error == ""
+
     assert "Demo dataset is ready." in output
     assert "Operational date: 2026-09-02" in output
     assert DEMO_PASSWORD not in output
+
+    verification_output = StringIO()
+    call_command(
+        "verify_demo_data",
+        date=DEMO_DATE,
+        stdout=verification_output,
+    )
+    assert "All 23 showcase checks passed." in verification_output.getvalue()
 
 
 @pytest.mark.django_db
@@ -381,8 +465,7 @@ def test_seed_demo_day_shift_start_follows_weekday_weekend_rule(
     )
     assert first_block is not None
     assert (
-        first_block.planned_start_at.astimezone().time().replace(tzinfo=None)
-        == expected_start
+        first_block.planned_start_at.astimezone(SITE_TIMEZONE).time() == expected_start
     )
 
 
