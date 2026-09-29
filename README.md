@@ -736,7 +736,7 @@ step:
 
 ```bash
 export DEMO_SEED_PASSWORD="Choose-A-Local-Demo-Password"
-./scripts/build_showcase_database.sh
+bash scripts/build_showcase_database.sh
 ```
 
 The complete record inventory, role-by-role screen walkthrough, interaction
