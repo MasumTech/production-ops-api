@@ -87,7 +87,7 @@ test("Team Leader escalation becomes visible to Operations Manager", async ({
   await expect(
     page.getByRole("heading", { name: "Team Leaders & line control" }),
   ).toBeVisible();
-  const lineOneRow = page.getByRole("row", {
+  const lineOneRow = page.getByRole("button", {
     name: "Open details for DEMO-LINE-01",
   });
   await lineOneRow.click();

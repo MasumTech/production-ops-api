@@ -1,5 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { DailyRiskBriefingPanel } from "./DailyRiskBriefingPanel";
+import { completedFractionForBlock } from "./dailyPlanMath";
+import {
+  aggregateManagerPosition,
+  buildManagerProgress,
+  managerSnapshotMinutes,
+} from "./managerProgress";
 import { LossAnalyticsPanel } from "./LossAnalyticsPanel";
 import { PilotAdminPanel } from "./PilotAdminPanel";
 import { EmptyState, ErrorBanner, StatusPill } from "../components";
@@ -9,7 +15,6 @@ import { NotificationCentre } from "../NotificationCentre";
 import { AppIcon, type AppIconName } from "../AppIcon";
 import { apiRequest } from "../api";
 import {
-  elapsedShiftFraction,
   formatClockMinutes,
   formatScheduleClock,
   getShiftWindow,
@@ -432,6 +437,7 @@ export function ManagerConsole({
   const [shiftTimeSaving, setShiftTimeSaving] = useState(false);
   const [shiftTimeMessage, setShiftTimeMessage] = useState("");
   const [selectedPlanBlock, setSelectedPlanBlock] = useState<DailyPlanBlock | null>(null);
+  const [expandedPlanLine, setExpandedPlanLine] = useState<number | null>(null);
   const [materialsTab, setMaterialsTab] = useState<"materials" | "actions">("materials");
   const [materialStatusFilter, setMaterialStatusFilter] = useState<MaterialStatus | "all">("all");
   const [materialLineFilter, setMaterialLineFilter] = useState("all");
@@ -515,6 +521,26 @@ export function ManagerConsole({
   const shiftLabel = `${configuredShiftStart}–${configuredShiftEnd}`;
   const planAxisTicks = timelineTicks(scheduleWindow);
   const liveView = viewMode === "live" && !isHistorical;
+  const snapshotMinutes = managerSnapshotMinutes(
+    data.updates,
+    rows,
+    scheduleWindow,
+    liveView,
+  );
+  const progressLines = buildManagerProgress(
+    rows,
+    data.planBlocks ?? [],
+    data.hourlyOutputs ?? [],
+    scheduleWindow,
+    snapshotMinutes,
+  );
+  const aggregatePosition = aggregateManagerPosition(progressLines);
+  const snapshotFraction = Math.max(0, Math.min(100,
+    ((snapshotMinutes - scheduleWindow.startMinutes) /
+      Math.max(1, scheduleWindow.endMinutes - scheduleWindow.startMinutes)) * 100,
+  ));
+  const snapshotInsideShift = snapshotMinutes >= scheduleWindow.startMinutes &&
+    snapshotMinutes <= scheduleWindow.endMinutes;
   const recoveryOpportunities = (data.breakOpportunities ?? []).filter((item) => recoveryLineFilter === "all" || String(item.production_line) === recoveryLineFilter);
   const recordedDowntime = data.downtimeEvents.filter((event) => recoveryLineFilter === "all" || String(event.production_line) === recoveryLineFilter).reduce((total, event) => total + event.duration_minutes, 0);
   const recoveredMinutes = recoveryOpportunities.filter((item) => item.status === "recovered" && item.checks_completed_at).reduce((total, item) => total + Math.max(0, Math.round((new Date(item.checks_completed_at!).getTime() - new Date(item.suggested_start_at).getTime()) / 60000)), 0);
@@ -526,6 +552,7 @@ export function ManagerConsole({
     setSelectedDowntimeEventId(null);
     setSelectedMaterialId(null);
     setSelectedPlanBlock(null);
+    setExpandedPlanLine(null);
     setSelectedRecovery(null);
   }, [operationalDate, shiftPattern]);
 
@@ -921,6 +948,7 @@ export function ManagerConsole({
                   <p>{shiftPattern === "day" ? "Day" : "Night"} shift {shiftLabel}&nbsp;&nbsp; | &nbsp;&nbsp;{liveView && liveState === "live" ? "Live data" : "Historical data"}</p>
                   {isHistorical ? <span className="historical-badge">Historical view</span> : null}
                 </div>
+                <span className="manager-snapshot-badge">{liveView ? "Now" : "Snapshot"} {formatClockMinutes(snapshotMinutes)}</span>
               </section>
 
               <section className="manager-kpis" aria-label="Operational summary">
@@ -935,6 +963,10 @@ export function ManagerConsole({
                 <article className="control-kpi">
                   <span className="control-kpi__icon control-kpi__icon--blue control-kpi__target"><AppIcon name="chart" size={31} /></span>
                   <div><strong>{Math.round(planCompletion)}%</strong><span>Plan complete</span><small>{NUMBER.format(summary.total_actual_output)} / {NUMBER.format(summary.total_planned_output)} planned cases</small></div>
+                </article>
+                <article className="control-kpi">
+                  <span className="control-kpi__icon control-kpi__icon--green"><AppIcon name="chart" size={31} /></span>
+                  <div><strong>{aggregatePosition?.due ? `${Math.round(aggregatePosition.actual / aggregatePosition.due * 100)}%` : "—"}</strong><span>Target due now</span><small>{aggregatePosition ? `${NUMBER.format(aggregatePosition.actual)} / ${NUMBER.format(aggregatePosition.due)} due` : "Target unavailable for some lines"}</small></div>
                 </article>
                 <article className="control-kpi control-kpi--downtime">
                   <span className="control-kpi__icon control-kpi__icon--red"><AppIcon name="clock" size={31} /></span>
@@ -954,58 +986,28 @@ export function ManagerConsole({
                 <button className="attention-strip__open" type="button" aria-label="Open critical line control" onClick={() => setView("lines")}>›</button>
               </section>
 
-              <section className="manager-overview-board" aria-labelledby="coverage-board-title">
-                <div className="manager-section-heading">
-                  <div>
-                    <h2 id="coverage-board-title">Team Leaders and production lines</h2>
-                    <p>Live status, plan progress and next check for each line</p>
+              <div className="manager-overview-primary-grid">
+              <section className="manager-position-board" aria-labelledby="coverage-board-title">
+                <header className="manager-position-head">
+                  <div><h2 id="coverage-board-title">All lines · position now</h2><p>Green = done · marker = target due now · track = full-shift plan</p></div>
+                  <span>{formatClockMinutes(snapshotMinutes)}</span>
+                </header>
+                {progressLines.length ? progressLines.map(({ row, actual, expectedNow, delta }) => (
+                  <div className="manager-position-row" key={row.assignment.id}>
+                    <div><strong>{displayLine(row.assignment.production_line_code)}</strong><small>{row.update?.current_product || row.assignment.production_line_name}</small></div>
+                    <div className="manager-position-progress">
+                      <div className="manager-position-track" aria-label={`${displayLine(row.assignment.production_line_code)}: ${actual === null ? "output unavailable" : `${NUMBER.format(actual)} done`}, ${expectedNow === null ? "target unavailable" : `${NUMBER.format(expectedNow)} due now`}`}>
+                        <span style={{ width: `${row.shift?.planned_output && actual !== null ? Math.min(100, actual / row.shift.planned_output * 100) : 0}%` }} />
+                        {row.shift?.planned_output && expectedNow !== null ? <i style={{ left: `${Math.min(100, expectedNow / row.shift.planned_output * 100)}%` }} /> : null}
+                      </div>
+                      <small>{actual === null ? "Output unavailable" : `${NUMBER.format(actual)} done`} / {expectedNow === null ? "target unavailable" : `${NUMBER.format(expectedNow)} due`}</small>
+                    </div>
+                    <strong className={delta === null ? "" : delta >= 0 ? "metric-ahead" : "metric-behind"}>{delta === null ? "Target unavailable" : `${NUMBER.format(Math.abs(delta))} ${delta >= 0 ? "ahead" : "behind"}`}</strong>
                   </div>
-                </div>
-                <div className="manager-leader-grid">
-                  {hierarchyGroups.map(({ teamLeaderId, lines }, leaderIndex) => (
-                    <article className="leader-card" key={teamLeaderId}>
-                      <header className="leader-card__header">
-                        <div>
-                          <span className="leader-card__icon">
-                            <AppIcon
-                              name={(["users", "settings", "shield"] as AppIconName[])[leaderIndex] ?? "users"}
-                              size={24}
-                            />
-                          </span>
-                          <div>
-                            <strong>Team Leader {leaderIndex + 1}</strong>
-                            <span>{(["Operations", "Engineering", "QA"] as const)[leaderIndex] ?? "Operations"} &nbsp;·&nbsp; {lines.map((line) => displayLine(line.production_line_code)).join(", ")}</span>
-                          </div>
-                        </div>
-                        <button type="button" onClick={() => setView("lines")}>View details <span aria-hidden="true">→</span></button>
-                      </header>
-                      {lines.map((line) => {
-                        const row = rows.find((item) => item.assignment.id === line.id);
-                        const percent = planPercent(row?.shift ?? null);
-                        const status = row?.update?.status ?? "missing";
-                        const statusLabel = status === "green" ? "Running" : status === "amber" ? "Behind" : status === "red" ? "Stopped" : "No update";
-                        return <div className={`leader-line leader-line--${status}`} key={line.id}>
-                          <div className="leader-line__top">
-                            <div><strong>{displayLine(line.production_line_code)}</strong><span>{row?.update?.current_product || "Planned production"}</span></div>
-                            <span className={`status-dot status-text status-dot--${status}`} aria-label={`Status: ${statusLabel}`}>{statusLabel}</span>
-                            <button type="button" className="downtime-link" aria-label={`${lineDowntime(data.downtimeEvents, line.production_line)} min downtime`} onClick={() => {
-                              setSelectedDowntimeLine(line.production_line);
-                              const target = document.getElementById("hourly-downtime-title");
-                              if (target && typeof target.scrollIntoView === "function") target.scrollIntoView({ behavior: "smooth" });
-                            }}>
-                              <strong>{lineDowntime(data.downtimeEvents, line.production_line)} min</strong><span>downtime</span>
-                            </button>
-                          </div>
-                          <progress value={percent ?? 0} max="100" />
-                          <div className="leader-line__output"><span>{percent ?? 0}% complete</span><span>{NUMBER.format(row?.shift?.actual_output ?? 0)} / {NUMBER.format(row?.shift?.planned_output ?? 0)} cases</span></div>
-                        </div>;
-                      })}
-                    </article>
-                  ))}
-                </div>
+                )) : <p>No assigned lines for this shift.</p>}
+                <button type="button" className="manager-position-link" onClick={() => setView("plans")}>Open hour-by-hour plan →</button>
               </section>
 
-              <div className="overview-lower-grid">
               <section className="overview-priorities" aria-labelledby="overview-priorities-title">
                 <header><span><AppIcon name="clipboard" size={24} /></span><div><h2 id="overview-priorities-title">Suggested priorities</h2><p>Based on current performance and risks</p></div></header>
                 {managerPriorities.length ? <ol>
@@ -1013,6 +1015,7 @@ export function ManagerConsole({
                 </ol> : <p className="overview-priorities__empty">No immediate intervention is required for this shift.</p>}
                 <button type="button" className="button button--primary overview-priorities__cta" onClick={() => setView("briefing")}>View full briefing <span aria-hidden="true">→</span></button>
               </section>
+              </div>
 
               <section className="hourly-downtime" aria-labelledby="hourly-downtime-title">
                 <div className="manager-section-heading">
@@ -1041,7 +1044,6 @@ export function ManagerConsole({
                   </aside>
                 </div>
               </section>
-              </div>
 
               {selectedDowntimeEvent && (downtimeEditorOpen || selectedDowntimeEventId) ? <div className="downtime-modal-backdrop" role="presentation">
                 <section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="downtime-editor-title">
@@ -1092,52 +1094,30 @@ export function ManagerConsole({
           </div>
 
           {visibleRows.length ? (
-            <div className="table-card manager-table-card">
-              <div className="responsive-table">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Line &amp; product</th>
-                      <th>Team Leader</th>
-                      <th>Status</th>
-                      <th>Plan complete</th>
-                      <th>Downtime</th>
-                      <th>Issues</th>
-                      <th><span className="sr-only">Open</span></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visibleRows.map((row) => (
-                      <tr
-                        key={row.assignment.id}
-                        className={`manager-row manager-row--${row.attentionLevel}`}
-                        tabIndex={0}
-                        aria-label={`Open details for ${row.assignment.production_line_code}`}
-                        onClick={() => setSelectedLineId(row.assignment.id)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            setSelectedLineId(row.assignment.id);
-                          }
-                        }}
-                      >
-                        <td data-label="Line & product">
-                          <strong>{displayLine(row.assignment.production_line_code)}</strong>
-                          <span>{row.update?.current_product || row.assignment.production_line_name}</span>
-                        </td>
-                        <td data-label="Team Leader"><strong>{row.assignment.team_leader_username || `TL${row.assignment.team_leader}`}</strong></td>
-                        <td data-label="Status">
-                          <span className={`status-dot status-text status-dot--${row.update?.status || "missing"}`}>{row.update?.status === "green" ? "Running" : row.update?.status === "amber" ? "Behind" : row.update?.status === "red" ? "Stopped" : "No update"}</span>
-                        </td>
-                        <td data-label="Plan complete"><div className="team-plan-cell"><strong>{planPercent(row.shift) ?? 0}%</strong><progress value={planPercent(row.shift) ?? 0} max="100" /></div></td>
-                        <td data-label="Downtime"><strong>{lineDowntime(data.downtimeEvents, row.assignment.production_line)} min</strong></td>
-                        <td data-label="Issues"><strong className={row.openActions.length ? "issue-count" : ""}>{row.openActions.length}</strong></td>
-                        <td className="team-row-chevron" aria-hidden="true">›</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            <div className="manager-leader-progress-grid">
+              {hierarchyGroups.map(({ teamLeaderId }, leaderIndex) => {
+                const leaderLines = visibleRows.filter((row) => row.assignment.team_leader === teamLeaderId);
+                if (!leaderLines.length) return null;
+                return <article className="manager-leader-progress-card" key={teamLeaderId}>
+                  <header><div><h2>Team Leader {leaderIndex + 1}</h2><p>{(["Operations", "Engineering", "QA"] as const)[leaderIndex] ?? "Operations"} · {leaderLines.map((row) => displayLine(row.assignment.production_line_code)).join(" & ")}</p></div><span>{leaderLines.length} assigned line{leaderLines.length === 1 ? "" : "s"}</span></header>
+                  {leaderLines.map((row) => {
+                    const progress = progressLines.find((item) => item.row.assignment.id === row.assignment.id);
+                    const recentHours = progress?.hours.filter((hour) => !hour.future).slice(-4) ?? [];
+                    return <div className="manager-leader-progress-line" key={row.assignment.id}>
+                      <div className="manager-leader-progress-label"><button type="button" aria-label={`Open details for ${row.assignment.production_line_code}`} onClick={() => setSelectedLineId(row.assignment.id)}>{displayLine(row.assignment.production_line_code)} · {row.update?.current_product || row.assignment.production_line_name}</button><strong className={progress?.delta === null || progress?.delta === undefined ? "" : progress.delta >= 0 ? "metric-ahead" : "metric-behind"}>{progress?.delta === null || progress?.delta === undefined ? "Target unavailable" : `${NUMBER.format(Math.abs(progress.delta))} ${progress.delta >= 0 ? "ahead" : "behind"}`}</strong></div>
+                      <p>{row.update?.status === "red" ? "Stopped" : row.update?.status === "amber" ? "Behind" : row.update?.status === "green" ? "Running" : "No update"} · {progress?.actual === null || progress?.actual === undefined ? "Output unavailable" : `${NUMBER.format(progress.actual)} / ${NUMBER.format(row.shift?.planned_output ?? 0)} shift plan`} · {lineDowntime(data.downtimeEvents, row.assignment.production_line)} min downtime</p>
+                      <div className="manager-leader-hours">
+                        {recentHours.map((hour) => <div key={hour.label}>
+                          <div className="manager-leader-hour-track"><i style={{ width: `${hour.done !== null && hour.target ? Math.min(100, hour.done / hour.target * 100) : 0}%` }} /></div>
+                          <small>{hour.current ? formatClockMinutes(snapshotMinutes) : hour.label.split("–")[0]}</small><span>{hour.done === null ? "—" : NUMBER.format(hour.done)} / {hour.dueNow === null ? "—" : NUMBER.format(hour.current ? hour.dueNow : hour.target ?? hour.dueNow)}</span>
+                        </div>)}
+                        {!recentHours.length ? <small>No hours due yet</small> : null}
+                      </div>
+                    </div>;
+                  })}
+                  <button type="button" className="manager-leader-open-hours" onClick={() => { setPlanLineFilter("all"); setExpandedPlanLine(leaderLines[0].assignment.id); setView("plans"); }}>Inspect hourly details →</button>
+                </article>;
+              })}
             </div>
           ) : (
             <EmptyState
@@ -1198,7 +1178,7 @@ export function ManagerConsole({
               <ManagerViewIntro
                 eyebrow={isHistorical ? "Historical snapshot" : "Today&apos;s schedule"}
                 title="Daily plans"
-                body={isHistorical ? `Read-only approved schedule and recorded output for ${controlBoardDate(operationalDate)}.` : "Compare the approved schedule with recorded output. Production blocks are blue; planned breaks are grey."}
+                body={isHistorical ? `Read-only approved schedule and recorded output for ${controlBoardDate(operationalDate)}.` : "Compare the approved schedule with recorded output, target due now and each recorded hour."}
               />
               <div className="daily-plan-controls">
                 <select aria-label="Filter daily plans by line" value={planLineFilter} onChange={(event) => setPlanLineFilter(event.target.value)}><option value="all">All lines</option>{rows.map((row) => <option key={row.assignment.id} value={row.assignment.production_line}>{displayLine(row.assignment.production_line_code)}</option>)}</select>
@@ -1208,28 +1188,54 @@ export function ManagerConsole({
               <section className="daily-plan-timeline-board" aria-label="Daily schedule timeline">
                 <header className="daily-plan-timeline-header">
                   <div><strong>Shift schedule</strong><span>{shiftLabel}</span></div>
-                  <div className="daily-plan-legend"><span className="legend-production">Production</span><span className="legend-break">Planned break</span></div>
+                  <div className="daily-plan-legend"><span className="legend-done">Done</span><span className="legend-production">Planned output left</span><span className="legend-break">Planned break</span></div>
                 </header>
-                <div className="daily-plan-axis" aria-hidden="true">{planAxisTicks.map((minutes) => <span key={minutes}>{formatClockMinutes(minutes)}</span>)}</div>
+                <div className="daily-plan-axis" aria-hidden="true">{planAxisTicks.map((minutes, index) => index === 1 && minutes - planAxisTicks[0] < 30 ? null : <span key={minutes} style={{ left: `${(minutes - scheduleWindow.startMinutes) / Math.max(1, scheduleWindow.endMinutes - scheduleWindow.startMinutes) * 100}%` }}>{formatClockMinutes(minutes)}</span>)}</div>
                 <div className="daily-plan-rows">
                   {planRows.map((row) => {
                     const blocks = (data.planBlocks ?? []).filter((block) => block.assignment === row.assignment.id).sort((left, right) => left.sequence_number - right.sequence_number);
+                    const progress = progressLines.find((item) => item.row.assignment.id === row.assignment.id);
                     return <article className="daily-plan-row" key={row.assignment.id}>
-                      <div className="daily-plan-row-label"><strong>{displayLine(row.assignment.production_line_code)}</strong><span>{row.update?.current_product || "Planned production"}</span></div>
+                      <div className="daily-plan-row-label"><strong>{displayLine(row.assignment.production_line_code)}</strong><span>{progress?.actual === null || progress?.actual === undefined ? "Output unavailable" : `${NUMBER.format(progress.actual)} done`}</span></div>
                       <div className="daily-plan-track">
                         {blocks.length ? blocks.map((block) => {
-                          return <button type="button" className={`daily-plan-block daily-plan-block--${block.block_type}`} style={timelineStyle(block.planned_start_at, block.planned_end_at, scheduleWindow)} key={block.id} onClick={() => setSelectedPlanBlock(block)}>
+                          return <button type="button" className={`daily-plan-block daily-plan-block--${block.block_type}`} style={{ ...timelineStyle(block.planned_start_at, block.planned_end_at, scheduleWindow), "--manager-plan-done": `${completedFractionForBlock(block, blocks, scheduleWindow, row.shift ?? undefined)}%` } as CSSProperties} key={block.id} onClick={() => setSelectedPlanBlock(block)}>
                             <strong>{block.block_type === "break" ? `Break ${block.break_number ?? ""}` : block.product_name}</strong><span>{formatScheduleClock(block.planned_start_at)} – {formatScheduleClock(block.planned_end_at)}</span>
                           </button>;
                         }) : <span className="daily-plan-empty">No plan blocks recorded</span>}
+                        {snapshotInsideShift ? <i className="manager-plan-now" style={{ left: `${snapshotFraction}%` }} aria-label={`${liveView ? "Now" : "Snapshot"} ${formatClockMinutes(snapshotMinutes)}`} /> : null}
                       </div>
                     </article>;
                   })}
                 </div>
+                {snapshotInsideShift && planRows.length ? <div className="manager-plan-now-label">{liveView ? "Now" : "Snapshot"} {formatClockMinutes(snapshotMinutes)}</div> : null}
               </section>
               <section className="daily-plan-output-table" aria-label="Daily plan output table">
                 <h2>Output by line</h2>
-                <div className="responsive-table"><table><thead><tr><th>Line</th><th>Planned</th><th>Actual</th><th>Full-day completion</th><th>Position now</th></tr></thead><tbody>{planRows.map((row) => { const delta = (row.shift?.actual_output ?? 0) - Math.round((row.shift?.planned_output ?? 0) * elapsedShiftFraction(scheduleWindow)); return <tr key={row.assignment.id}><td>{displayLine(row.assignment.production_line_code)}</td><td>{NUMBER.format(row.shift?.planned_output ?? 0)}</td><td>{NUMBER.format(row.shift?.actual_output ?? 0)}</td><td>{planPercent(row.shift) ?? 0}%</td><td className={delta < 0 ? "metric-behind" : "metric-ahead"}>{delta < 0 ? `${NUMBER.format(Math.abs(delta))} behind` : `${NUMBER.format(delta)} ahead`}</td></tr>; })}</tbody></table></div>
+                <p>Select a line for hourly target, recorded done and short.</p>
+                <div className="responsive-table"><table><thead><tr><th>Line</th><th>Planned</th><th>Actual</th><th>Full-day completion</th><th>Position now</th></tr></thead><tbody>{planRows.map((row) => {
+                  const progress = progressLines.find((item) => item.row.assignment.id === row.assignment.id);
+                  const expanded = expandedPlanLine === row.assignment.id;
+                  const delta = progress?.delta ?? null;
+                  return <Fragment key={row.assignment.id}>
+                    <tr className={expanded ? "manager-output-selected" : ""}>
+                      <td><button type="button" className="manager-output-open" aria-expanded={expanded} aria-controls={`manager-hours-${row.assignment.id}`} onClick={() => setExpandedPlanLine(expanded ? null : row.assignment.id)}>{displayLine(row.assignment.production_line_code)} {expanded ? "▴" : "▾"}</button><small>{row.update?.current_product || row.assignment.production_line_name}</small></td>
+                      <td>{row.shift ? NUMBER.format(row.shift.planned_output) : "—"}</td>
+                      <td>{progress?.actual === null || progress?.actual === undefined ? "—" : NUMBER.format(progress.actual)}</td>
+                      <td>{planPercent(row.shift) === null ? "—" : `${planPercent(row.shift)}%`}</td>
+                      <td className={delta === null ? "" : delta < 0 ? "metric-behind" : "metric-ahead"}>{delta === null ? "Target unavailable" : `${NUMBER.format(Math.abs(delta))} ${delta < 0 ? "behind" : "ahead"}`}</td>
+                    </tr>
+                    {expanded ? <tr className="manager-output-detail-row"><td colSpan={5}><div id={`manager-hours-${row.assignment.id}`} className="manager-output-detail" aria-label={`${displayLine(row.assignment.production_line_code)} hourly details`}>
+                      <header><div><h3>{displayLine(row.assignment.production_line_code)} · Hourly details</h3><p>Break-aware target · recorded hours only · partial hour due by {formatClockMinutes(snapshotMinutes)}</p></div><span>{progress?.expectedNow ? `${Math.round((progress.actual ?? 0) / progress.expectedNow * 100)}% of target due now` : "Target unavailable"}</span></header>
+                      <div className="manager-output-facts"><div><small>Actual now</small><strong>{progress?.actual === null || progress?.actual === undefined ? "—" : NUMBER.format(progress.actual)}</strong></div><div><small>Target due now</small><strong>{progress?.expectedNow === null || progress?.expectedNow === undefined ? "—" : NUMBER.format(progress.expectedNow)}</strong></div><div><small>Position now</small><strong>{delta === null ? "—" : `${NUMBER.format(Math.abs(delta))} ${delta < 0 ? "behind" : "ahead"}`}</strong></div><div><small>Left in shift</small><strong>{row.shift && progress?.actual !== null && progress?.actual !== undefined ? NUMBER.format(Math.max(0, row.shift.planned_output - progress.actual)) : "—"}</strong></div></div>
+                      <div className="manager-output-hours">{progress?.hours.map((hour) => {
+                        const short = hour.done !== null && hour.dueNow !== null ? Math.max(0, hour.dueNow - hour.done) : null;
+                        return <div className={`manager-output-hour${hour.current ? " is-current" : ""}`} key={hour.label}><strong>{hour.label}</strong><div className="manager-output-hour-track"><i style={{ width: `${hour.target && hour.done !== null ? Math.min(100, hour.done / hour.target * 100) : 0}%` }} /></div><small>{hour.breakMinutes ? `${hour.breakMinutes}m break · ` : ""}T {hour.target === null ? "—" : NUMBER.format(hour.current ? hour.dueNow ?? 0 : hour.target)} · D {hour.done === null ? "—" : NUMBER.format(hour.done)} · S {short === null ? "—" : NUMBER.format(short)}</small></div>;
+                      })}</div>
+                      {progress && !progress.hours.some((hour) => hour.done !== null) ? <p>Hourly actuals have not been recorded for this line. Done and short are unavailable.</p> : null}
+                    </div></td></tr> : null}
+                  </Fragment>;
+                })}</tbody></table></div>
               </section>
               {selectedPlanBlock ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="plan-block-title"><header><div><span className="eyebrow">Schedule detail</span><h2 id="plan-block-title">{selectedPlanBlock.block_type === "break" ? `Planned break ${selectedPlanBlock.break_number ?? ""}` : selectedPlanBlock.product_name}</h2></div><button type="button" aria-label="Close plan detail" onClick={() => setSelectedPlanBlock(null)}>×</button></header><dl className="plan-block-facts"><div><dt>Start</dt><dd>{formatScheduleClock(selectedPlanBlock.planned_start_at)}</dd></div><div><dt>End</dt><dd>{formatScheduleClock(selectedPlanBlock.planned_end_at)}</dd></div><div><dt>Target</dt><dd>{selectedPlanBlock.target_units_per_hour ?? "—"} / hour</dd></div><div><dt>Quantity</dt><dd>{NUMBER.format(selectedPlanBlock.planned_units)}</dd></div><div><dt>Materials</dt><dd>{data.materials.filter((item) => item.assignment === selectedPlanBlock.assignment && item.sequence_number === selectedPlanBlock.sequence_number).map((item) => item.product_name).join(", ") || "No material record"}</dd></div></dl><footer><button type="button" className="button button--ghost" onClick={() => setSelectedPlanBlock(null)}>Done</button>{profile.is_staff && !isHistorical ? <button type="button" className="button button--primary" onClick={() => openPlanEditor(selectedPlanBlock)}>Edit block</button> : null}</footer></section></div> : null}
               {shiftEditorOpen ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="shift-time-title"><header><div><span className="eyebrow">Operations control</span><h2 id="shift-time-title">Shift start & end</h2></div><button type="button" aria-label="Close shift time editor" onClick={() => setShiftEditorOpen(false)}>×</button></header><p>These times apply to every recorded {shiftPattern} shift line for {controlBoardDate(operationalDate)}.</p><label>Shift start<input type="time" value={shiftStart} onChange={(event) => setShiftStart(event.target.value)} /></label><label>Shift end<input type="time" value={shiftEnd} onChange={(event) => setShiftEnd(event.target.value)} /></label><p className="workflow-boundary">Default day shift: Monday–Friday 06:45–18:00; Saturday–Sunday 07:00–18:00. Operations may override the recorded shift when required.</p>{shiftTimeMessage ? <p role="status">{shiftTimeMessage}</p> : null}<footer><button type="button" className="button button--ghost" onClick={() => setShiftEditorOpen(false)}>Cancel</button><button type="button" className="button button--primary" disabled={shiftTimeSaving} onClick={() => void saveShiftTimes()}>{shiftTimeSaving ? "Saving…" : "Save shift time"}</button></footer></section></div> : null}
