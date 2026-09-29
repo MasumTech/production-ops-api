@@ -316,9 +316,6 @@ describe("manager console", () => {
     expect(within(coverage).getByText("Line 2")).toBeInTheDocument();
     expect(within(coverage).queryByText("lead.one")).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /12 minutes/ }));
-    expect(screen.getByRole("dialog", { name: "Edit downtime & description" })).toBeInTheDocument();
-
     expect(
       within(screen.getByRole("navigation", { name: "Manager sections" })).getByRole(
         "button",

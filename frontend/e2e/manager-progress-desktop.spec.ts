@@ -14,6 +14,8 @@ test("manager progress views render at desktop width with recorded hourly detail
 
   const nav = page.locator('aside[aria-label="Operations Manager workspace"]');
   await expect(page.locator(".manager-position-row")).toHaveCount(6);
+  await expect(page.getByText("Time attainment")).toBeVisible();
+  await expect(page.getByText(/min behind/).first()).toBeVisible();
   await expect(page.getByLabel("Hourly downtime chart")).toBeVisible();
   await expect(page.locator(".manager-position-track i").first()).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("manager-progress-overview-desktop.png"), animations: "disabled", fullPage: true });
@@ -29,6 +31,7 @@ test("manager progress views render at desktop width with recorded hourly detail
   await expect(page.locator(".daily-plan-block--production").first()).toBeVisible();
   await page.locator(".manager-output-open").first().click();
   await expect(page.locator(".manager-output-detail")).toBeVisible();
+  await expect(page.getByText("Shift attainment")).toBeVisible();
   await expect(page.locator(".manager-output-hour").first()).toBeVisible();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: testInfo.outputPath("manager-progress-daily-plans-desktop.png"), animations: "disabled", fullPage: true });

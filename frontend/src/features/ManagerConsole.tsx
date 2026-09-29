@@ -97,6 +97,18 @@ const EMPTY_SUMMARY = {
 
 const NUMBER = new Intl.NumberFormat();
 
+function timePositionLabel(minutes: number | null): string {
+  if (minutes === null) return "Time unavailable";
+  if (minutes === 0) return "On target";
+  return `${NUMBER.format(Math.abs(minutes))} min ${minutes > 0 ? "ahead" : "behind"}`;
+}
+
+function unitPositionLabel(delta: number | null): string {
+  if (delta === null) return "Target unavailable";
+  if (delta === 0) return "No unit gap";
+  return `${NUMBER.format(Math.abs(delta))} units ${delta > 0 ? "ahead" : "short"}`;
+}
+
 function assignmentKey(assignment: Assignment): string {
   return `${assignment.production_line}:${assignment.shift_type}`;
 }
@@ -966,7 +978,7 @@ export function ManagerConsole({
                 </article>
                 <article className="control-kpi">
                   <span className="control-kpi__icon control-kpi__icon--green"><AppIcon name="chart" size={31} /></span>
-                  <div><strong>{aggregatePosition?.due ? `${Math.round(aggregatePosition.actual / aggregatePosition.due * 100)}%` : "—"}</strong><span>Target due now</span><small>{aggregatePosition ? `${NUMBER.format(aggregatePosition.actual)} / ${NUMBER.format(aggregatePosition.due)} due` : "Target unavailable for some lines"}</small></div>
+                  <div><strong>{aggregatePosition ? `${aggregatePosition.shiftAttainment}%` : "—"}</strong><span>Time attainment</span><small>{aggregatePosition ? `${NUMBER.format(aggregatePosition.actual)} / ${NUMBER.format(aggregatePosition.due)} target due now` : "Target unavailable for some lines"}</small></div>
                 </article>
                 <article className="control-kpi control-kpi--downtime">
                   <span className="control-kpi__icon control-kpi__icon--red"><AppIcon name="clock" size={31} /></span>
@@ -992,7 +1004,7 @@ export function ManagerConsole({
                   <div><h2 id="coverage-board-title">All lines · position now</h2><p>Green = done · marker = target due now · track = full-shift plan</p></div>
                   <span>{formatClockMinutes(snapshotMinutes)}</span>
                 </header>
-                {progressLines.length ? progressLines.map(({ row, actual, expectedNow, delta }) => (
+                {progressLines.length ? progressLines.map(({ row, actual, expectedNow, delta, positionMinutes, shiftAttainment }) => (
                   <div className="manager-position-row" key={row.assignment.id}>
                     <div><strong>{displayLine(row.assignment.production_line_code)}</strong><small>{row.update?.current_product || row.assignment.production_line_name}</small></div>
                     <div className="manager-position-progress">
@@ -1002,7 +1014,7 @@ export function ManagerConsole({
                       </div>
                       <small>{actual === null ? "Output unavailable" : `${NUMBER.format(actual)} done`} / {expectedNow === null ? "target unavailable" : `${NUMBER.format(expectedNow)} due`}</small>
                     </div>
-                    <strong className={delta === null ? "" : delta >= 0 ? "metric-ahead" : "metric-behind"}>{delta === null ? "Target unavailable" : `${NUMBER.format(Math.abs(delta))} ${delta >= 0 ? "ahead" : "behind"}`}</strong>
+                    <div className={`manager-position-result ${positionMinutes === null ? "" : positionMinutes >= 0 ? "metric-ahead" : "metric-behind"}`}><strong>{timePositionLabel(positionMinutes)}</strong><small>{unitPositionLabel(delta)} · {shiftAttainment === null ? "—" : `${shiftAttainment}% attainment`}</small></div>
                   </div>
                 )) : <p>No assigned lines for this shift.</p>}
                 <button type="button" className="manager-position-link" onClick={() => setView("plans")}>Open hour-by-hour plan →</button>
@@ -1104,7 +1116,7 @@ export function ManagerConsole({
                     const progress = progressLines.find((item) => item.row.assignment.id === row.assignment.id);
                     const recentHours = progress?.hours.filter((hour) => !hour.future).slice(-4) ?? [];
                     return <div className="manager-leader-progress-line" key={row.assignment.id}>
-                      <div className="manager-leader-progress-label"><button type="button" aria-label={`Open details for ${row.assignment.production_line_code}`} onClick={() => setSelectedLineId(row.assignment.id)}>{displayLine(row.assignment.production_line_code)} · {row.update?.current_product || row.assignment.production_line_name}</button><strong className={progress?.delta === null || progress?.delta === undefined ? "" : progress.delta >= 0 ? "metric-ahead" : "metric-behind"}>{progress?.delta === null || progress?.delta === undefined ? "Target unavailable" : `${NUMBER.format(Math.abs(progress.delta))} ${progress.delta >= 0 ? "ahead" : "behind"}`}</strong></div>
+                      <div className="manager-leader-progress-label"><button type="button" aria-label={`Open details for ${row.assignment.production_line_code}`} onClick={() => setSelectedLineId(row.assignment.id)}>{displayLine(row.assignment.production_line_code)} · {row.update?.current_product || row.assignment.production_line_name}</button><div className={progress?.positionMinutes === null || progress?.positionMinutes === undefined ? "" : progress.positionMinutes >= 0 ? "metric-ahead" : "metric-behind"}><strong>{timePositionLabel(progress?.positionMinutes ?? null)}</strong><small>{unitPositionLabel(progress?.delta ?? null)} · {progress?.shiftAttainment ?? "—"}%</small></div></div>
                       <p>{row.update?.status === "red" ? "Stopped" : row.update?.status === "amber" ? "Behind" : row.update?.status === "green" ? "Running" : "No update"} · {progress?.actual === null || progress?.actual === undefined ? "Output unavailable" : `${NUMBER.format(progress.actual)} / ${NUMBER.format(row.shift?.planned_output ?? 0)} shift plan`} · {lineDowntime(data.downtimeEvents, row.assignment.production_line)} min downtime</p>
                       <div className="manager-leader-hours">
                         {recentHours.map((hour) => <div key={hour.label}>
@@ -1223,11 +1235,11 @@ export function ManagerConsole({
                       <td>{row.shift ? NUMBER.format(row.shift.planned_output) : "—"}</td>
                       <td>{progress?.actual === null || progress?.actual === undefined ? "—" : NUMBER.format(progress.actual)}</td>
                       <td>{planPercent(row.shift) === null ? "—" : `${planPercent(row.shift)}%`}</td>
-                      <td className={delta === null ? "" : delta < 0 ? "metric-behind" : "metric-ahead"}>{delta === null ? "Target unavailable" : `${NUMBER.format(Math.abs(delta))} ${delta < 0 ? "behind" : "ahead"}`}</td>
+                      <td className={delta === null ? "" : delta < 0 ? "metric-behind" : "metric-ahead"}><strong>{timePositionLabel(progress?.positionMinutes ?? null)}</strong><small>{unitPositionLabel(delta)} · {progress?.shiftAttainment ?? "—"}% attainment</small></td>
                     </tr>
                     {expanded ? <tr className="manager-output-detail-row"><td colSpan={5}><div id={`manager-hours-${row.assignment.id}`} className="manager-output-detail" aria-label={`${displayLine(row.assignment.production_line_code)} hourly details`}>
                       <header><div><h3>{displayLine(row.assignment.production_line_code)} · Hourly details</h3><p>Break-aware target · recorded hours only · partial hour due by {formatClockMinutes(snapshotMinutes)}</p></div><span>{progress?.expectedNow ? `${Math.round((progress.actual ?? 0) / progress.expectedNow * 100)}% of target due now` : "Target unavailable"}</span></header>
-                      <div className="manager-output-facts"><div><small>Actual now</small><strong>{progress?.actual === null || progress?.actual === undefined ? "—" : NUMBER.format(progress.actual)}</strong></div><div><small>Target due now</small><strong>{progress?.expectedNow === null || progress?.expectedNow === undefined ? "—" : NUMBER.format(progress.expectedNow)}</strong></div><div><small>Position now</small><strong>{delta === null ? "—" : `${NUMBER.format(Math.abs(delta))} ${delta < 0 ? "behind" : "ahead"}`}</strong></div><div><small>Left in shift</small><strong>{row.shift && progress?.actual !== null && progress?.actual !== undefined ? NUMBER.format(Math.max(0, row.shift.planned_output - progress.actual)) : "—"}</strong></div></div>
+                      <div className="manager-output-facts"><div><small>Actual now</small><strong>{progress?.actual === null || progress?.actual === undefined ? "—" : NUMBER.format(progress.actual)}</strong></div><div><small>Target due now</small><strong>{progress?.expectedNow === null || progress?.expectedNow === undefined ? "—" : NUMBER.format(progress.expectedNow)}</strong></div><div><small>Position now</small><strong>{timePositionLabel(progress?.positionMinutes ?? null)}</strong><span>{unitPositionLabel(delta)}</span></div><div><small>Shift attainment</small><strong>{progress?.shiftAttainment === null || progress?.shiftAttainment === undefined ? "—" : `${progress.shiftAttainment}%`}</strong><span>Full-shift time basis</span></div><div><small>Left in shift</small><strong>{row.shift && progress?.actual !== null && progress?.actual !== undefined ? NUMBER.format(Math.max(0, row.shift.planned_output - progress.actual)) : "—"}</strong></div></div>
                       <div className="manager-output-hours">{progress?.hours.map((hour) => {
                         const short = hour.done !== null && hour.dueNow !== null ? Math.max(0, hour.dueNow - hour.done) : null;
                         return <div className={`manager-output-hour${hour.current ? " is-current" : ""}`} key={hour.label}><strong>{hour.label}</strong><div className="manager-output-hour-track"><i style={{ width: `${hour.target && hour.done !== null ? Math.min(100, hour.done / hour.target * 100) : 0}%` }} /></div><small>{hour.breakMinutes ? `${hour.breakMinutes}m break · ` : ""}T {hour.target === null ? "—" : NUMBER.format(hour.current ? hour.dueNow ?? 0 : hour.target)} · D {hour.done === null ? "—" : NUMBER.format(hour.done)} · S {short === null ? "—" : NUMBER.format(short)}</small></div>;
