@@ -10,7 +10,7 @@ From the repository root:
 
 ```bash
 export DEMO_SEED_PASSWORD="Choose-A-Local-Only-Password"
-./scripts/build_showcase_database.sh
+bash scripts/build_showcase_database.sh
 ```
 
 The default output is `showcase-production-ops.sqlite3` and the default
@@ -21,7 +21,7 @@ database, seeds it, and runs 23 coherence checks.
 To choose another safe output file or operational date:
 
 ```bash
-./scripts/build_showcase_database.sh \
+bash scripts/build_showcase_database.sh \
   /absolute/path/production-ops-showcase.sqlite3 \
   2026-09-04
 ```
