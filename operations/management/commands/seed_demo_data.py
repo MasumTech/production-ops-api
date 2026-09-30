@@ -877,6 +877,11 @@ class Command(BaseCommand):
                 ZoneInfo("Europe/London"),
             )
 
+        def deadline_time(hour, minute=0):
+            return timezone.make_aware(
+                datetime.combine(operational_date, time(hour, minute))
+            )
+
         definitions = {
             "red": {
                 "assignment": assignments["line_1"],
@@ -887,7 +892,7 @@ class Command(BaseCommand):
                 "support_required": "Replacement valve inspection",
                 "requires_follow_up": True,
                 "recorded_at": recorded_time(8, 5),
-                "next_update_due_at": recorded_time(9, 5),
+                "next_update_due_at": deadline_time(9, 5),
             },
             "amber": {
                 "assignment": assignments["line_2"],
@@ -898,7 +903,7 @@ class Command(BaseCommand):
                 "support_required": "Confirm delivery ETA",
                 "requires_follow_up": True,
                 "recorded_at": recorded_time(16, 10),
-                "next_update_due_at": recorded_time(17, 10),
+                "next_update_due_at": deadline_time(17, 10),
             },
             "line_2_stop": {
                 "assignment": assignments["line_2"],
@@ -909,7 +914,7 @@ class Command(BaseCommand):
                 "support_required": "Engineering checks before restart",
                 "requires_follow_up": True,
                 "recorded_at": recorded_time(10, 8),
-                "next_update_due_at": recorded_time(10, 53),
+                "next_update_due_at": deadline_time(10, 53),
             },
             "line_2_suggestion": {
                 "assignment": assignments["line_2"],
@@ -920,7 +925,7 @@ class Command(BaseCommand):
                 "support_required": "Engineering checks before restart",
                 "requires_follow_up": True,
                 "recorded_at": recorded_time(9, 55),
-                "next_update_due_at": recorded_time(10, 40),
+                "next_update_due_at": deadline_time(10, 35),
             },
             "line_1_current": {
                 "assignment": assignments["line_1"],
@@ -931,7 +936,7 @@ class Command(BaseCommand):
                 "support_required": "",
                 "requires_follow_up": False,
                 "recorded_at": recorded_time(16, 0),
-                "next_update_due_at": recorded_time(17, 0),
+                "next_update_due_at": deadline_time(17, 0),
             },
             "line_3_current": {
                 "assignment": assignments["line_3"],
@@ -942,7 +947,7 @@ class Command(BaseCommand):
                 "support_required": "",
                 "requires_follow_up": False,
                 "recorded_at": recorded_time(16, 5),
-                "next_update_due_at": recorded_time(17, 5),
+                "next_update_due_at": deadline_time(17, 5),
             },
             "line_4_current": {
                 "assignment": assignments["line_4"],
@@ -953,7 +958,7 @@ class Command(BaseCommand):
                 "support_required": "Engineering recovery support",
                 "requires_follow_up": True,
                 "recorded_at": recorded_time(16, 15),
-                "next_update_due_at": recorded_time(16, 45),
+                "next_update_due_at": deadline_time(16, 45),
             },
             "line_5_current": {
                 "assignment": assignments["line_5"],
@@ -964,7 +969,7 @@ class Command(BaseCommand):
                 "support_required": "",
                 "requires_follow_up": False,
                 "recorded_at": recorded_time(16, 20),
-                "next_update_due_at": recorded_time(17, 20),
+                "next_update_due_at": deadline_time(17, 20),
             },
             "line_6_current": {
                 "assignment": assignments["line_6"],
@@ -975,7 +980,7 @@ class Command(BaseCommand):
                 "support_required": "Engineering standby",
                 "requires_follow_up": True,
                 "recorded_at": recorded_time(16, 25),
-                "next_update_due_at": recorded_time(16, 55),
+                "next_update_due_at": deadline_time(16, 55),
             },
         }
         updates = {}
