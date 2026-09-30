@@ -673,7 +673,15 @@ Open http://localhost:5173/. Vite proxies `/api` to the local Django server. The
 
 ## Local Demo Dataset
 
-A repeatable management command creates realistic local demonstration data for the Team Leader PWA, Operations Manager control board, hourly line downtime, break/recovery, handover, escalation, material-readiness, and loss-analytics workflows. The seeded day shift contains three Team Leaders with two lines each, Green/Amber/Red conditions, hourly output records, and seven timestamped downtime events with short operational reasons. Hourly output can also be recorded in Django admin; the Daily Plan does not estimate actual units for missing hours.
+A repeatable management command creates realistic local demonstration data for
+the Team Leader, Operations Manager, scoped Support, notification, pilot,
+hourly line-control, break/recovery, handover, escalation,
+material-readiness, evidence, idempotency and loss-analytics workflows. The
+seeded day shift contains three Team Leaders with two lines each,
+Green/Amber/Red conditions, hourly output records, and seven timestamped
+downtime events with short operational reasons. Hourly output can also be
+recorded in Django admin; the Daily Plan does not estimate actual units for
+missing hours.
 
 Run the command only in a local development environment where `DJANGO_DEBUG=True`.
 To remove only the previous demo records and recreate them:
@@ -722,6 +730,23 @@ Set a local demo password explicitly with `--password` or the `DEMO_SEED_PASSWOR
 Running the command again updates the same demo records rather than creating duplicates. The `--reset` option deletes and recreates only demo users and records identified by the `demo.` username or `DEMO-` data prefix. The local-only `demo.support` persona has one assigned action and one available action to exercise the scoped Operational Support workflow. Engineer, QA, Cover, and Materials remain functional responsibility labels inside the Manager and Team Leader workflows.
 
 The command refuses to run when `DJANGO_DEBUG=False`. These accounts, credentials, and records must never be used in staging or production.
+
+To build a dedicated SQLite showcase database and run all dataset checks in one
+step:
+
+```bash
+export DEMO_SEED_PASSWORD="Choose-A-Local-Demo-Password"
+bash scripts/build_showcase_database.sh
+```
+
+The complete record inventory, role-by-role screen walkthrough, interaction
+tests and reset rules are in the
+[Showcase Database and Feature Walkthrough](docs/showcase-demo-data.md). To
+verify an existing seed without changing it, run:
+
+```bash
+python manage.py verify_demo_data --date 2026-09-04
+```
 
 ## Authentication Example
 

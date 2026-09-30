@@ -1,10 +1,13 @@
 import os
 from datetime import datetime, time, timedelta
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
@@ -12,6 +15,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from operations.access import OPERATIONAL_SUPPORT_GROUP
+from operations.events import publish_due_reminders
 from operations.models import (
     BreakOpportunity,
     BreakRecovery,
@@ -22,6 +26,9 @@ from operations.models import (
     IdempotentRequest,
     OperationalEscalation,
     OperationalEvent,
+    OperationalEventReadReceipt,
+    OperationalEvidence,
+    OperationalWorkerHeartbeat,
     PilotApproval,
     PilotFeedback,
     PilotObservation,
@@ -42,8 +49,9 @@ FULL_RESET_CONFIRMATION = "DELETE-ALL-LOCAL-DATA"
 
 class Command(BaseCommand):
     help = (
-        "Create a repeatable local demo dataset covering the Team Leader, "
-        "Manager, handover, break, and loss analytics workflows."
+        "Create a repeatable local showcase dataset covering Team Leader, "
+        "Manager, Support, notifications, pilot evidence, handover, break, "
+        "and loss analytics workflows."
     )
 
     def add_arguments(self, parser):
@@ -117,12 +125,26 @@ class Command(BaseCommand):
             f"{summary['shifts']} shifts, "
             f"{summary['downtime_events']} downtime events, "
             f"{summary['plan_blocks']} daily plan blocks, "
+            f"{summary['hourly_outputs']} hourly outputs, "
             f"{summary['updates']} line updates, "
+            f"{summary['evidence']} evidence files, "
             f"{summary['materials']} material items, "
             f"{summary['escalations']} escalations, "
             f"{summary['break_opportunities']} break opportunities, "
             f"{summary['breaks']} legacy break records, and "
             f"{summary['handovers']} handover."
+        )
+        self.stdout.write(
+            "Showcase evidence: "
+            f"{summary['quality_incidents']} quality incident, "
+            f"{summary['operational_events']} notifications, "
+            f"{summary['read_receipts']} read receipts, "
+            f"{summary['pilot_trials']} pilot trials, "
+            f"{summary['pilot_observations']} pilot observations, "
+            f"{summary['pilot_approvals']} pilot approvals, "
+            f"{summary['pilot_feedback']} pilot feedback notes, "
+            f"{summary['idempotent_requests']} idempotent request, and "
+            f"{summary['worker_heartbeats']} healthy reminder worker."
         )
         self.stdout.write("")
         self.stdout.write("Local demo accounts:")
@@ -130,7 +152,7 @@ class Command(BaseCommand):
         self.stdout.write("  Team Leader 1:      demo.leader")
         self.stdout.write("  Team Leader 2:      demo.leader.two")
         self.stdout.write("  Team Leader 3:      demo.leader.three")
-        self.stdout.write("  Operational Support: demo.support")
+        self.stdout.write("  Operational Support: demo.support (workflow demo only)")
         self.stdout.write("  Password: use the value supplied by you")
         self.stdout.write("")
         self.stdout.write("Frontend: http://localhost:5173/")
@@ -225,8 +247,14 @@ class Command(BaseCommand):
         )
         downtime_events = self._seed_downtime_events(operational_date, shifts)
         plan_blocks = self._seed_daily_plan(operational_date, users, assignments)
-        self._seed_hourly_output(operational_date, assignments, shifts, plan_blocks)
+        hourly_outputs = self._seed_hourly_output(
+            operational_date,
+            assignments,
+            shifts,
+            plan_blocks,
+        )
         updates = self._seed_updates(now, operational_date, users, assignments)
+        evidence = self._seed_operational_evidence(users, updates)
         break_opportunities = self._seed_break_opportunities(
             operational_date,
             users,
@@ -242,13 +270,16 @@ class Command(BaseCommand):
             assignments,
             updates,
         )
-        self._seed_quality_incident(now, users, shifts)
+        quality_incident = self._seed_quality_incident(now, users, shifts)
         breaks = self._seed_breaks(now, users, assignments)
         handovers = self._seed_handover(
             users,
             assignments,
             escalations,
         )
+        pilot = self._seed_pilot_data(operational_date, users, lines)
+        idempotent_request = self._seed_idempotent_request(now, users, updates)
+        runtime = self._seed_runtime_evidence(now, users)
 
         return {
             "users": len(users),
@@ -258,12 +289,23 @@ class Command(BaseCommand):
             "shifts": len(shifts),
             "downtime_events": len(downtime_events),
             "plan_blocks": len(plan_blocks),
+            "hourly_outputs": len(hourly_outputs),
             "updates": len(updates),
+            "evidence": len(evidence),
             "materials": len(materials),
             "escalations": len(escalations),
             "break_opportunities": len(break_opportunities),
             "breaks": len(breaks),
             "handovers": len(handovers),
+            "quality_incidents": int(quality_incident is not None),
+            "operational_events": runtime["event_count"],
+            "read_receipts": len(runtime["read_receipts"]),
+            "pilot_trials": len(pilot["trials"]),
+            "pilot_observations": len(pilot["observations"]),
+            "pilot_approvals": len(pilot["approvals"]),
+            "pilot_feedback": len(pilot["feedback"]),
+            "idempotent_requests": int(idempotent_request is not None),
+            "worker_heartbeats": int(runtime["heartbeat"] is not None),
         }
 
     @staticmethod
@@ -754,6 +796,7 @@ class Command(BaseCommand):
     def _seed_hourly_output(operational_date, assignments, shifts, plan_blocks):
         """Distribute sample shift totals over clock hours up to 16:10."""
         site_timezone = ZoneInfo("Europe/London")
+        outputs = []
         snapshot = timezone.make_aware(
             datetime.combine(operational_date, time(16, 10)), site_timezone
         )
@@ -814,7 +857,7 @@ class Command(BaseCommand):
                     else 0
                 )
                 remaining -= units
-                HourlyOutput.objects.update_or_create(
+                output, _ = HourlyOutput.objects.update_or_create(
                     assignment=assignment,
                     hour_start_at=hour,
                     defaults={
@@ -822,18 +865,21 @@ class Command(BaseCommand):
                         "recorded_by": assignment.team_leader,
                     },
                 )
+                outputs.append(output)
+
+        return outputs
 
     @staticmethod
     def _seed_updates(now, operational_date, users, assignments):
         def recorded_time(hour, minute=0):
             return timezone.make_aware(
-                datetime.combine(operational_date, time(hour, minute))
-            )
-
-        def site_time(hour, minute=0):
-            return timezone.make_aware(
                 datetime.combine(operational_date, time(hour, minute)),
                 ZoneInfo("Europe/London"),
+            )
+
+        def deadline_time(hour, minute=0):
+            return timezone.make_aware(
+                datetime.combine(operational_date, time(hour, minute))
             )
 
         definitions = {
@@ -846,7 +892,7 @@ class Command(BaseCommand):
                 "support_required": "Replacement valve inspection",
                 "requires_follow_up": True,
                 "recorded_at": recorded_time(8, 5),
-                "next_update_due_at": recorded_time(9, 5),
+                "next_update_due_at": deadline_time(9, 5),
             },
             "amber": {
                 "assignment": assignments["line_2"],
@@ -856,8 +902,8 @@ class Command(BaseCommand):
                 "action_taken": "Warehouse replenishment requested",
                 "support_required": "Confirm delivery ETA",
                 "requires_follow_up": True,
-                "recorded_at": site_time(16, 10),
-                "next_update_due_at": site_time(17, 10),
+                "recorded_at": recorded_time(16, 10),
+                "next_update_due_at": deadline_time(17, 10),
             },
             "line_2_stop": {
                 "assignment": assignments["line_2"],
@@ -867,8 +913,19 @@ class Command(BaseCommand):
                 "action_taken": "Line stopped safely and product controlled",
                 "support_required": "Engineering checks before restart",
                 "requires_follow_up": True,
+                "recorded_at": recorded_time(10, 8),
+                "next_update_due_at": deadline_time(10, 53),
+            },
+            "line_2_suggestion": {
+                "assignment": assignments["line_2"],
+                "status": HourlyLineUpdate.Status.RED,
+                "current_product": "Oat Drink 1L",
+                "issue_summary": "Printer fault detected before planned break",
+                "action_taken": "Line stopped safely and product controlled",
+                "support_required": "Engineering checks before restart",
+                "requires_follow_up": True,
                 "recorded_at": recorded_time(9, 55),
-                "next_update_due_at": recorded_time(10, 35),
+                "next_update_due_at": deadline_time(10, 35),
             },
             "line_1_current": {
                 "assignment": assignments["line_1"],
@@ -878,8 +935,8 @@ class Command(BaseCommand):
                 "action_taken": "Filler reset completed",
                 "support_required": "",
                 "requires_follow_up": False,
-                "recorded_at": site_time(16, 0),
-                "next_update_due_at": site_time(17, 0),
+                "recorded_at": recorded_time(16, 0),
+                "next_update_due_at": deadline_time(17, 0),
             },
             "line_3_current": {
                 "assignment": assignments["line_3"],
@@ -889,8 +946,8 @@ class Command(BaseCommand):
                 "action_taken": "Hourly check completed",
                 "support_required": "",
                 "requires_follow_up": False,
-                "recorded_at": site_time(16, 5),
-                "next_update_due_at": site_time(17, 5),
+                "recorded_at": recorded_time(16, 5),
+                "next_update_due_at": deadline_time(17, 5),
             },
             "line_4_current": {
                 "assignment": assignments["line_4"],
@@ -900,8 +957,8 @@ class Command(BaseCommand):
                 "action_taken": "Engineering fault finding in progress",
                 "support_required": "Engineering recovery support",
                 "requires_follow_up": True,
-                "recorded_at": site_time(16, 15),
-                "next_update_due_at": site_time(16, 45),
+                "recorded_at": recorded_time(16, 15),
+                "next_update_due_at": deadline_time(16, 45),
             },
             "line_5_current": {
                 "assignment": assignments["line_5"],
@@ -911,8 +968,8 @@ class Command(BaseCommand):
                 "action_taken": "QA sample released",
                 "support_required": "",
                 "requires_follow_up": False,
-                "recorded_at": site_time(16, 20),
-                "next_update_due_at": site_time(17, 20),
+                "recorded_at": recorded_time(16, 20),
+                "next_update_due_at": deadline_time(17, 20),
             },
             "line_6_current": {
                 "assignment": assignments["line_6"],
@@ -922,8 +979,8 @@ class Command(BaseCommand):
                 "action_taken": "Machine Minder monitoring every cycle",
                 "support_required": "Engineering standby",
                 "requires_follow_up": True,
-                "recorded_at": site_time(16, 25),
-                "next_update_due_at": site_time(16, 55),
+                "recorded_at": recorded_time(16, 25),
+                "next_update_due_at": deadline_time(16, 55),
             },
         }
         updates = {}
@@ -941,6 +998,30 @@ class Command(BaseCommand):
             updates[key] = update
 
         return updates
+
+    @staticmethod
+    def _seed_operational_evidence(users, updates):
+        path = "operational_evidence/demo/demo-filler-pressure-check.txt"
+        payload = (
+            "DEMO ONLY\n"
+            "Line: DEMO-LINE-01\n"
+            "Evidence: filler pressure inspection requested\n"
+            "No real employee, customer, traceability, or production data.\n"
+        )
+        if not default_storage.exists(path):
+            default_storage.save(path, ContentFile(payload.encode("utf-8")))
+
+        evidence, _ = OperationalEvidence.objects.update_or_create(
+            hourly_update=updates["red"],
+            original_name="demo-filler-pressure-check.txt",
+            defaults={
+                "file": path,
+                "content_type": "text/plain",
+                "size_bytes": len(payload.encode("utf-8")),
+                "uploaded_by": users["leader"],
+            },
+        )
+        return {"filler_check": evidence}
 
     @staticmethod
     def _seed_break_opportunities(
@@ -974,8 +1055,31 @@ class Command(BaseCommand):
                 ),
             },
         )
-        suggested, _ = BreakOpportunity.objects.update_or_create(
+        day_four_recovery, _ = BreakOpportunity.objects.update_or_create(
             source_update=updates["line_2_stop"],
+            defaults={
+                "assignment": assignments["line_2"],
+                "break_block": plan_blocks["line_2_2"],
+                "status": BreakOpportunity.Status.RECOVERED,
+                "fault_at": event_time(10, 8),
+                "suggested_start_at": event_time(10, 8),
+                "expected_return_at": event_time(10, 48),
+                "confirmed_at": event_time(10, 8),
+                "confirmed_by": users["leader"],
+                "returned_at": event_time(10, 48),
+                "checks_completed_at": event_time(10, 53),
+                "run_resumed_at": event_time(10, 53),
+                "recovery_notes": (
+                    "Full 40-minute break protected; restart checks completed "
+                    "five minutes after return."
+                ),
+                "declined_at": None,
+                "declined_by": None,
+                "decline_reason": "",
+            },
+        )
+        suggested, _ = BreakOpportunity.objects.update_or_create(
+            source_update=updates["line_2_suggestion"],
             defaults={
                 "assignment": assignments["line_2"],
                 "break_block": plan_blocks["line_2_2"],
@@ -995,7 +1099,11 @@ class Command(BaseCommand):
             },
         )
 
-        return {"recovered": recovered, "suggested": suggested}
+        return {
+            "recovered": recovered,
+            "day_four_recovery": day_four_recovery,
+            "suggested": suggested,
+        }
 
     @staticmethod
     def _seed_materials(operational_date, users, assignments):
@@ -1300,3 +1408,318 @@ class Command(BaseCommand):
         )
         handover.escalations.set((escalations["critical"],))
         return {"pending": handover}
+
+    @staticmethod
+    def _seed_pilot_data(operational_date, users, lines):
+        site_timezone = ZoneInfo("Europe/London")
+
+        def audit_time(days, hour=12, minute=0):
+            return timezone.make_aware(
+                datetime.combine(
+                    operational_date + timedelta(days=days),
+                    time(hour, minute),
+                ),
+                site_timezone,
+            )
+
+        definitions = {
+            "stopped": {
+                "name": "DEMO-01 Safeguards learning trial",
+                "objective": (
+                    "Demonstrate a controlled stop when paper fallback and missed "
+                    "actions exceed the agreed pilot tolerance."
+                ),
+                "start_date": operational_date - timedelta(days=60),
+                "end_date": operational_date - timedelta(days=46),
+                "status": PilotTrial.Status.STOPPED,
+                "started_at": audit_time(-60, 7),
+                "started_by": users["manager"],
+                "decided_at": audit_time(-52, 15),
+                "decided_by": users["manager"],
+                "decision_note": (
+                    "Stopped safely after the paper-fallback threshold was reached."
+                ),
+                "selected_lines": (lines["line_1"],),
+            },
+            "completed": {
+                "name": "DEMO-02 Completed workflow pilot",
+                "objective": (
+                    "Show a completed pilot decision with retained approval and "
+                    "human feedback evidence."
+                ),
+                "start_date": operational_date - timedelta(days=35),
+                "end_date": operational_date - timedelta(days=15),
+                "status": PilotTrial.Status.COMPLETED,
+                "started_at": audit_time(-35, 7),
+                "started_by": users["manager"],
+                "decided_at": audit_time(-14, 15),
+                "decided_by": users["manager"],
+                "decision_note": (
+                    "Completed with the hourly control and escalation workflow accepted."
+                ),
+                "selected_lines": (lines["line_1"], lines["line_2"]),
+            },
+            "planned": {
+                "name": "DEMO-03 Planned readiness review",
+                "objective": (
+                    "Demonstrate a planned trial that is blocked until requested "
+                    "Quality/Safety changes and pending reviews are completed."
+                ),
+                "start_date": operational_date + timedelta(days=7),
+                "end_date": operational_date + timedelta(days=34),
+                "status": PilotTrial.Status.PLANNED,
+                "started_at": None,
+                "started_by": None,
+                "decided_at": None,
+                "decided_by": None,
+                "decision_note": "",
+                "selected_lines": (lines["line_5"], lines["line_6"]),
+            },
+            "active": {
+                "name": "DEMO-04 Active multi-line pilot",
+                "objective": (
+                    "Measure update speed, escalation acknowledgement, status "
+                    "accuracy, missed actions, and paper fallback using dummy data."
+                ),
+                "start_date": operational_date - timedelta(days=7),
+                "end_date": operational_date + timedelta(days=20),
+                "status": PilotTrial.Status.ACTIVE,
+                "started_at": audit_time(-7, 6, 45),
+                "started_by": users["manager"],
+                "decided_at": None,
+                "decided_by": None,
+                "decision_note": "",
+                "selected_lines": (
+                    lines["line_1"],
+                    lines["line_2"],
+                    lines["line_3"],
+                ),
+            },
+        }
+        trials = {}
+        for key, definition in definitions.items():
+            selected_lines = definition["selected_lines"]
+            trial, _ = PilotTrial.objects.update_or_create(
+                name=definition["name"],
+                defaults={
+                    field: value
+                    for field, value in definition.items()
+                    if field not in {"name", "selected_lines"}
+                }
+                | {"created_by": users["manager"]},
+            )
+            trial.selected_lines.set(selected_lines)
+            trials[key] = trial
+
+        approvals = []
+        reviewer_roles = [value for value, _ in PilotApproval.ReviewerRole.choices]
+        for trial_key, trial in trials.items():
+            for role in reviewer_roles:
+                decision = PilotApproval.Decision.APPROVED
+                note = "Approved for the controlled dummy-data pilot."
+                if trial_key == "planned":
+                    if role == PilotApproval.ReviewerRole.QUALITY_SAFETY:
+                        decision = PilotApproval.Decision.CHANGES_REQUESTED
+                        note = "Add the agreed restart-check evidence before launch."
+                    elif role in {
+                        PilotApproval.ReviewerRole.ENGINEERING_IT,
+                        PilotApproval.ReviewerRole.PRODUCT_OWNER,
+                    }:
+                        decision = PilotApproval.Decision.PENDING
+                        note = ""
+                approval, _ = PilotApproval.objects.update_or_create(
+                    trial=trial,
+                    reviewer_role=role,
+                    defaults={
+                        "decision": decision,
+                        "note": note,
+                        "decided_by": (
+                            None
+                            if decision == PilotApproval.Decision.PENDING
+                            else users["manager"]
+                        ),
+                        "decided_at": (
+                            None
+                            if decision == PilotApproval.Decision.PENDING
+                            else audit_time(-8, 14)
+                        ),
+                    },
+                )
+                approvals.append(approval)
+
+        observation_definitions = (
+            ("line_1", -5, PilotObservation.LineStatus.GREEN, 44, 180, 0, True, False),
+            ("line_2", -4, PilotObservation.LineStatus.AMBER, 61, 245, 0, True, False),
+            ("line_3", -3, PilotObservation.LineStatus.RED, 73, 310, 1, True, False),
+            ("line_1", -2, PilotObservation.LineStatus.GREEN, 39, 155, 0, True, False),
+            ("line_2", 0, PilotObservation.LineStatus.AMBER, 52, 205, 0, False, True),
+        )
+        observations = []
+        for (
+            line_key,
+            day_offset,
+            line_status,
+            update_seconds,
+            acknowledgement_seconds,
+            missed_actions,
+            accurate,
+            paper_fallback,
+        ) in observation_definitions:
+            observation, _ = PilotObservation.objects.update_or_create(
+                trial=trials["active"],
+                production_line=lines[line_key],
+                observed_on=operational_date + timedelta(days=day_offset),
+                shift_type=Shift.ShiftType.DAY,
+                defaults={
+                    "line_status": line_status,
+                    "update_duration_seconds": update_seconds,
+                    "escalation_ack_seconds": acknowledgement_seconds,
+                    "missed_actions": missed_actions,
+                    "status_was_accurate": accurate,
+                    "used_paper_fallback": paper_fallback,
+                    "notes": (
+                        "Dummy observation retained for pilot evidence and trend review."
+                    ),
+                    "observed_by": users["manager"],
+                },
+            )
+            observations.append(observation)
+
+        feedback_definitions = (
+            (
+                trials["active"],
+                PilotApproval.ReviewerRole.OPERATIONS,
+                PilotFeedback.Category.USABILITY,
+                PilotFeedback.Sentiment.POSITIVE,
+                "Two-line desktop control is clear and quick to scan.",
+            ),
+            (
+                trials["active"],
+                PilotApproval.ReviewerRole.ENGINEERING_IT,
+                PilotFeedback.Category.TECHNICAL,
+                PilotFeedback.Sentiment.NEUTRAL,
+                "Notification delivery is stable; continue worker freshness checks.",
+            ),
+            (
+                trials["active"],
+                PilotApproval.ReviewerRole.QUALITY_SAFETY,
+                PilotFeedback.Category.SAFETY_QUALITY,
+                PilotFeedback.Sentiment.CONCERN,
+                "One paper fallback needs a reviewed follow-up before wider use.",
+            ),
+            (
+                trials["active"],
+                PilotApproval.ReviewerRole.PRODUCT_OWNER,
+                PilotFeedback.Category.WORKFLOW,
+                PilotFeedback.Sentiment.POSITIVE,
+                "Hourly target, done, short and downtime evidence support decisions.",
+            ),
+            (
+                trials["completed"],
+                PilotApproval.ReviewerRole.OPERATIONS,
+                PilotFeedback.Category.WORKFLOW,
+                PilotFeedback.Sentiment.POSITIVE,
+                "Completed trial confirmed clear handover ownership.",
+            ),
+            (
+                trials["stopped"],
+                PilotApproval.ReviewerRole.QUALITY_SAFETY,
+                PilotFeedback.Category.SAFETY_QUALITY,
+                PilotFeedback.Sentiment.CONCERN,
+                "The stop decision correctly protected the agreed trial boundary.",
+            ),
+        )
+        feedback = []
+        for trial, reviewer_role, category, sentiment, notes in feedback_definitions:
+            item, _ = PilotFeedback.objects.update_or_create(
+                trial=trial,
+                reviewer_role=reviewer_role,
+                category=category,
+                defaults={
+                    "sentiment": sentiment,
+                    "notes": notes,
+                    "created_by": users["manager"],
+                },
+            )
+            feedback.append(item)
+
+        return {
+            "trials": trials,
+            "observations": observations,
+            "approvals": approvals,
+            "feedback": feedback,
+        }
+
+    @staticmethod
+    def _seed_idempotent_request(now, users, updates):
+        request, _ = IdempotentRequest.objects.update_or_create(
+            user=users["leader"],
+            key=UUID("00000000-0000-4000-8000-000000000001"),
+            defaults={
+                "method": "POST",
+                "path": "/api/hourly-line-updates/capture-issue/",
+                "request_hash": "0" * 64,
+                "response_status": 201,
+                "response_body": {
+                    "demo": True,
+                    "line_update_id": updates["red"].id,
+                    "message": "Recovered once after an offline retry.",
+                },
+                "completed_at": now,
+            },
+        )
+        return request
+
+    @staticmethod
+    def _seed_runtime_evidence(now, users):
+        published = publish_due_reminders(now=now + timedelta(days=1))
+        heartbeat_time = timezone.now()
+        heartbeat, _ = OperationalWorkerHeartbeat.objects.update_or_create(
+            worker_name="operational-reminders",
+            defaults={
+                "last_started_at": heartbeat_time - timedelta(seconds=1),
+                "last_completed_at": heartbeat_time,
+                "last_error": "",
+                "published_count": published,
+            },
+        )
+
+        demo_events = OperationalEvent.objects.filter(
+            Q(production_line__code__startswith=DEMO_PREFIX)
+            | Q(assignment__production_line__code__startswith=DEMO_PREFIX)
+            | Q(actor__username__startswith=DEMO_USER_PREFIX)
+        )
+        read_receipts = []
+        manager_event = (
+            demo_events.filter(
+                severity=OperationalEvent.Severity.CRITICAL,
+            )
+            .order_by("id")
+            .first()
+        )
+        if manager_event:
+            receipt, _ = OperationalEventReadReceipt.objects.get_or_create(
+                event=manager_event,
+                user=users["manager"],
+            )
+            read_receipts.append(receipt)
+
+        leader_event = (
+            demo_events.filter(
+                audiences=users["leader"],
+            )
+            .order_by("id")
+            .first()
+        )
+        if leader_event:
+            receipt, _ = OperationalEventReadReceipt.objects.get_or_create(
+                event=leader_event,
+                user=users["leader"],
+            )
+            read_receipts.append(receipt)
+
+        return {
+            "heartbeat": heartbeat,
+            "event_count": demo_events.count(),
+            "read_receipts": read_receipts,
+        }

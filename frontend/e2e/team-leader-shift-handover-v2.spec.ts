@@ -68,7 +68,7 @@ test("Shift Handover matches the approved unresolved-work reference", async ({
     ),
   ).toBeVisible();
   await expect(
-    page.getByText("Restart checks completed at 09:00"),
+    page.getByText("Restart checks completed at 10:53"),
   ).toBeVisible();
 
   await expect(page.getByRole("heading", { name: "Sign-off" })).toBeVisible();
