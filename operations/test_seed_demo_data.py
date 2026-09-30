@@ -1,7 +1,6 @@
 from datetime import date, time
 from io import StringIO
 from uuid import uuid4
-from zoneinfo import ZoneInfo
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -41,7 +40,6 @@ from operations.models import (
 DEMO_DATE = "2026-09-02"
 DEMO_PASSWORD = f"test-{uuid4().hex}"
 FULL_RESET_CONFIRMATION = "DELETE-ALL-LOCAL-DATA"
-SITE_TIMEZONE = ZoneInfo("Europe/London")
 
 
 def run_seed(**options):
@@ -123,7 +121,7 @@ def test_seed_demo_data_creates_complete_dataset():
         "downtime_events": 7,
         "plan_blocks": 30,
         "hourly_outputs": 66,
-        "updates": 8,
+        "updates": 9,
         "evidence": 1,
         "materials": 4,
         "escalations": 6,
@@ -159,9 +157,7 @@ def test_seed_demo_data_creates_complete_dataset():
         .first()
     )
     assert latest_line_two is not None
-    assert latest_line_two.recorded_at.astimezone(
-        ZoneInfo("Europe/London")
-    ).time() == time(16, 10)
+    assert latest_line_two.recorded_at.time() == time(16, 10)
 
     manager = get_user_model().objects.get(username="demo.manager")
     assert manager.is_staff is True
@@ -205,9 +201,7 @@ def test_seed_demo_data_creates_complete_dataset():
         .first()
     )
     assert weekday_first_block is not None
-    assert weekday_first_block.planned_start_at.astimezone(
-        SITE_TIMEZONE
-    ).time() == time(6, 45)
+    assert weekday_first_block.planned_start_at.time() == time(6, 45)
     assert (
         DailyPlanBlock.objects.filter(
             assignment__production_line__code="DEMO-LINE-01",
@@ -225,36 +219,24 @@ def test_seed_demo_data_creates_complete_dataset():
         "break_block",
         "source_update",
     ).get(status=BreakOpportunity.Status.SUGGESTED)
-    assert suggested_break.assignment.production_line.code == "DEMO-LINE-04"
-    assert suggested_break.break_block.break_number == 2
-    assert suggested_break.fault_at.astimezone(SITE_TIMEZONE).time() == time(16, 15)
-    assert suggested_break.suggested_start_at.astimezone(SITE_TIMEZONE).time() == time(
-        16, 20
-    )
-    assert suggested_break.expected_return_at.astimezone(SITE_TIMEZONE).time() == time(
-        17, 0
-    )
+    assert suggested_break.assignment.production_line.code == "DEMO-LINE-02"
+    assert suggested_break.break_block.break_number == 1
+    assert suggested_break.fault_at.time() == time(9, 55)
+    assert suggested_break.suggested_start_at.time() == time(10, 0)
+    assert suggested_break.expected_return_at.time() == time(10, 40)
     assert suggested_break.source_update.issue_summary == (
-        "Conveyor restart remains below target"
+        "Printer fault detected before planned break"
     )
-    assert suggested_break.source_update.next_update_due_at.astimezone(
-        SITE_TIMEZONE
-    ).time() == time(16, 45)
+    assert suggested_break.source_update.next_update_due_at.time() == time(10, 40)
 
     day_four_recovery = BreakOpportunity.objects.get(
         assignment__production_line__code="DEMO-LINE-02",
         status=BreakOpportunity.Status.RECOVERED,
     )
-    assert day_four_recovery.fault_at.astimezone(SITE_TIMEZONE).time() == time(10, 8)
-    assert day_four_recovery.expected_return_at.astimezone(
-        SITE_TIMEZONE
-    ).time() == time(10, 48)
-    assert day_four_recovery.checks_completed_at.astimezone(
-        SITE_TIMEZONE
-    ).time() == time(10, 53)
-    assert day_four_recovery.run_resumed_at.astimezone(SITE_TIMEZONE).time() == time(
-        10, 53
-    )
+    assert day_four_recovery.fault_at.time() == time(10, 8)
+    assert day_four_recovery.expected_return_at.time() == time(10, 48)
+    assert day_four_recovery.checks_completed_at.time() == time(10, 53)
+    assert day_four_recovery.run_resumed_at.time() == time(10, 53)
     assert (
         sum(
             event.duration_minutes
@@ -275,13 +257,11 @@ def test_seed_demo_data_creates_complete_dataset():
         expected_available_at=None,
     ).first()
     assert material_eta is not None
-    assert material_eta.expected_available_at.astimezone(SITE_TIMEZONE).date() == date(
-        2026, 9, 2
-    )
+    assert material_eta.expected_available_at.date() == date(2026, 9, 2)
 
     assert all(
-        item.planned_start_at.astimezone(SITE_TIMEZONE).date() == date(2026, 9, 2)
-        and item.expected_return_at.astimezone(SITE_TIMEZONE).date() == date(2026, 9, 2)
+        item.planned_start_at.date() == date(2026, 9, 2)
+        and item.expected_return_at.date() == date(2026, 9, 2)
         for item in BreakRecovery.objects.all()
     )
     assert list(
@@ -331,7 +311,7 @@ def test_seed_demo_data_creates_complete_dataset():
     assert short_material.responsible_role == "Materials"
     assert short_material.expected_action == "Decision due 10:20"
     assert short_material.next_action == "Confirm replenishment"
-    assert short_material.needed_by_at.astimezone(SITE_TIMEZONE).time() == time(10, 30)
+    assert short_material.needed_by_at.time() == time(10, 30)
     assert short_material.notes == "Carton stock below next-hour demand."
 
     held_material = ProductMaterialReadiness.objects.get(
@@ -382,7 +362,7 @@ def test_seed_demo_data_creates_complete_dataset():
 
     handover = ShiftHandover.objects.get()
     assert handover.status == ShiftHandover.Status.PENDING
-    assert handover.handed_over_at.astimezone(SITE_TIMEZONE).date() == date(2026, 9, 2)
+    assert handover.handed_over_at.date() == date(2026, 9, 2)
     assert handover.escalations.filter(
         status=OperationalEscalation.Status.OPEN,
     ).exists()
@@ -464,9 +444,7 @@ def test_seed_demo_day_shift_start_follows_weekday_weekend_rule(
         .first()
     )
     assert first_block is not None
-    assert (
-        first_block.planned_start_at.astimezone(SITE_TIMEZONE).time() == expected_start
-    )
+    assert first_block.planned_start_at.time() == expected_start
 
 
 @pytest.mark.django_db
