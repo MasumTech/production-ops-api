@@ -873,7 +873,8 @@ class Command(BaseCommand):
     def _seed_updates(now, operational_date, users, assignments):
         def recorded_time(hour, minute=0):
             return timezone.make_aware(
-                datetime.combine(operational_date, time(hour, minute))
+                datetime.combine(operational_date, time(hour, minute)),
+                ZoneInfo("Europe/London"),
             )
 
         definitions = {
