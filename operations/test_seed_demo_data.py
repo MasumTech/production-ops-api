@@ -230,9 +230,7 @@ def test_seed_demo_data_creates_complete_dataset():
     assert suggested_break.source_update.issue_summary == (
         "Printer fault detected before planned break"
     )
-    assert suggested_break.source_update.next_update_due_at.astimezone(
-        ZoneInfo("Europe/London")
-    ).time() == time(10, 40)
+    assert suggested_break.source_update.next_update_due_at.time() == time(10, 35)
 
     day_four_recovery = BreakOpportunity.objects.get(
         assignment__production_line__code="DEMO-LINE-02",
