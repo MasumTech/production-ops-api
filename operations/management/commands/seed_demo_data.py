@@ -231,10 +231,7 @@ class Command(BaseCommand):
     def _seed(self, operational_date, password):
         # Keep every relative demo timestamp anchored to the requested
         # operational date rather than the machine clock running the seed.
-        now = timezone.make_aware(
-            datetime.combine(operational_date, time(16, 30)),
-            ZoneInfo("Europe/London"),
-        )
+        now = timezone.make_aware(datetime.combine(operational_date, time(16, 30)))
         users = self._seed_users(password)
         lines = self._seed_lines()
         assets = self._seed_assets(lines)
@@ -584,8 +581,7 @@ class Command(BaseCommand):
     def _seed_downtime_events(operational_date, shifts):
         def event_time(hour, minute=0):
             return timezone.make_aware(
-                datetime.combine(operational_date, time(hour, minute)),
-                ZoneInfo("Europe/London"),
+                datetime.combine(operational_date, time(hour, minute))
             )
 
         definitions = (
@@ -667,8 +663,7 @@ class Command(BaseCommand):
 
         def planned_time(hour, minute=0):
             return timezone.make_aware(
-                datetime.combine(operational_date, time(hour, minute)),
-                ZoneInfo("Europe/London"),
+                datetime.combine(operational_date, time(hour, minute))
             )
 
         schedules = {
@@ -876,10 +871,9 @@ class Command(BaseCommand):
 
     @staticmethod
     def _seed_updates(now, operational_date, users, assignments):
-        def site_time(hour, minute=0):
+        def recorded_time(hour, minute=0):
             return timezone.make_aware(
-                datetime.combine(operational_date, time(hour, minute)),
-                ZoneInfo("Europe/London"),
+                datetime.combine(operational_date, time(hour, minute))
             )
 
         definitions = {
@@ -891,8 +885,8 @@ class Command(BaseCommand):
                 "action_taken": "Engineering inspection started",
                 "support_required": "Replacement valve inspection",
                 "requires_follow_up": True,
-                "recorded_at": site_time(8, 5),
-                "next_update_due_at": site_time(9, 5),
+                "recorded_at": recorded_time(8, 5),
+                "next_update_due_at": recorded_time(9, 5),
             },
             "amber": {
                 "assignment": assignments["line_2"],
@@ -902,8 +896,8 @@ class Command(BaseCommand):
                 "action_taken": "Warehouse replenishment requested",
                 "support_required": "Confirm delivery ETA",
                 "requires_follow_up": True,
-                "recorded_at": site_time(16, 10),
-                "next_update_due_at": site_time(17, 10),
+                "recorded_at": recorded_time(16, 10),
+                "next_update_due_at": recorded_time(17, 10),
             },
             "line_2_stop": {
                 "assignment": assignments["line_2"],
@@ -913,8 +907,19 @@ class Command(BaseCommand):
                 "action_taken": "Line stopped safely and product controlled",
                 "support_required": "Engineering checks before restart",
                 "requires_follow_up": True,
-                "recorded_at": site_time(10, 8),
-                "next_update_due_at": site_time(10, 53),
+                "recorded_at": recorded_time(10, 8),
+                "next_update_due_at": recorded_time(10, 53),
+            },
+            "line_2_suggestion": {
+                "assignment": assignments["line_2"],
+                "status": HourlyLineUpdate.Status.RED,
+                "current_product": "Oat Drink 1L",
+                "issue_summary": "Printer fault detected before planned break",
+                "action_taken": "Line stopped safely and product controlled",
+                "support_required": "Engineering checks before restart",
+                "requires_follow_up": True,
+                "recorded_at": recorded_time(9, 55),
+                "next_update_due_at": recorded_time(10, 40),
             },
             "line_1_current": {
                 "assignment": assignments["line_1"],
@@ -924,8 +929,8 @@ class Command(BaseCommand):
                 "action_taken": "Filler reset completed",
                 "support_required": "",
                 "requires_follow_up": False,
-                "recorded_at": site_time(16, 0),
-                "next_update_due_at": site_time(17, 0),
+                "recorded_at": recorded_time(16, 0),
+                "next_update_due_at": recorded_time(17, 0),
             },
             "line_3_current": {
                 "assignment": assignments["line_3"],
@@ -935,8 +940,8 @@ class Command(BaseCommand):
                 "action_taken": "Hourly check completed",
                 "support_required": "",
                 "requires_follow_up": False,
-                "recorded_at": site_time(16, 5),
-                "next_update_due_at": site_time(17, 5),
+                "recorded_at": recorded_time(16, 5),
+                "next_update_due_at": recorded_time(17, 5),
             },
             "line_4_current": {
                 "assignment": assignments["line_4"],
@@ -946,8 +951,8 @@ class Command(BaseCommand):
                 "action_taken": "Engineering fault finding in progress",
                 "support_required": "Engineering recovery support",
                 "requires_follow_up": True,
-                "recorded_at": site_time(16, 15),
-                "next_update_due_at": site_time(16, 45),
+                "recorded_at": recorded_time(16, 15),
+                "next_update_due_at": recorded_time(16, 45),
             },
             "line_5_current": {
                 "assignment": assignments["line_5"],
@@ -957,8 +962,8 @@ class Command(BaseCommand):
                 "action_taken": "QA sample released",
                 "support_required": "",
                 "requires_follow_up": False,
-                "recorded_at": site_time(16, 20),
-                "next_update_due_at": site_time(17, 20),
+                "recorded_at": recorded_time(16, 20),
+                "next_update_due_at": recorded_time(17, 20),
             },
             "line_6_current": {
                 "assignment": assignments["line_6"],
@@ -968,8 +973,8 @@ class Command(BaseCommand):
                 "action_taken": "Machine Minder monitoring every cycle",
                 "support_required": "Engineering standby",
                 "requires_follow_up": True,
-                "recorded_at": site_time(16, 25),
-                "next_update_due_at": site_time(16, 55),
+                "recorded_at": recorded_time(16, 25),
+                "next_update_due_at": recorded_time(16, 55),
             },
         }
         updates = {}
@@ -1022,8 +1027,7 @@ class Command(BaseCommand):
     ):
         def event_time(hour, minute=0):
             return timezone.make_aware(
-                datetime.combine(operational_date, time(hour, minute)),
-                ZoneInfo("Europe/London"),
+                datetime.combine(operational_date, time(hour, minute))
             )
 
         recovered, _ = BreakOpportunity.objects.update_or_create(
@@ -1069,14 +1073,14 @@ class Command(BaseCommand):
             },
         )
         suggested, _ = BreakOpportunity.objects.update_or_create(
-            source_update=updates["line_4_current"],
+            source_update=updates["line_2_suggestion"],
             defaults={
-                "assignment": assignments["line_4"],
-                "break_block": plan_blocks["line_4_4"],
+                "assignment": assignments["line_2"],
+                "break_block": plan_blocks["line_2_2"],
                 "status": BreakOpportunity.Status.SUGGESTED,
-                "fault_at": event_time(16, 15),
-                "suggested_start_at": event_time(16, 20),
-                "expected_return_at": event_time(17, 0),
+                "fault_at": event_time(9, 55),
+                "suggested_start_at": event_time(10, 0),
+                "expected_return_at": event_time(10, 40),
                 "confirmed_at": None,
                 "confirmed_by": None,
                 "returned_at": None,
@@ -1099,8 +1103,7 @@ class Command(BaseCommand):
     def _seed_materials(operational_date, users, assignments):
         def material_time(hour, minute=0):
             return timezone.make_aware(
-                datetime.combine(operational_date, time(hour, minute)),
-                ZoneInfo("Europe/London"),
+                datetime.combine(operational_date, time(hour, minute))
             )
 
         definitions = {
@@ -1202,8 +1205,7 @@ class Command(BaseCommand):
 
         def event_time(hour, minute=0):
             return timezone.make_aware(
-                datetime.combine(operational_date, time(hour, minute)),
-                ZoneInfo("Europe/London"),
+                datetime.combine(operational_date, time(hour, minute))
             )
 
         definitions = {
@@ -1381,8 +1383,7 @@ class Command(BaseCommand):
     def _seed_handover(users, assignments, escalations):
         operational_date = assignments["line_1"].date
         handed_over_at = timezone.make_aware(
-            datetime.combine(operational_date, time(16, 25)),
-            ZoneInfo("Europe/London"),
+            datetime.combine(operational_date, time(16, 25))
         )
         handover, _ = ShiftHandover.objects.update_or_create(
             outgoing_assignment=assignments["line_1"],

@@ -1,5 +1,4 @@
 from datetime import date, time
-from zoneinfo import ZoneInfo
 
 from django.contrib.auth import get_user_model
 from django.core.files.storage import default_storage
@@ -90,7 +89,6 @@ class Command(BaseCommand):
             assignment__production_line__code="DEMO-LINE-02",
             status=BreakOpportunity.Status.RECOVERED,
         ).first()
-        site_timezone = ZoneInfo("Europe/London")
         worker = OperationalWorkerHeartbeat.objects.filter(
             worker_name="operational-reminders",
         ).first()
@@ -172,12 +170,9 @@ class Command(BaseCommand):
                 "10:08 recovery story",
                 bool(
                     day_four
-                    and day_four.fault_at.astimezone(site_timezone).time()
-                    == time(10, 8)
-                    and day_four.expected_return_at.astimezone(site_timezone).time()
-                    == time(10, 48)
-                    and day_four.checks_completed_at.astimezone(site_timezone).time()
-                    == time(10, 53)
+                    and day_four.fault_at.time() == time(10, 8)
+                    and day_four.expected_return_at.time() == time(10, 48)
+                    and day_four.checks_completed_at.time() == time(10, 53)
                 ),
                 "fault 10:08, return 10:48, checks 10:53",
             ),
