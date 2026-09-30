@@ -71,7 +71,7 @@ functional owners, not login personas. All names and records are fictional.
 | Downtime events | 7 / 42 min | Hour buckets, reason, owner and resolved evidence |
 | Daily plan blocks | 30 | Three production blocks and two 40-minute breaks per line |
 | Hourly output rows | 66 | Target, done, short, progress fill and hourly detail |
-| Line updates | 8 | Green, Amber and Red, current product, owner and next update |
+| Line updates | 9 | Green, Amber and Red, current product, owner and next update |
 | Evidence files | 1 | Safe downloadable text evidence attached to a Red update |
 | Material rows | 4 | Ready, In process, Short and Held |
 | Escalations | 6 | Critical/high/medium, assigned/unassigned, open/resolved and historical loss |
