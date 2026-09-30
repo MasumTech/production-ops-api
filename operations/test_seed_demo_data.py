@@ -1,6 +1,7 @@
 from datetime import date, time
 from io import StringIO
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -157,7 +158,9 @@ def test_seed_demo_data_creates_complete_dataset():
         .first()
     )
     assert latest_line_two is not None
-    assert latest_line_two.recorded_at.time() == time(16, 10)
+    assert latest_line_two.recorded_at.astimezone(
+        ZoneInfo("Europe/London")
+    ).time() == time(16, 10)
 
     manager = get_user_model().objects.get(username="demo.manager")
     assert manager.is_staff is True
@@ -227,7 +230,9 @@ def test_seed_demo_data_creates_complete_dataset():
     assert suggested_break.source_update.issue_summary == (
         "Printer fault detected before planned break"
     )
-    assert suggested_break.source_update.next_update_due_at.time() == time(10, 40)
+    assert suggested_break.source_update.next_update_due_at.astimezone(
+        ZoneInfo("Europe/London")
+    ).time() == time(10, 40)
 
     day_four_recovery = BreakOpportunity.objects.get(
         assignment__production_line__code="DEMO-LINE-02",
