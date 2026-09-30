@@ -4,6 +4,11 @@ This pack defines the final evidence and human approvals required to take the
 Multi-Line Production Operations Platform into a controlled, non-production
 factory pilot. It does not authorise production use.
 
+The latest frozen technical evidence is recorded in
+[Release Candidate Evidence — 30 September 2026](release-candidate-evidence-2026-09-30.md).
+That record confirms the merged-main automated gate while keeping human UAT,
+named approvals, staging publication, and deployment explicitly pending.
+
 ## Release candidate identity
 
 Record these values before testing:
