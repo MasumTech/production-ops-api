@@ -108,10 +108,10 @@ test("Recovery history shows completed evidence without changing current state",
   await page.getByRole("tab", { name: "Recovery history" }).click();
 
   await expect(page.getByLabel("History range")).toHaveValue("7");
-  await expect(page.getByText("Recovered", { exact: true })).toBeVisible();
+  await expect(page.getByText("Recovered", { exact: true }).first()).toBeVisible();
   await expect(page.getByText(/Safety, quality and technical checks completed/)).toBeVisible();
 
   await page.getByLabel("History range").selectOption("30");
   await expect(page.getByLabel("History range")).toHaveValue("30");
-  await expect(page.getByText("Recovered", { exact: true })).toBeVisible();
+  await expect(page.getByText("Recovered", { exact: true }).first()).toBeVisible();
 });
