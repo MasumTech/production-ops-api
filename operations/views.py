@@ -1132,6 +1132,8 @@ class DowntimeEventViewSet(viewsets.ModelViewSet):
             "shift",
             "shift__production_line",
         )
+        if getattr(self, "swagger_fake_view", False):
+            return queryset.none()
         if not self.request.user.is_staff:
             assigned_shift = TeamLeaderAssignment.objects.filter(
                 team_leader=self.request.user,
