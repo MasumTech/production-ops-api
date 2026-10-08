@@ -41,6 +41,11 @@ from operations.models import (
 DEMO_DATE = "2026-09-02"
 DEMO_PASSWORD = f"test-{uuid4().hex}"
 FULL_RESET_CONFIRMATION = "DELETE-ALL-LOCAL-DATA"
+SITE_TIMEZONE = ZoneInfo("Europe/London")
+
+
+def site_time(value):
+    return value.astimezone(SITE_TIMEZONE).time().replace(tzinfo=None)
 
 
 def run_seed(**options):
@@ -127,7 +132,7 @@ def test_seed_demo_data_creates_complete_dataset():
         "materials": 4,
         "escalations": 6,
         "breaks": 2,
-        "break_opportunities": 3,
+        "break_opportunities": 4,
         "handovers": 1,
         "incidents": 1,
         "pilot_trials": 4,
@@ -158,9 +163,7 @@ def test_seed_demo_data_creates_complete_dataset():
         .first()
     )
     assert latest_line_two is not None
-    assert latest_line_two.recorded_at.astimezone(
-        ZoneInfo("Europe/London")
-    ).time() == time(16, 10)
+    assert site_time(latest_line_two.recorded_at) == time(16, 10)
 
     manager = get_user_model().objects.get(username="demo.manager")
     assert manager.is_staff is True
@@ -204,7 +207,7 @@ def test_seed_demo_data_creates_complete_dataset():
         .first()
     )
     assert weekday_first_block is not None
-    assert weekday_first_block.planned_start_at.time() == time(6, 45)
+    assert site_time(weekday_first_block.planned_start_at) == time(6, 45)
     assert (
         DailyPlanBlock.objects.filter(
             assignment__production_line__code="DEMO-LINE-01",
@@ -221,25 +224,45 @@ def test_seed_demo_data_creates_complete_dataset():
     suggested_break = BreakOpportunity.objects.select_related(
         "break_block",
         "source_update",
-    ).get(status=BreakOpportunity.Status.SUGGESTED)
+    ).get(
+        status=BreakOpportunity.Status.SUGGESTED,
+        assignment__production_line__code="DEMO-LINE-02",
+    )
     assert suggested_break.assignment.production_line.code == "DEMO-LINE-02"
     assert suggested_break.break_block.break_number == 1
-    assert suggested_break.fault_at.time() == time(9, 55)
-    assert suggested_break.suggested_start_at.time() == time(10, 0)
-    assert suggested_break.expected_return_at.time() == time(10, 40)
+    assert site_time(suggested_break.fault_at) == time(9, 55)
+    assert site_time(suggested_break.suggested_start_at) == time(10, 0)
+    assert site_time(suggested_break.expected_return_at) == time(10, 40)
     assert suggested_break.source_update.issue_summary == (
         "Printer fault detected before planned break"
     )
-    assert suggested_break.source_update.next_update_due_at.time() == time(10, 35)
+    assert site_time(suggested_break.source_update.next_update_due_at) == time(10, 35)
+
+    line_four_suggestion = BreakOpportunity.objects.select_related(
+        "break_block",
+        "source_update",
+    ).get(
+        status=BreakOpportunity.Status.SUGGESTED,
+        assignment__production_line__code="DEMO-LINE-04",
+    )
+    assert line_four_suggestion.break_block.break_number == 2
+    assert site_time(line_four_suggestion.fault_at) == time(16, 10)
+    assert site_time(line_four_suggestion.suggested_start_at) == time(16, 20)
+    assert site_time(line_four_suggestion.expected_return_at) == time(17, 0)
+    assert site_time(line_four_suggestion.break_block.planned_start_at) == time(16, 20)
+    assert site_time(line_four_suggestion.break_block.planned_end_at) == time(17, 0)
+    assert line_four_suggestion.source_update.issue_summary == (
+        "Conveyor restart remains below target"
+    )
 
     day_four_recovery = BreakOpportunity.objects.get(
         assignment__production_line__code="DEMO-LINE-02",
         status=BreakOpportunity.Status.RECOVERED,
     )
-    assert day_four_recovery.fault_at.time() == time(10, 8)
-    assert day_four_recovery.expected_return_at.time() == time(10, 48)
-    assert day_four_recovery.checks_completed_at.time() == time(10, 53)
-    assert day_four_recovery.run_resumed_at.time() == time(10, 53)
+    assert site_time(day_four_recovery.fault_at) == time(10, 8)
+    assert site_time(day_four_recovery.expected_return_at) == time(10, 48)
+    assert site_time(day_four_recovery.checks_completed_at) == time(10, 53)
+    assert site_time(day_four_recovery.run_resumed_at) == time(10, 53)
     assert (
         sum(
             event.duration_minutes
@@ -298,6 +321,13 @@ def test_seed_demo_data_creates_complete_dataset():
         HourlyLineUpdate.Status.AMBER,
         HourlyLineUpdate.Status.RED,
     }
+    latest_update_times = []
+    for assignment in current_assignments:
+        latest_update = assignment.hourly_updates.order_by("-recorded_at").first()
+        assert latest_update is not None
+        latest_update_times.append(site_time(latest_update.recorded_at))
+    assert max(latest_update_times) == time(16, 10)
+    assert all(update_time <= time(16, 10) for update_time in latest_update_times)
     assert set(ProductMaterialReadiness.objects.values_list("status", flat=True)) == {
         ProductMaterialReadiness.Status.READY,
         ProductMaterialReadiness.Status.IN_PROCESS,
@@ -314,7 +344,7 @@ def test_seed_demo_data_creates_complete_dataset():
     assert short_material.responsible_role == "Materials"
     assert short_material.expected_action == "Decision due 10:20"
     assert short_material.next_action == "Confirm replenishment"
-    assert short_material.needed_by_at.time() == time(10, 30)
+    assert site_time(short_material.needed_by_at) == time(10, 30)
     assert short_material.notes == "Carton stock below next-hour demand."
 
     held_material = ProductMaterialReadiness.objects.get(
@@ -407,7 +437,7 @@ def test_seed_demo_data_creates_complete_dataset():
         date=DEMO_DATE,
         stdout=verification_output,
     )
-    assert "All 23 showcase checks passed." in verification_output.getvalue()
+    assert "All 34 showcase checks passed." in verification_output.getvalue()
 
 
 @pytest.mark.django_db
@@ -447,7 +477,7 @@ def test_seed_demo_day_shift_start_follows_weekday_weekend_rule(
         .first()
     )
     assert first_block is not None
-    assert first_block.planned_start_at.time() == expected_start
+    assert site_time(first_block.planned_start_at) == expected_start
 
 
 @pytest.mark.django_db

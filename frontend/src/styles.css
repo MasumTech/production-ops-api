@@ -1807,6 +1807,13 @@ td span {
   font-size: 0.72rem;
 }
 
+.notification-item__description {
+  margin: 0;
+  color: #d8e6f3;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
 .notification-item .button {
   min-height: 36px;
   padding: 0.45rem 0.65rem;
@@ -4638,6 +4645,13 @@ td span {
 .daily-plan-output-table h2 { margin-top: 0; }
 .daily-plan-snapshot { display: inline-flex; align-items: center; justify-self: end; gap: 7px; color: #536984; font-size: .82rem; font-weight: 700; }
 .plan-block-editor { width: min(760px, calc(100vw - 32px)); }
+.plan-editor-line-context { display: grid; gap: 3px; padding: 12px 14px; border: 1px solid #b8d4eb; border-radius: 8px; background: #eef7ff; }
+.plan-editor-line-context strong { color: #0d315e; font-size: 1rem; }
+.plan-editor-line-context span { color: #536984; font-size: .82rem; }
+.manager-line-hourly-detail { display: grid; gap: 10px; }
+.manager-line-hourly-detail > p { margin: 0; color: #536984; font-size: .82rem; }
+.manager-line-hourly-detail .tl-plan-v2__metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.manager-line-hourly-detail .tl-plan-v2__hours { grid-template-columns: repeat(2,minmax(0,1fr)); }
 .plan-editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .plan-editor-grid label { margin: 0; }
 .metric-behind { color: #b42332; font-weight: 700; }.metric-ahead { color: #137d4f; font-weight: 700; }
@@ -6861,16 +6875,50 @@ td span {
 
 .team-control-card__actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 14px;
   margin-top: auto;
   padding: 13px 18px 18px;
 }
 
 .team-control-card__actions .team-line-primary-action,
-.team-control-card__actions .team-line-outline-danger {
+.team-control-card__actions .team-line-outline-danger,
+.team-control-card__actions .team-line-downtime-action {
   min-height: 48px;
   padding-inline: 14px;
+}
+
+.team-line-downtime-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #c07813;
+  border-radius: 4px;
+  color: #8a5308;
+  background: #fff8e7;
+  font: inherit;
+  font-weight: 760;
+}
+
+.team-line-downtime-action:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.team-downtime-editor__times,
+.team-downtime-editor__selects {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 700px) {
+  .team-control-card__actions,
+  .team-downtime-editor__times,
+  .team-downtime-editor__selects {
+    grid-template-columns: 1fr;
+  }
 }
 
 .team-lines-v2__priority {

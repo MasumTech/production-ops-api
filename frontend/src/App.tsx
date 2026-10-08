@@ -659,6 +659,10 @@ export default function App() {
           <MyLinesPanel
             data={data}
             onRaiseIssue={openIssueFor}
+            onSaved={async (message) => {
+              if (online) await refresh();
+              setToast(message);
+            }}
           />
         ) : null}
         {tab === "issues" && profile ? (

@@ -7,6 +7,7 @@ from django.db.models import (
     Avg,
     Case,
     Count,
+    Exists,
     IntegerField,
     OuterRef,
     Prefetch,
@@ -56,6 +57,7 @@ from .models import (
     TeamLeaderAssignment,
 )
 from .permissions import (
+    IsAssignedTeamLeaderDowntimeOrStaff,
     IsAssignedTeamLeaderOrStaff,
     IsBreakRecoveryParticipantOrStaff,
     IsEscalationParticipantOrStaff,
@@ -1107,7 +1109,7 @@ class ShiftViewSet(viewsets.ModelViewSet):
 
 class DowntimeEventViewSet(viewsets.ModelViewSet):
     serializer_class = DowntimeEventSerializer
-    permission_classes = (IsStaffOrReadOnly,)
+    permission_classes = (IsAssignedTeamLeaderDowntimeOrStaff,)
     filter_backends = (
         filters.SearchFilter,
         filters.OrderingFilter,
@@ -1130,6 +1132,16 @@ class DowntimeEventViewSet(viewsets.ModelViewSet):
             "shift",
             "shift__production_line",
         )
+        if not self.request.user.is_staff:
+            assigned_shift = TeamLeaderAssignment.objects.filter(
+                team_leader=self.request.user,
+                production_line_id=OuterRef("shift__production_line_id"),
+                date=OuterRef("shift__date"),
+                shift_type=OuterRef("shift__shift_type"),
+            )
+            queryset = queryset.annotate(
+                assigned_to_requester=Exists(assigned_shift),
+            ).filter(assigned_to_requester=True)
         shift_date = self.request.query_params.get("date")
         shift_type = self.request.query_params.get("shift_type")
         production_line = self.request.query_params.get("production_line")
@@ -1144,6 +1156,22 @@ class DowntimeEventViewSet(viewsets.ModelViewSet):
         if event_status:
             queryset = queryset.filter(status=event_status)
         return queryset
+
+    def perform_create(self, serializer):
+        shift = serializer.validated_data["shift"]
+        if (
+            not self.request.user.is_staff
+            and not TeamLeaderAssignment.objects.filter(
+                team_leader=self.request.user,
+                production_line=shift.production_line,
+                date=shift.date,
+                shift_type=shift.shift_type,
+            ).exists()
+        ):
+            raise PermissionDenied(
+                "You can only record downtime for your assigned lines."
+            )
+        serializer.save()
 
 
 class QualityIncidentViewSet(viewsets.ModelViewSet):

@@ -89,6 +89,33 @@ const updates: LineUpdate[] = [
 const data: ManagerWorkspaceData = {
   assignments,
   updates,
+  planBlocks: [
+    {
+      id: 60,
+      assignment: 2,
+      assignment_date: "2026-09-01",
+      production_line: 102,
+      production_line_code: "LINE-02",
+      sequence_number: 1,
+      block_type: "production",
+      planned_start_at: "2026-09-01T07:00:00Z",
+      planned_end_at: "2026-09-01T18:00:00Z",
+      product_code: "PROD-B",
+      product_name: "Product B",
+      target_units_per_hour: 455,
+      planned_units: 5000,
+      break_number: null,
+    },
+  ],
+  hourlyOutputs: [
+    {
+      id: 61,
+      assignment: 2,
+      hour_start_at: "2026-09-01T08:00:00Z",
+      actual_units: 390,
+      updated_at: "2026-09-01T09:00:00Z",
+    },
+  ],
   materials: [
     {
       id: 20,
@@ -438,6 +465,10 @@ describe("manager console", () => {
 
     await actor.click(within(screen.getByRole("navigation", { name: "Manager sections" })).getByRole("button", { name: "Team Leaders" }));
     await actor.click(screen.getByLabelText("Open details for LINE-02"));
+    const lineDrawer = screen.getByLabelText("Line 2 details");
+    expect(within(lineDrawer).getByRole("heading", { name: "Hour-by-hour details" })).toBeInTheDocument();
+    expect(within(lineDrawer).getAllByText("T 455").length).toBeGreaterThan(0);
+    expect(within(lineDrawer).getByText("D 390")).toBeInTheDocument();
     await actor.click(screen.getByRole("button", { name: /Filler sensor reset/ }));
 
     const dialog = screen.getByRole("dialog", { name: "Edit downtime & description" });
@@ -493,6 +524,8 @@ describe("manager console", () => {
     await actor.click(within(screen.getByRole("navigation", { name: "Manager sections" })).getByRole("button", { name: "Daily plans" }));
     await actor.click(screen.getByRole("button", { name: "Add plan block" }));
     const addDialog = screen.getByRole("dialog", { name: "Add plan block" });
+    expect(within(addDialog).getByText("Selected line: Line 2")).toBeInTheDocument();
+    expect(within(addDialog).getByText(/LINE-02 · Ready Meals · Day shift/)).toBeInTheDocument();
     await actor.type(within(addDialog).getByLabelText("Product code"), "NEW-01");
     await actor.type(within(addDialog).getByLabelText("Product name"), "New product");
     await actor.type(within(addDialog).getByLabelText("Target units / hour"), "120");

@@ -1,7 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import * as api from "../api";
 import type { Assignment, ShiftRecord, WorkspaceData } from "../types";
 import { MyLinesPanel } from "./MyLinesPanel";
 
@@ -116,6 +117,8 @@ const data: WorkspaceData = {
   downtimeEvents: [],
 };
 
+afterEach(() => vi.restoreAllMocks());
+
 describe("Team Leader My Lines v2", () => {
   it("renders the latest card-based operational control view", () => {
     render(<MyLinesPanel data={data} onRaiseIssue={vi.fn()} />);
@@ -220,5 +223,42 @@ describe("Team Leader My Lines v2", () => {
 
     await actor.click(updateButtons[1]);
     expect(onRaiseIssue).toHaveBeenLastCalledWith(assignments[1].id, "update");
+  });
+
+  it("records downtime from the selected Team Leader line", async () => {
+    const actor = userEvent.setup();
+    const onSaved = vi.fn();
+    const postSpy = vi.spyOn(api, "postJson").mockResolvedValue({} as never);
+
+    render(
+      <MyLinesPanel
+        data={data}
+        onRaiseIssue={vi.fn()}
+        onSaved={onSaved}
+      />,
+    );
+
+    await actor.click(screen.getAllByRole("button", { name: "Record downtime" })[0]);
+    const dialog = screen.getByRole("dialog", { name: "Record downtime" });
+    expect(within(dialog).getByText(/Line 2 · DEMO-LINE-02/)).toBeInTheDocument();
+    await actor.type(
+      within(dialog).getByLabelText("Description"),
+      "Sealer stopped and the line was made safe",
+    );
+    await actor.selectOptions(within(dialog).getByLabelText("Reason"), "equipment");
+    await actor.selectOptions(within(dialog).getByLabelText("Owner group"), "engineering");
+    await actor.click(within(dialog).getByRole("button", { name: "Record downtime" }));
+
+    expect(postSpy).toHaveBeenCalledWith(
+      "/downtime-events/",
+      expect.objectContaining({
+        shift: 21,
+        reason_category: "equipment",
+        description: "Sealer stopped and the line was made safe",
+        owner_group: "engineering",
+        status: "open",
+      }),
+    );
+    expect(onSaved).toHaveBeenCalledWith("Downtime recorded for the selected line.");
   });
 });

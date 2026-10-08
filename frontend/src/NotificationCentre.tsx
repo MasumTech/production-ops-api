@@ -9,6 +9,30 @@ function notificationTitle(event: OperationalEvent): string {
   return event.event_type.split(".").map(titleCase).join(" · ");
 }
 
+function notificationDescription(event: OperationalEvent): string {
+  const lineContext = event.production_line ? "Production-line alert: " : "";
+  const descriptions: Record<string, string> = {
+    "escalation.overdue": "The response deadline has passed. Review the owner and immediate action.",
+    "line_update.overdue": "The next line update is overdue. Confirm the current condition and record a new status.",
+    "break_recovery.overdue": "The expected return time has passed. Confirm return, checks and safe restart.",
+    "line_update.created": "A new line status was recorded. Review the RAG state, control and next update time.",
+    "line_update.changed": "A line status was updated. Review the latest control and follow-up requirement.",
+    "escalation.created": "A new operational action was raised. Review its priority, owner and response time.",
+    "escalation.changed": "An operational action changed. Review the latest ownership and status.",
+    "material.created": "A material-readiness record was added. Check availability, owner and need-by time.",
+    "material.changed": "Material readiness changed. Review the supply position and required action.",
+    "handover.created": "A shift handover is ready for review and acceptance.",
+    "handover.changed": "Shift handover status changed. Review the latest summary and open actions.",
+  };
+  const fallback = event.event_type.endsWith(".created")
+    ? "A new operational record was created. Open the related workspace for full details."
+    : "An operational record changed. Open the related workspace for full details.";
+  const status = typeof event.metadata.status === "string"
+    ? ` Current status: ${titleCase(event.metadata.status)}.`
+    : "";
+  return `${lineContext}${descriptions[event.event_type] ?? fallback}${status}`;
+}
+
 export function NotificationCentre({
   refreshToken,
   iconOnly = false,
@@ -94,6 +118,7 @@ export function NotificationCentre({
               <article key={event.id} className={`notification-item notification-item--${event.severity}`}>
                 <div>
                   <strong>{notificationTitle(event)}</strong>
+                  <p className="notification-item__description">{notificationDescription(event)}</p>
                   <span>{formatDateTime(event.occurred_at)}</span>
                 </div>
                 <button

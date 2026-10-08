@@ -16,7 +16,7 @@ bash scripts/build_showcase_database.sh
 The default output is `showcase-production-ops.sqlite3` and the default
 operational date is Friday **04 September 2026**. The filename is ignored by
 Git. The build applies every migration, flushes only that dedicated showcase
-database, seeds it, and runs 23 coherence checks.
+database, seeds it, and runs 34 coherence checks.
 
 To choose another safe output file or operational date:
 
@@ -75,7 +75,7 @@ functional owners, not login personas. All names and records are fictional.
 | Evidence files | 1 | Safe downloadable text evidence attached to a Red update |
 | Material rows | 4 | Ready, In process, Short and Held |
 | Escalations | 6 | Critical/high/medium, assigned/unassigned, open/resolved and historical loss |
-| Break opportunities | 3 | Suggested plus two fully recovered examples |
+| Break opportunities | 4 | Two suggested plus two fully recovered examples |
 | Legacy break controls | 2 | Planned and active-overdue monitoring |
 | Shift handovers | 1 | Pending handover with an open linked escalation |
 | Quality incidents | 1 | High-severity investigating label hold |
@@ -98,6 +98,10 @@ functional owners, not login personas. All names and records are fictional.
 | Line 4 · Secondary Filling | Team Leader 2 | Red | Behind plan, conveyor downtime and a suggested 16:20–17:00 break opportunity |
 | Line 5 · Final Packing | Team Leader 3 | Green | Stable production with QA sample release |
 | Line 6 · Dispatch Preparation | Team Leader 3 | Amber | Sealer temperature watch and Machine Minder ownership |
+
+All six line stories share a deliberate **16:10 Europe/London** Manager
+snapshot. Earlier updates remain visible as history; no current record is later
+than that snapshot.
 
 ## Screen-by-screen verification
 

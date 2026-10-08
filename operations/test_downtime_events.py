@@ -8,7 +8,12 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from operations.models import DowntimeEvent, ProductionLine, Shift
+from operations.models import (
+    DowntimeEvent,
+    ProductionLine,
+    Shift,
+    TeamLeaderAssignment,
+)
 
 
 @pytest.fixture
@@ -183,3 +188,121 @@ def test_only_management_staff_can_edit_downtime(downtime_shift):
     event.refresh_from_db()
     assert event.description == "Verified conveyor reset"
     assert event.resolution_note == "Manager checked the maintenance log."
+
+
+@pytest.mark.django_db
+def test_team_leader_can_create_downtime_only_for_assigned_shift(downtime_shift):
+    team_leader = get_user_model().objects.create_user(
+        username="assigned.downtime.leader",
+        password=None,
+    )
+    TeamLeaderAssignment.objects.create(
+        team_leader=team_leader,
+        production_line=downtime_shift.production_line,
+        date=downtime_shift.date,
+        shift_type=downtime_shift.shift_type,
+        assigned_by=downtime_shift.supervisor,
+    )
+    client = APIClient()
+    client.force_authenticate(team_leader)
+
+    response = client.post(
+        reverse("downtime-event-list"),
+        {
+            "shift": downtime_shift.id,
+            "started_at": shift_time(downtime_shift, 11, 5).isoformat(),
+            "ended_at": shift_time(downtime_shift, 11, 14).isoformat(),
+            "reason_category": DowntimeEvent.ReasonCategory.EQUIPMENT,
+            "description": "Conveyor sensor stopped the line",
+            "owner_group": DowntimeEvent.OwnerGroup.ENGINEERING,
+            "status": DowntimeEvent.Status.RESOLVED,
+            "resolution_note": "Sensor reset and guarded restart completed.",
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["duration_minutes"] == 9
+    assert response.data["production_line_code"] == "LINE-DT"
+
+    unassigned_line = ProductionLine.objects.create(
+        code="LINE-DT-OTHER",
+        name="Unassigned downtime line",
+    )
+    unassigned_shift = Shift.objects.create(
+        production_line=unassigned_line,
+        supervisor=downtime_shift.supervisor,
+        date=downtime_shift.date,
+        shift_type=downtime_shift.shift_type,
+        start_time=time(7),
+        end_time=time(18),
+        planned_output=900,
+        actual_output=600,
+    )
+    denied = client.post(
+        reverse("downtime-event-list"),
+        {
+            "shift": unassigned_shift.id,
+            "started_at": shift_time(unassigned_shift, 12).isoformat(),
+            "reason_category": DowntimeEvent.ReasonCategory.OTHER,
+            "description": "Must not be accepted",
+            "owner_group": DowntimeEvent.OwnerGroup.OPERATIONS,
+            "status": DowntimeEvent.Status.OPEN,
+        },
+        format="json",
+    )
+
+    assert denied.status_code == status.HTTP_403_FORBIDDEN
+    assert not DowntimeEvent.objects.filter(shift=unassigned_shift).exists()
+
+
+@pytest.mark.django_db
+def test_team_leader_downtime_list_is_limited_to_assigned_shifts(downtime_shift):
+    team_leader = get_user_model().objects.create_user(
+        username="scoped.downtime.leader",
+        password=None,
+    )
+    TeamLeaderAssignment.objects.create(
+        team_leader=team_leader,
+        production_line=downtime_shift.production_line,
+        date=downtime_shift.date,
+        shift_type=downtime_shift.shift_type,
+        assigned_by=downtime_shift.supervisor,
+    )
+    visible = DowntimeEvent.objects.create(
+        shift=downtime_shift,
+        started_at=shift_time(downtime_shift, 13),
+        reason_category=DowntimeEvent.ReasonCategory.MATERIAL,
+        description="Visible assigned-line event",
+        owner_group=DowntimeEvent.OwnerGroup.OPERATIONS,
+    )
+    hidden_shift = Shift.objects.create(
+        production_line=ProductionLine.objects.create(
+            code="LINE-DT-HIDDEN",
+            name="Hidden downtime line",
+        ),
+        supervisor=downtime_shift.supervisor,
+        date=downtime_shift.date,
+        shift_type=downtime_shift.shift_type,
+        start_time=time(7),
+        end_time=time(18),
+        planned_output=900,
+        actual_output=600,
+    )
+    DowntimeEvent.objects.create(
+        shift=hidden_shift,
+        started_at=shift_time(hidden_shift, 13),
+        reason_category=DowntimeEvent.ReasonCategory.QUALITY,
+        description="Hidden unassigned-line event",
+        owner_group=DowntimeEvent.OwnerGroup.QA,
+    )
+    client = APIClient()
+    client.force_authenticate(team_leader)
+
+    response = client.get(
+        reverse("downtime-event-list"),
+        {"date": downtime_shift.date, "shift_type": downtime_shift.shift_type},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert [item["id"] for item in response.data["results"]] == [visible.id]
