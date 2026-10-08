@@ -9,6 +9,7 @@ export default defineConfig({
   reporter: process.env.CI ? "line" : "list",
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://127.0.0.1:5173",
+    timezoneId: "Europe/London",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
