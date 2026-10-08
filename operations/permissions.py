@@ -26,6 +26,28 @@ class IsAssignedTeamLeaderOrStaff(BasePermission):
         return obj.assignment.team_leader_id == request.user.id
 
 
+class IsAssignedTeamLeaderDowntimeOrStaff(BasePermission):
+    message = "You can only record downtime for your assigned lines."
+
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        return request.method in SAFE_METHODS or request.method == "POST"
+
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_staff:
+            return True
+        if request.method not in SAFE_METHODS:
+            return False
+        return obj.shift.production_line.team_leader_assignments.filter(
+            team_leader=request.user,
+            date=obj.shift.date,
+            shift_type=obj.shift.shift_type,
+        ).exists()
+
+
 class IsEscalationParticipantOrStaff(BasePermission):
     message = "You can only access escalations for your lines or assigned actions."
 

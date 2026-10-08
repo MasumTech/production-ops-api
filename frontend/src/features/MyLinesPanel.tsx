@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { AppIcon } from "../AppIcon";
+import { ApiError, OfflineQueuedError, postJson } from "../api";
 import { EmptyState } from "../components";
 import type {
   Assignment,
@@ -44,6 +45,12 @@ function formatClock(value: string | null | undefined): string {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function localDateTimeInput(value: string): string {
+  const parsed = new Date(value);
+  parsed.setMinutes(parsed.getMinutes() - parsed.getTimezoneOffset());
+  return parsed.toISOString().slice(0, 16);
 }
 
 function shiftDateTime(date: string, time: string): Date {
@@ -282,11 +289,22 @@ function MetricCard({
 export function MyLinesPanel({
   data,
   onRaiseIssue,
+  onSaved,
 }: {
   data: WorkspaceData;
   onRaiseIssue: (assignmentId: number, mode: "update" | "escalation") => void;
+  onSaved?: (message: string) => void | Promise<void>;
 }) {
   const lines = useMemo(() => buildLineViews(data), [data]);
+  const [downtimeLine, setDowntimeLine] = useState<LineView | null>(null);
+  const [downtimeStartedAt, setDowntimeStartedAt] = useState("");
+  const [downtimeEndedAt, setDowntimeEndedAt] = useState("");
+  const [downtimeReason, setDowntimeReason] = useState<DowntimeEvent["reason_category"]>("equipment");
+  const [downtimeOwner, setDowntimeOwner] = useState<DowntimeEvent["owner_group"]>("engineering");
+  const [downtimeDescription, setDowntimeDescription] = useState("");
+  const [downtimeResolution, setDowntimeResolution] = useState("");
+  const [downtimeSaving, setDowntimeSaving] = useState(false);
+  const [downtimeMessage, setDowntimeMessage] = useState("");
   const referenceTime = useMemo(() => snapshotTime(lines), [lines]);
   const counts = useMemo(
     () => ({
@@ -306,6 +324,63 @@ export function MyLinesPanel({
     .map((line) => line.update?.next_update_due_at)
     .filter((value): value is string => Boolean(value))
     .sort((left, right) => new Date(left).getTime() - new Date(right).getTime())[0];
+
+  const openDowntimeCapture = (line: LineView) => {
+    setDowntimeLine(line);
+    setDowntimeStartedAt(localDateTimeInput(line.update?.recorded_at ?? new Date().toISOString()));
+    setDowntimeEndedAt("");
+    setDowntimeReason("equipment");
+    setDowntimeOwner("engineering");
+    setDowntimeDescription("");
+    setDowntimeResolution("");
+    setDowntimeMessage("");
+  };
+
+  const saveDowntime = async () => {
+    if (!downtimeLine?.shift) {
+      setDowntimeMessage("This line has no shift record for the selected date.");
+      return;
+    }
+    if (!downtimeStartedAt || !downtimeDescription.trim()) {
+      setDowntimeMessage("Start time and a clear description are required.");
+      return;
+    }
+    if (
+      downtimeEndedAt &&
+      new Date(downtimeEndedAt).getTime() <= new Date(downtimeStartedAt).getTime()
+    ) {
+      setDowntimeMessage("Downtime end must be later than the start time.");
+      return;
+    }
+
+    setDowntimeSaving(true);
+    setDowntimeMessage("");
+    try {
+      await postJson<DowntimeEvent>("/downtime-events/", {
+        shift: downtimeLine.shift.id,
+        started_at: new Date(downtimeStartedAt).toISOString(),
+        ended_at: downtimeEndedAt ? new Date(downtimeEndedAt).toISOString() : null,
+        reason_category: downtimeReason,
+        description: downtimeDescription.trim(),
+        owner_group: downtimeOwner,
+        status: downtimeEndedAt ? "resolved" : "open",
+        resolution_note: downtimeEndedAt ? downtimeResolution.trim() : "",
+      });
+      setDowntimeLine(null);
+      await onSaved?.("Downtime recorded for the selected line.");
+    } catch (caught) {
+      if (caught instanceof OfflineQueuedError) {
+        setDowntimeLine(null);
+        await onSaved?.("Downtime saved offline and queued for sync.");
+      } else {
+        setDowntimeMessage(
+          caught instanceof ApiError ? caught.message : "Could not record downtime.",
+        );
+      }
+    } finally {
+      setDowntimeSaving(false);
+    }
+  };
 
   return (
     <section className="team-lines-v2">
@@ -537,6 +612,15 @@ export function MyLinesPanel({
                       <AppIcon name="warning" size={20} />
                       Raise issue
                     </button>
+                    <button
+                      type="button"
+                      className="team-line-downtime-action"
+                      disabled={!line.shift}
+                      onClick={() => openDowntimeCapture(line)}
+                    >
+                      <AppIcon name="clock" size={20} />
+                      Record downtime
+                    </button>
                   </footer>
                 </article>
               );
@@ -552,6 +636,42 @@ export function MyLinesPanel({
                 .join(" · ")}
             </p>
           </div>
+
+          {downtimeLine ? (
+            <div className="downtime-modal-backdrop" role="presentation">
+              <section
+                className="downtime-editor team-downtime-editor"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="team-downtime-title"
+              >
+                <header>
+                  <div>
+                    <span className="eyebrow">Team Leader loss capture</span>
+                    <h2 id="team-downtime-title">Record downtime</h2>
+                  </div>
+                  <button type="button" aria-label="Close downtime form" onClick={() => setDowntimeLine(null)}>×</button>
+                </header>
+                <div className="downtime-editor__summary">
+                  <strong>{lineLabel(downtimeLine.assignment.production_line_code, 0)} · {downtimeLine.assignment.production_line_code}</strong>
+                  <span>{downtimeLine.assignment.production_line_name} · {downtimeLine.assignment.date} · {downtimeLine.assignment.shift_type}</span>
+                </div>
+                <div className="team-downtime-editor__times">
+                  <label>Downtime start<input type="datetime-local" value={downtimeStartedAt} onChange={(event) => setDowntimeStartedAt(event.target.value)} required /></label>
+                  <label>Downtime end (optional)<input type="datetime-local" value={downtimeEndedAt} min={downtimeStartedAt} onChange={(event) => setDowntimeEndedAt(event.target.value)} /></label>
+                </div>
+                <div className="team-downtime-editor__selects">
+                  <label>Reason<select value={downtimeReason} onChange={(event) => setDowntimeReason(event.target.value as DowntimeEvent["reason_category"])}><option value="equipment">Equipment</option><option value="material">Material</option><option value="quality">Quality</option><option value="staffing">Staffing</option><option value="changeover">Changeover</option><option value="other">Other</option></select></label>
+                  <label>Owner group<select value={downtimeOwner} onChange={(event) => setDowntimeOwner(event.target.value as DowntimeEvent["owner_group"])}><option value="operations">Operations</option><option value="engineering">Engineering</option><option value="qa">QA</option><option value="machine_minder">Machine Minder</option></select></label>
+                </div>
+                <label>Description<textarea rows={3} maxLength={160} value={downtimeDescription} onChange={(event) => setDowntimeDescription(event.target.value)} placeholder="What stopped or slowed the line?" required /></label>
+                {downtimeEndedAt ? <label>Resolution / restart evidence<textarea rows={2} maxLength={255} value={downtimeResolution} onChange={(event) => setDowntimeResolution(event.target.value)} placeholder="What was checked before restart?" /></label> : null}
+                <p className="downtime-editor__policy"><AppIcon name="shield" size={18} /> Open events remain live until a Manager reviews or resolves them. Completed events require an end time.</p>
+                {downtimeMessage ? <p className="downtime-editor__message" role="alert">{downtimeMessage}</p> : null}
+                <footer><button type="button" className="button button--ghost" onClick={() => setDowntimeLine(null)}>Cancel</button><button type="button" className="button button--primary" disabled={downtimeSaving} onClick={() => void saveDowntime()}>{downtimeSaving ? "Saving…" : "Record downtime"}</button></footer>
+              </section>
+            </div>
+          ) : null}
         </>
       )}
     </section>

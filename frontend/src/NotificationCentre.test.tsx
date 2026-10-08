@@ -34,6 +34,9 @@ describe("notification centre", () => {
     await actor.click(screen.getByRole("button", { name: "Alerts (1)" }));
     expect(screen.getByRole("heading", { name: "Notifications" })).toBeInTheDocument();
     expect(screen.getByText("Escalation · Overdue")).toBeInTheDocument();
+    expect(
+      screen.getByText(/response deadline has passed/i),
+    ).toBeInTheDocument();
 
     await actor.click(screen.getByRole("button", { name: "Mark read" }));
 

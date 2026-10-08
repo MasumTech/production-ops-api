@@ -45,6 +45,8 @@ from operations.models import (
 DEMO_PREFIX = "DEMO-"
 DEMO_USER_PREFIX = "demo."
 FULL_RESET_CONFIRMATION = "DELETE-ALL-LOCAL-DATA"
+SHOWCASE_SNAPSHOT_TIME = time(16, 10)
+SITE_TIMEZONE = ZoneInfo("Europe/London")
 
 
 class Command(BaseCommand):
@@ -231,7 +233,9 @@ class Command(BaseCommand):
     def _seed(self, operational_date, password):
         # Keep every relative demo timestamp anchored to the requested
         # operational date rather than the machine clock running the seed.
-        now = timezone.make_aware(datetime.combine(operational_date, time(16, 30)))
+        now = timezone.make_aware(
+            datetime.combine(operational_date, time(16, 30)), SITE_TIMEZONE
+        )
         users = self._seed_users(password)
         lines = self._seed_lines()
         assets = self._seed_assets(lines)
@@ -581,7 +585,7 @@ class Command(BaseCommand):
     def _seed_downtime_events(operational_date, shifts):
         def event_time(hour, minute=0):
             return timezone.make_aware(
-                datetime.combine(operational_date, time(hour, minute))
+                datetime.combine(operational_date, time(hour, minute)), SITE_TIMEZONE
             )
 
         definitions = (
@@ -663,7 +667,7 @@ class Command(BaseCommand):
 
         def planned_time(hour, minute=0):
             return timezone.make_aware(
-                datetime.combine(operational_date, time(hour, minute))
+                datetime.combine(operational_date, time(hour, minute)), SITE_TIMEZONE
             )
 
         schedules = {
@@ -759,6 +763,46 @@ class Command(BaseCommand):
                 )
             }
         )
+        # Line 4 carries the Manager showcase's Red-line recovery decision.
+        # Its second protected break is deliberately later so the 16:20-17:00
+        # suggested opportunity is backed by a real approved plan block.
+        schedules["line_4"] = (
+            (
+                "production",
+                day_start_hour,
+                day_start_minute,
+                11,
+                0,
+                "VSR-05",
+                "Vegetable Spring Rolls",
+                645,
+                None,
+            ),
+            ("break", 11, 0, 11, 40, "", "", None, 1),
+            (
+                "production",
+                11,
+                40,
+                16,
+                20,
+                "VSR-05",
+                "Vegetable Spring Rolls",
+                645,
+                None,
+            ),
+            ("break", 16, 20, 17, 0, "", "", None, 2),
+            (
+                "production",
+                17,
+                0,
+                18,
+                0,
+                "VSR-05",
+                "Vegetable Spring Rolls",
+                645,
+                None,
+            ),
+        )
         plan_blocks = {}
 
         for line_key, schedule in schedules.items():
@@ -794,11 +838,10 @@ class Command(BaseCommand):
 
     @staticmethod
     def _seed_hourly_output(operational_date, assignments, shifts, plan_blocks):
-        """Distribute sample shift totals over clock hours up to 16:10."""
-        site_timezone = ZoneInfo("Europe/London")
+        """Distribute sample shift totals over clock hours to the shared snapshot."""
         outputs = []
         snapshot = timezone.make_aware(
-            datetime.combine(operational_date, time(16, 10)), site_timezone
+            datetime.combine(operational_date, SHOWCASE_SNAPSHOT_TIME), SITE_TIMEZONE
         )
         for key, assignment in assignments.items():
             if key not in shifts:
@@ -812,7 +855,7 @@ class Command(BaseCommand):
             ]
             hour = timezone.make_aware(
                 datetime.combine(operational_date, shift.start_time.replace(minute=0)),
-                site_timezone,
+                SITE_TIMEZONE,
             )
             weighted_hours = []
             while hour < snapshot:
@@ -825,18 +868,24 @@ class Command(BaseCommand):
                                 end,
                                 timezone.make_aware(
                                     datetime.combine(
-                                        operational_date, block.planned_end_at.time()
+                                        operational_date,
+                                        block.planned_end_at.astimezone(
+                                            SITE_TIMEZONE
+                                        ).time(),
                                     ),
-                                    site_timezone,
+                                    SITE_TIMEZONE,
                                 ),
                             )
                             - max(
                                 hour,
                                 timezone.make_aware(
                                     datetime.combine(
-                                        operational_date, block.planned_start_at.time()
+                                        operational_date,
+                                        block.planned_start_at.astimezone(
+                                            SITE_TIMEZONE
+                                        ).time(),
                                     ),
-                                    site_timezone,
+                                    SITE_TIMEZONE,
                                 ),
                             )
                         ).total_seconds(),
@@ -874,12 +923,12 @@ class Command(BaseCommand):
         def recorded_time(hour, minute=0):
             return timezone.make_aware(
                 datetime.combine(operational_date, time(hour, minute)),
-                ZoneInfo("Europe/London"),
+                SITE_TIMEZONE,
             )
 
         def deadline_time(hour, minute=0):
             return timezone.make_aware(
-                datetime.combine(operational_date, time(hour, minute))
+                datetime.combine(operational_date, time(hour, minute)), SITE_TIMEZONE
             )
 
         definitions = {
@@ -957,7 +1006,7 @@ class Command(BaseCommand):
                 "action_taken": "Engineering fault finding in progress",
                 "support_required": "Engineering recovery support",
                 "requires_follow_up": True,
-                "recorded_at": recorded_time(16, 15),
+                "recorded_at": recorded_time(16, 10),
                 "next_update_due_at": deadline_time(16, 45),
             },
             "line_5_current": {
@@ -968,7 +1017,7 @@ class Command(BaseCommand):
                 "action_taken": "QA sample released",
                 "support_required": "",
                 "requires_follow_up": False,
-                "recorded_at": recorded_time(16, 20),
+                "recorded_at": recorded_time(16, 10),
                 "next_update_due_at": deadline_time(17, 20),
             },
             "line_6_current": {
@@ -979,7 +1028,7 @@ class Command(BaseCommand):
                 "action_taken": "Machine Minder monitoring every cycle",
                 "support_required": "Engineering standby",
                 "requires_follow_up": True,
-                "recorded_at": recorded_time(16, 25),
+                "recorded_at": recorded_time(16, 10),
                 "next_update_due_at": deadline_time(16, 55),
             },
         }
@@ -1033,7 +1082,7 @@ class Command(BaseCommand):
     ):
         def event_time(hour, minute=0):
             return timezone.make_aware(
-                datetime.combine(operational_date, time(hour, minute))
+                datetime.combine(operational_date, time(hour, minute)), SITE_TIMEZONE
             )
 
         recovered, _ = BreakOpportunity.objects.update_or_create(
@@ -1099,17 +1148,39 @@ class Command(BaseCommand):
             },
         )
 
+        line_four_suggested, _ = BreakOpportunity.objects.update_or_create(
+            source_update=updates["line_4_current"],
+            defaults={
+                "assignment": assignments["line_4"],
+                "break_block": plan_blocks["line_4_4"],
+                "status": BreakOpportunity.Status.SUGGESTED,
+                "fault_at": event_time(16, 10),
+                "suggested_start_at": event_time(16, 20),
+                "expected_return_at": event_time(17, 0),
+                "confirmed_at": None,
+                "confirmed_by": None,
+                "returned_at": None,
+                "checks_completed_at": None,
+                "run_resumed_at": None,
+                "recovery_notes": "",
+                "declined_at": None,
+                "declined_by": None,
+                "decline_reason": "",
+            },
+        )
+
         return {
             "recovered": recovered,
             "day_four_recovery": day_four_recovery,
             "suggested": suggested,
+            "line_four_suggested": line_four_suggested,
         }
 
     @staticmethod
     def _seed_materials(operational_date, users, assignments):
         def material_time(hour, minute=0):
             return timezone.make_aware(
-                datetime.combine(operational_date, time(hour, minute))
+                datetime.combine(operational_date, time(hour, minute)), SITE_TIMEZONE
             )
 
         definitions = {
@@ -1211,7 +1282,7 @@ class Command(BaseCommand):
 
         def event_time(hour, minute=0):
             return timezone.make_aware(
-                datetime.combine(operational_date, time(hour, minute))
+                datetime.combine(operational_date, time(hour, minute)), SITE_TIMEZONE
             )
 
         definitions = {
@@ -1389,7 +1460,7 @@ class Command(BaseCommand):
     def _seed_handover(users, assignments, escalations):
         operational_date = assignments["line_1"].date
         handed_over_at = timezone.make_aware(
-            datetime.combine(operational_date, time(16, 25))
+            datetime.combine(operational_date, time(16, 25)), SITE_TIMEZONE
         )
         handover, _ = ShiftHandover.objects.update_or_create(
             outgoing_assignment=assignments["line_1"],
@@ -1411,15 +1482,13 @@ class Command(BaseCommand):
 
     @staticmethod
     def _seed_pilot_data(operational_date, users, lines):
-        site_timezone = ZoneInfo("Europe/London")
-
         def audit_time(days, hour=12, minute=0):
             return timezone.make_aware(
                 datetime.combine(
                     operational_date + timedelta(days=days),
                     time(hour, minute),
                 ),
-                site_timezone,
+                SITE_TIMEZONE,
             )
 
         definitions = {

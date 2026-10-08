@@ -546,6 +546,12 @@ export function ManagerConsole({
     scheduleWindow,
     snapshotMinutes,
   );
+  const selectedLineProgress = selectedLine
+    ? progressLines.find((item) => item.row.assignment.id === selectedLine.assignment.id)
+    : undefined;
+  const selectedPlanAssignment = rows.find(
+    (row) => String(row.assignment.id) === planAssignment,
+  )?.assignment;
   const aggregatePosition = aggregateManagerPosition(progressLines);
   const snapshotFraction = Math.max(0, Math.min(100,
     ((snapshotMinutes - scheduleWindow.startMinutes) /
@@ -630,6 +636,18 @@ export function ManagerConsole({
     setPlanMessage("");
     setPlanEditorOpen(true);
     setSelectedPlanBlock(null);
+  };
+
+  const changePlanAssignment = (value: string) => {
+    setPlanAssignment(value);
+    const assignmentId = Number(value);
+    const nextSequence = Math.max(
+      0,
+      ...(data.planBlocks ?? [])
+        .filter((item) => item.assignment === assignmentId)
+        .map((item) => item.sequence_number),
+    ) + 1;
+    setPlanSequence(String(nextSequence));
   };
 
   const openDowntimeEvent = (eventId: number) => {
@@ -1161,6 +1179,38 @@ export function ManagerConsole({
                       <div><dt>Action</dt><dd>{selectedLine.update?.action_taken || "Continue scheduled monitoring"}</dd></div>
                     </dl>
                   </section>
+                  <section className="manager-line-hourly-detail">
+                    <h3>Hour-by-hour details</h3>
+                    <p>Same target, done and short evidence available to the assigned Team Leader.</p>
+                    <div className="tl-plan-v2__metrics">
+                      <div><span>Actual now</span><strong>{selectedLineProgress?.actual === null || selectedLineProgress?.actual === undefined ? "—" : NUMBER.format(selectedLineProgress.actual)}</strong></div>
+                      <div><span>Target now</span><strong>{selectedLineProgress?.expectedNow === null || selectedLineProgress?.expectedNow === undefined ? "—" : NUMBER.format(selectedLineProgress.expectedNow)}</strong></div>
+                      <div><span>Position now</span><strong>{timePositionLabel(selectedLineProgress?.positionMinutes ?? null)}</strong></div>
+                      <div><span>Shift plan</span><strong>{selectedLine.shift ? NUMBER.format(selectedLine.shift.planned_output) : "—"}</strong></div>
+                    </div>
+                    <div className="tl-plan-v2__hours">
+                      {selectedLineProgress?.hours.map((hour) => {
+                        const short = hour.done !== null && hour.dueNow !== null
+                          ? Math.max(0, hour.dueNow - hour.done)
+                          : null;
+                        const green = hour.target && hour.done !== null
+                          ? Math.min(100, hour.done / hour.target * 100)
+                          : 0;
+                        const amber = hour.target && short !== null
+                          ? Math.min(100 - green, short / hour.target * 100)
+                          : 0;
+                        return <div className={`tl-plan-v2__hour${hour.current ? " is-current" : ""}`} key={hour.label}>
+                          <strong>{hour.label}</strong>
+                          <span>{hour.breakMinutes ? `${hour.breakMinutes}m break` : "Production"}</span>
+                          <span>T {hour.target === null ? "—" : NUMBER.format(hour.target)}</span>
+                          <span>D {hour.done === null ? "—" : NUMBER.format(hour.done)}</span>
+                          <span>S {short === null ? "—" : NUMBER.format(short)}</span>
+                          <div className="tl-plan-v2__hour-bar" aria-label={`${hour.label}: ${hour.done === null ? "actual output unavailable" : `${hour.done} done`}, ${short === null ? "shortage unavailable" : `${short} short`}`}><i style={{ width: `${green}%` }} /><b style={{ width: `${amber}%` }} /></div>
+                        </div>;
+                      })}
+                    </div>
+                    {selectedLineProgress && !selectedLineProgress.hours.some((hour) => hour.done !== null) ? <p className="tl-plan-v2__data-note">Hourly actuals have not been recorded for this line.</p> : null}
+                  </section>
                   <section>
                     <h3>Issue details</h3>
                     <dl className="drawer-facts"><div><dt>Severity</dt><dd>{selectedLine.openActions[0]?.priority ? titleCase(selectedLine.openActions[0].priority) : "No open issue"}</dd></div><div><dt>Issue</dt><dd>{selectedLine.update?.issue_summary || selectedLine.openActions[0]?.summary || "No issue recorded"}</dd></div><div><dt>Next action</dt><dd>{selectedLine.openActions[0]?.immediate_action || "Continue scheduled monitoring"}</dd></div></dl>
@@ -1251,7 +1301,7 @@ export function ManagerConsole({
               </section>
               {selectedPlanBlock ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="plan-block-title"><header><div><span className="eyebrow">Schedule detail</span><h2 id="plan-block-title">{selectedPlanBlock.block_type === "break" ? `Planned break ${selectedPlanBlock.break_number ?? ""}` : selectedPlanBlock.product_name}</h2></div><button type="button" aria-label="Close plan detail" onClick={() => setSelectedPlanBlock(null)}>×</button></header><dl className="plan-block-facts"><div><dt>Start</dt><dd>{formatScheduleClock(selectedPlanBlock.planned_start_at)}</dd></div><div><dt>End</dt><dd>{formatScheduleClock(selectedPlanBlock.planned_end_at)}</dd></div><div><dt>Target</dt><dd>{selectedPlanBlock.target_units_per_hour ?? "—"} / hour</dd></div><div><dt>Quantity</dt><dd>{NUMBER.format(selectedPlanBlock.planned_units)}</dd></div><div><dt>Materials</dt><dd>{data.materials.filter((item) => item.assignment === selectedPlanBlock.assignment && item.sequence_number === selectedPlanBlock.sequence_number).map((item) => item.product_name).join(", ") || "No material record"}</dd></div></dl><footer><button type="button" className="button button--ghost" onClick={() => setSelectedPlanBlock(null)}>Done</button>{profile.is_staff && !isHistorical ? <button type="button" className="button button--primary" onClick={() => openPlanEditor(selectedPlanBlock)}>Edit block</button> : null}</footer></section></div> : null}
               {shiftEditorOpen ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="shift-time-title"><header><div><span className="eyebrow">Operations control</span><h2 id="shift-time-title">Shift start & end</h2></div><button type="button" aria-label="Close shift time editor" onClick={() => setShiftEditorOpen(false)}>×</button></header><p>These times apply to every recorded {shiftPattern} shift line for {controlBoardDate(operationalDate)}.</p><label>Shift start<input type="time" value={shiftStart} onChange={(event) => setShiftStart(event.target.value)} /></label><label>Shift end<input type="time" value={shiftEnd} onChange={(event) => setShiftEnd(event.target.value)} /></label><p className="workflow-boundary">Default day shift: Monday–Friday 06:45–18:00; Saturday–Sunday 07:00–18:00. Operations may override the recorded shift when required.</p>{shiftTimeMessage ? <p role="status">{shiftTimeMessage}</p> : null}<footer><button type="button" className="button button--ghost" onClick={() => setShiftEditorOpen(false)}>Cancel</button><button type="button" className="button button--primary" disabled={shiftTimeSaving} onClick={() => void saveShiftTimes()}>{shiftTimeSaving ? "Saving…" : "Save shift time"}</button></footer></section></div> : null}
-              {planEditorOpen ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor plan-block-editor" role="dialog" aria-modal="true" aria-labelledby="plan-editor-title"><header><div><span className="eyebrow">Approved schedule</span><h2 id="plan-editor-title">{editingPlanBlock ? "Edit plan block" : "Add plan block"}</h2></div><button type="button" aria-label="Close plan editor" onClick={() => setPlanEditorOpen(false)}>×</button></header><div className="plan-editor-grid"><label>Production line<select value={planAssignment} disabled={Boolean(editingPlanBlock)} onChange={(event) => setPlanAssignment(event.target.value)}>{planRows.map((row) => <option key={row.assignment.id} value={row.assignment.id}>{displayLine(row.assignment.production_line_code)} · {row.assignment.production_line_name}</option>)}</select></label><label>Sequence<input type="number" min="1" value={planSequence} onChange={(event) => setPlanSequence(event.target.value)} /></label><label>Block type<select value={planBlockType} onChange={(event) => setPlanBlockType(event.target.value as "production" | "break")}><option value="production">Production</option><option value="break">Planned break</option></select></label><label>Start<input type="datetime-local" value={planStart} onChange={(event) => setPlanStart(event.target.value)} /></label><label>End<input type="datetime-local" value={planEnd} onChange={(event) => setPlanEnd(event.target.value)} /></label>{planBlockType === "production" ? <><label>Product code<input value={planProductCode} onChange={(event) => setPlanProductCode(event.target.value)} /></label><label>Product name<input value={planProductName} onChange={(event) => setPlanProductName(event.target.value)} /></label><label>Target units / hour<input type="number" min="1" value={planHourlyTarget} onChange={(event) => setPlanHourlyTarget(event.target.value)} /></label></> : <label>Break number<select value={planBreakNumber} onChange={(event) => setPlanBreakNumber(event.target.value)}><option value="1">Break 1</option><option value="2">Break 2</option></select></label>}</div><p className="workflow-boundary">Blocks must stay inside the selected shift and cannot overlap. Approved breaks are exactly 40 minutes.</p>{planMessage ? <p role="status" className="downtime-editor__message">{planMessage}</p> : null}<footer><button type="button" className="button button--ghost" onClick={() => setPlanEditorOpen(false)}>Cancel</button><button type="button" className="button button--primary" disabled={planSaving} onClick={() => void savePlanBlock()}>{planSaving ? "Saving…" : editingPlanBlock ? "Save changes" : "Add block"}</button></footer></section></div> : null}
+              {planEditorOpen ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor plan-block-editor" role="dialog" aria-modal="true" aria-labelledby="plan-editor-title"><header><div><span className="eyebrow">Approved schedule</span><h2 id="plan-editor-title">{editingPlanBlock ? "Edit plan block" : "Add plan block"}</h2></div><button type="button" aria-label="Close plan editor" onClick={() => setPlanEditorOpen(false)}>×</button></header>{selectedPlanAssignment ? <div className="plan-editor-line-context"><strong>Selected line: {displayLine(selectedPlanAssignment.production_line_code)}</strong><span>{selectedPlanAssignment.production_line_code} · {selectedPlanAssignment.production_line_name} · {titleCase(selectedPlanAssignment.shift_type)} shift</span></div> : <p className="downtime-editor__message">No production line is available for this date and shift.</p>}<div className="plan-editor-grid"><label>Production line<select value={planAssignment} disabled={Boolean(editingPlanBlock)} onChange={(event) => changePlanAssignment(event.target.value)}>{planRows.map((row) => <option key={row.assignment.id} value={row.assignment.id}>{displayLine(row.assignment.production_line_code)} · {row.assignment.production_line_code} · {row.assignment.production_line_name}</option>)}</select></label><label>Sequence<input type="number" min="1" value={planSequence} onChange={(event) => setPlanSequence(event.target.value)} /></label><label>Block type<select value={planBlockType} onChange={(event) => setPlanBlockType(event.target.value as "production" | "break")}><option value="production">Production</option><option value="break">Planned break</option></select></label><label>Start<input type="datetime-local" value={planStart} onChange={(event) => setPlanStart(event.target.value)} /></label><label>End<input type="datetime-local" value={planEnd} onChange={(event) => setPlanEnd(event.target.value)} /></label>{planBlockType === "production" ? <><label>Product code<input value={planProductCode} onChange={(event) => setPlanProductCode(event.target.value)} /></label><label>Product name<input value={planProductName} onChange={(event) => setPlanProductName(event.target.value)} /></label><label>Target units / hour<input type="number" min="1" value={planHourlyTarget} onChange={(event) => setPlanHourlyTarget(event.target.value)} /></label></> : <label>Break number<select value={planBreakNumber} onChange={(event) => setPlanBreakNumber(event.target.value)}><option value="1">Break 1</option><option value="2">Break 2</option></select></label>}</div><p className="workflow-boundary">Blocks must stay inside the selected shift and cannot overlap. Approved breaks are exactly 40 minutes.</p>{planMessage ? <p role="status" className="downtime-editor__message">{planMessage}</p> : null}<footer><button type="button" className="button button--ghost" onClick={() => setPlanEditorOpen(false)}>Cancel</button><button type="button" className="button button--primary" disabled={planSaving || !selectedPlanAssignment} onClick={() => void savePlanBlock()}>{planSaving ? "Saving…" : editingPlanBlock ? "Save changes" : "Add block"}</button></footer></section></div> : null}
             </>
           ) : null}
 
