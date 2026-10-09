@@ -31,7 +31,7 @@ for (const viewport of viewports) {
     await expect(page.getByText("Operations Control Board", { exact: true })).toBeVisible();
     await expect(page.getByLabel("Shift pattern")).toHaveValue("day");
     await expect(page.getByRole("group", { name: "Data view" })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Alerts/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Notifications/ })).toBeVisible();
     await expect(page.getByLabel(/Open profile menu/)).toBeVisible();
 
     await page.screenshot({

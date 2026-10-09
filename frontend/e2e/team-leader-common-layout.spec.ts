@@ -62,7 +62,7 @@ for (const viewport of viewports) {
     } else {
       await expect(page.getByLabel("Shift pattern")).toHaveValue("day");
       await expect(page.getByRole("group", { name: "Data view" })).toBeVisible();
-      await expect(page.getByRole("button", { name: /Alerts/ })).toBeVisible();
+      await expect(page.getByRole("button", { name: /^Notifications/ })).toBeVisible();
 
       const dateControl = page.locator(".team-control-date");
       const dateInput = page.getByLabel("Operational date");

@@ -68,7 +68,7 @@ test("Team Leader My Plan opens hourly downtime CRUD", async ({ page }, testInfo
   await page.getByRole("button", { name: /Line 1 ▾/ }).click();
   const downtimeHour = page.locator(".tl-plan-v2__hour.has-downtime").first();
   await expect(downtimeHour).toBeVisible();
-  await downtimeHour.click();
+  await downtimeHour.getByRole("button", { name: /^Manage downtime for/ }).click();
   const editor = page.getByRole("dialog", { name: /Line 1 ·/ });
   await expect(editor.getByRole("heading", { name: "Recorded downtime" })).toBeVisible();
   await expect(editor.getByRole("button", { name: "Add downtime" })).toBeVisible();

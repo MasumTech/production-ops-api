@@ -2516,6 +2516,23 @@ td span {
   }
 }
 
+@media (max-width: 1180px) and (min-width: 901px) {
+  .support-shell .topbar__actions {
+    min-width: 0;
+    gap: 0.5rem;
+  }
+
+  .support-shell .topbar__brand span,
+  .support-shell .topbar__actions .user-chip,
+  .support-shell .date-control span {
+    display: none;
+  }
+
+  .support-shell .topbar__actions .button {
+    padding-inline: 0.7rem;
+  }
+}
+
 @media (max-width: 900px) {
   .daily-plan-grid {
     grid-template-columns: 1fr;

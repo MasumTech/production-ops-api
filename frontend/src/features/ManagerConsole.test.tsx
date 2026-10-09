@@ -299,6 +299,7 @@ describe("manager console", () => {
   it("shows the overview and the shared manager shell", async () => {
     const actor = userEvent.setup();
     const onShiftPatternChange = vi.fn();
+    const onEditProfile = vi.fn();
     render(
       <ManagerConsole
         profile={profile}
@@ -313,6 +314,7 @@ describe("manager console", () => {
         onDateChange={vi.fn()}
         onShiftPatternChange={onShiftPatternChange}
         onRefresh={vi.fn()}
+        onEditProfile={onEditProfile}
         onSignOut={vi.fn()}
       />,
     );
@@ -379,6 +381,15 @@ describe("manager console", () => {
     expect(
       screen.getByRole("group", { name: "Data view" }),
     ).toBeInTheDocument();
+
+    const profileMenuButton = screen.getByLabelText(/Open profile menu/);
+    const profileMenu = profileMenuButton.closest("details");
+    expect(profileMenu).not.toHaveAttribute("open");
+    await actor.click(profileMenuButton);
+    expect(profileMenu).toHaveAttribute("open");
+    await actor.click(screen.getByRole("button", { name: "Edit profile" }));
+    expect(onEditProfile).toHaveBeenCalledOnce();
+    expect(profileMenu).not.toHaveAttribute("open");
 
     await actor.selectOptions(within(controls).getByLabelText("Shift pattern"), "night");
     expect(onShiftPatternChange).toHaveBeenCalledWith("night");

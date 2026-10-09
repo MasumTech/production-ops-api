@@ -439,6 +439,7 @@ export function ManagerConsole({
   );
   const [navigationOpen, setNavigationOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const profileMenuRef = useRef<HTMLDetailsElement>(null);
   const workspaceRef = useRef<HTMLElement>(null);
   const [lineFilter, setLineFilter] = useState("all");
   const [planLineFilter, setPlanLineFilter] = useState("all");
@@ -1108,7 +1109,7 @@ export function ManagerConsole({
             </button>
           </div>
           <NotificationCentre refreshToken={lastUpdatedAt} iconOnly />
-          <details className="manager-profile">
+          <details className="manager-profile" ref={profileMenuRef}>
             <summary aria-label={`Open profile menu for ${profile.display_name}`}>
               <span className="manager-profile__avatar">{profileInitials(profile.display_name)}</span>
               <span className="manager-profile__name">{profile.display_name}</span>
@@ -1117,7 +1118,10 @@ export function ManagerConsole({
               <strong>{profile.display_name}</strong>
               <span>{profile.username}</span>
               <span>Operations Manager</span>
-              {onEditProfile ? <button type="button" onClick={onEditProfile}>Edit profile</button> : null}
+              {onEditProfile ? <button type="button" onClick={() => {
+                profileMenuRef.current?.removeAttribute("open");
+                onEditProfile();
+              }}>Edit profile</button> : null}
               <button type="button" onClick={onSignOut}>Sign out</button>
             </div>
           </details>
