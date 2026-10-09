@@ -36,7 +36,8 @@ test("manager design exposes fifteen plan leaders and the profile editor", async
   await editor.getByLabel("Production line").selectOption("line-7");
   const leaders = editor.getByLabel("Team Leader");
   await expect(leaders.getByRole("option")).toHaveCount(16);
-  await expect(leaders.getByRole("option", { name: "Team Leader 15" })).toBeVisible();
+  await leaders.selectOption({ label: "Team Leader 15" });
+  await expect(leaders.locator("option:checked")).toHaveText("Team Leader 15");
   await page.screenshot({
     path: testInfo.outputPath("manager-daily-plan-fifteen-leaders.png"),
     animations: "disabled",
@@ -68,7 +69,7 @@ test("Team Leader My Plan opens hourly downtime CRUD", async ({ page }, testInfo
   await page.getByRole("button", { name: /Line 1 ▾/ }).click();
   const downtimeHour = page.locator(".tl-plan-v2__hour.has-downtime").first();
   await expect(downtimeHour).toBeVisible();
-  await downtimeHour.click();
+  await downtimeHour.getByRole("button", { name: /^Manage downtime for/ }).click();
   const editor = page.getByRole("dialog", { name: /Line 1 ·/ });
   await expect(editor.getByRole("heading", { name: "Recorded downtime" })).toBeVisible();
   await expect(editor.getByRole("button", { name: "Add downtime" })).toBeVisible();

@@ -82,6 +82,7 @@ export function TeamLeaderShell({
 }) {
   const [navigationOpen, setNavigationOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const profileMenuRef = useRef<HTMLDetailsElement>(null);
   const workspaceRef = useRef<HTMLElement>(null);
   const activeNavigation: Exclude<WorkspaceTab, "issues"> =
     activeTab === "issues" ? "lines" : activeTab;
@@ -195,7 +196,7 @@ export function TeamLeaderShell({
 
           <NotificationCentre refreshToken={lastUpdatedAt} iconOnly />
 
-          <details className="team-control-profile">
+          <details className="team-control-profile" ref={profileMenuRef}>
             <summary aria-label={`Open profile menu for ${profile.display_name}`}>
               <span className="team-control-profile__avatar">
                 {initials(profile.display_name)}
@@ -213,7 +214,10 @@ export function TeamLeaderShell({
               <span>
                 {shiftPattern === "day" ? "Day" : "Night"} · {shiftWindow.startLabel}–{shiftWindow.endLabel}
               </span>
-              {onEditProfile ? <button type="button" onClick={onEditProfile}>Edit profile</button> : null}
+              {onEditProfile ? <button type="button" onClick={() => {
+                profileMenuRef.current?.removeAttribute("open");
+                onEditProfile();
+              }}>Edit profile</button> : null}
               <button type="button" onClick={onSignOut}>Sign out</button>
             </div>
           </details>

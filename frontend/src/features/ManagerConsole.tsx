@@ -9,12 +9,17 @@ import {
 import { LossAnalyticsPanel } from "./LossAnalyticsPanel";
 import { PilotAdminPanel } from "./PilotAdminPanel";
 import { EmptyState, ErrorBanner, StatusPill } from "../components";
+import {
+  HourlyOutputEditor,
+  type HourlyOutputContext,
+} from "../HourlyOutputEditor";
 import { formatDateTime, localDate, titleCase } from "../format";
 import { escalationRole } from "../operationalRoles";
 import { NotificationCentre } from "../NotificationCentre";
 import { AppIcon, type AppIconName } from "../AppIcon";
 import { apiRequest } from "../api";
 import {
+  dateTimeToShiftMinutes,
   formatClockMinutes,
   formatScheduleClock,
   getShiftWindow,
@@ -434,6 +439,7 @@ export function ManagerConsole({
   );
   const [navigationOpen, setNavigationOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const profileMenuRef = useRef<HTMLDetailsElement>(null);
   const workspaceRef = useRef<HTMLElement>(null);
   const [lineFilter, setLineFilter] = useState("all");
   const [planLineFilter, setPlanLineFilter] = useState("all");
@@ -459,6 +465,8 @@ export function ManagerConsole({
   const [shiftTimeMessage, setShiftTimeMessage] = useState("");
   const [selectedPlanBlock, setSelectedPlanBlock] = useState<DailyPlanBlock | null>(null);
   const [expandedPlanLine, setExpandedPlanLine] = useState<number | null>(null);
+  const [selectedOutputHour, setSelectedOutputHour] =
+    useState<HourlyOutputContext | null>(null);
   const [materialsTab, setMaterialsTab] = useState<"materials" | "actions">("materials");
   const [materialStatusFilter, setMaterialStatusFilter] = useState<MaterialStatus | "all">("all");
   const [materialLineFilter, setMaterialLineFilter] = useState("all");
@@ -622,6 +630,7 @@ export function ManagerConsole({
     setSelectedMaterialId(null);
     setSelectedPlanBlock(null);
     setExpandedPlanLine(null);
+    setSelectedOutputHour(null);
     setSelectedRecovery(null);
   }, [operationalDate, shiftPattern]);
 
@@ -711,6 +720,32 @@ export function ManagerConsole({
     setManagerComment(event.resolution_note);
     setDowntimeEditorOpen(false);
     setDowntimeMessage("");
+  };
+
+  const openManagerOutputHour = (
+    assignment: Assignment,
+    hour: ReturnType<typeof buildManagerProgress>[number]["hours"][number],
+  ) => {
+    const clockHour = Math.floor(hour.startMinutes / 60) * 60;
+    const output = (data.hourlyOutputs ?? []).find(
+      (item) =>
+        item.assignment === assignment.id &&
+        dateTimeToShiftMinutes(item.hour_start_at, scheduleWindow) === clockHour,
+    ) ?? null;
+    const dayOffset = Math.floor(clockHour / (24 * 60));
+    const hourDate = new Date(`${operationalDate}T12:00:00Z`);
+    hourDate.setUTCDate(hourDate.getUTCDate() + dayOffset);
+    const hourStartAt = new Date(
+      `${hourDate.toISOString().slice(0, 10)}T${formatClockMinutes(clockHour)}:00`,
+    ).toISOString();
+    setSelectedOutputHour({
+      assignmentId: assignment.id,
+      lineLabel: displayLine(assignment.production_line_code),
+      hourLabel: hour.label,
+      hourStartAt,
+      target: hour.target,
+      output,
+    });
   };
 
   const saveShiftTimes = async () => {
@@ -1074,7 +1109,7 @@ export function ManagerConsole({
             </button>
           </div>
           <NotificationCentre refreshToken={lastUpdatedAt} iconOnly />
-          <details className="manager-profile">
+          <details className="manager-profile" ref={profileMenuRef}>
             <summary aria-label={`Open profile menu for ${profile.display_name}`}>
               <span className="manager-profile__avatar">{profileInitials(profile.display_name)}</span>
               <span className="manager-profile__name">{profile.display_name}</span>
@@ -1083,7 +1118,10 @@ export function ManagerConsole({
               <strong>{profile.display_name}</strong>
               <span>{profile.username}</span>
               <span>Operations Manager</span>
-              {onEditProfile ? <button type="button" onClick={onEditProfile}>Edit profile</button> : null}
+              {onEditProfile ? <button type="button" onClick={() => {
+                profileMenuRef.current?.removeAttribute("open");
+                onEditProfile();
+              }}>Edit profile</button> : null}
               <button type="button" onClick={onSignOut}>Sign out</button>
             </div>
           </details>
@@ -1409,6 +1447,7 @@ export function ManagerConsole({
                 <select aria-label="Filter daily plans by Team Leader" value={planLeaderFilter} onChange={(event) => setPlanLeaderFilter(event.target.value)}><option value="all">All Team Leaders</option>{hierarchyGroups.map((group, index) => <option key={group.teamLeaderId} value={group.teamLeaderId}>Team Leader {index + 1}</option>)}</select>
                 {profile.is_staff && !isHistorical ? <><button type="button" className="button button--ghost" onClick={() => { setShiftStart(configuredShiftStart); setShiftEnd(configuredShiftEnd); setShiftTimeMessage(""); setShiftEditorOpen(true); }}><AppIcon name="clock" size={18} /> Shift times</button><button type="button" className="button button--primary" onClick={() => openPlanEditor()}><AppIcon name="edit" size={18} /> Add plan block</button></> : <span className="daily-plan-snapshot"><AppIcon name="shield" size={18} /> Read-only snapshot</span>}
               </div>
+              {planMessage ? <p className="downtime-editor__message" role="status">{planMessage}</p> : null}
               <section className="daily-plan-timeline-board" aria-label="Daily schedule timeline">
                 <header className="daily-plan-timeline-header">
                   <div><strong>Shift schedule</strong><span>{shiftLabel}</span></div>
@@ -1454,7 +1493,11 @@ export function ManagerConsole({
                       <div className="manager-output-facts"><div><small>Actual now</small><strong>{progress?.actual === null || progress?.actual === undefined ? "—" : NUMBER.format(progress.actual)}</strong></div><div><small>Target due now</small><strong>{progress?.expectedNow === null || progress?.expectedNow === undefined ? "—" : NUMBER.format(progress.expectedNow)}</strong></div><div><small>Position now</small><strong>{timePositionLabel(progress?.positionMinutes ?? null)}</strong><span>{unitPositionLabel(delta)}</span></div><div><small>Shift attainment</small><strong>{progress?.shiftAttainment === null || progress?.shiftAttainment === undefined ? "—" : `${progress.shiftAttainment}%`}</strong><span>Full-shift time basis</span></div><div><small>Left in shift</small><strong>{row.shift && progress?.actual !== null && progress?.actual !== undefined ? NUMBER.format(Math.max(0, row.shift.planned_output - progress.actual)) : "—"}</strong></div></div>
                       <div className="manager-output-hours">{progress?.hours.map((hour) => {
                         const short = hour.done !== null && hour.dueNow !== null ? Math.max(0, hour.dueNow - hour.done) : null;
-                        return <div className={`manager-output-hour${hour.current ? " is-current" : ""}`} key={hour.label}><strong>{hour.label}</strong><div className="manager-output-hour-track"><i style={{ width: `${hour.target && hour.done !== null ? Math.min(100, hour.done / hour.target * 100) : 0}%` }} /></div><small>{hour.breakMinutes ? `${hour.breakMinutes}m break · ` : ""}T {hour.target === null ? "—" : NUMBER.format(hour.current ? hour.dueNow ?? 0 : hour.target)} · D {hour.done === null ? "—" : NUMBER.format(hour.done)} · S {short === null ? "—" : NUMBER.format(short)}</small></div>;
+                        const recordedOutput = (data.hourlyOutputs ?? []).find((item) =>
+                          item.assignment === row.assignment.id &&
+                          dateTimeToShiftMinutes(item.hour_start_at, scheduleWindow) === Math.floor(hour.startMinutes / 60) * 60
+                        );
+                        return <div className={`manager-output-hour${hour.current ? " is-current" : ""}`} key={hour.label}><strong>{hour.label}</strong><div className="manager-output-hour-track"><i style={{ width: `${hour.target && hour.done !== null ? Math.min(100, hour.done / hour.target * 100) : 0}%` }} /></div><small>{hour.breakMinutes ? `${hour.breakMinutes}m break · ` : ""}T {hour.target === null ? "—" : NUMBER.format(hour.current ? hour.dueNow ?? 0 : hour.target)} · D {hour.done === null ? "—" : NUMBER.format(hour.done)} · S {short === null ? "—" : NUMBER.format(short)}</small>{recordedOutput ? <small>Reject {NUMBER.format(recordedOutput.rejected_units ?? 0)} · Rework {NUMBER.format(recordedOutput.rework_units ?? 0)}</small> : null}<button type="button" className="manager-output-hour-edit" disabled={isHistorical || hour.future} onClick={() => openManagerOutputHour(row.assignment, hour)}>{hour.done === null ? "Record output" : "Review / correct"}</button></div>;
                       })}</div>
                       {progress && !progress.hours.some((hour) => hour.done !== null) ? <p>Hourly actuals have not been recorded for this line. Done and short are unavailable.</p> : null}
                     </div></td></tr> : null}
@@ -1523,6 +1566,18 @@ export function ManagerConsole({
               </>}
               {selectedRecovery ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="recovery-form-title"><header><div><span className="eyebrow">Linked event #{selectedRecovery.id}</span><h2 id="recovery-form-title">Record recovery</h2></div><button type="button" aria-label="Close recovery form" onClick={() => setSelectedRecovery(null)}>×</button></header><label>Recovery time<input type="datetime-local" required value={recoveryTime} onChange={(event) => setRecoveryTime(event.target.value)} /></label><label>Recovery evidence<textarea rows={4} required value={recoveryEvidence} onChange={(event) => setRecoveryEvidence(event.target.value)} placeholder="Repair check, output evidence or verified restart note" /></label><footer><button type="button" className="button button--ghost" onClick={() => setSelectedRecovery(null)}>Cancel</button><button type="button" className="button button--primary" disabled={recoverySaving || !recoveryTime || !recoveryEvidence.trim()} onClick={recordRecovery}>{recoverySaving ? "Saving…" : "Record recovery"}</button></footer></section></div> : null}
             </>
+          ) : null}
+
+          {selectedOutputHour ? (
+            <HourlyOutputEditor
+              context={selectedOutputHour}
+              manager
+              onClose={() => setSelectedOutputHour(null)}
+              onSaved={(message) => {
+                setPlanMessage(message);
+                onRefresh();
+              }}
+            />
           ) : null}
 
         </main>

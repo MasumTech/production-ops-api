@@ -156,8 +156,21 @@ export interface DailyPlanBlock {
 export interface HourlyOutput {
   id: number;
   assignment: number;
+  assignment_date?: string;
+  shift_type?: "day" | "night";
+  production_line?: number;
+  production_line_code?: string;
   hour_start_at: string;
   actual_units: number;
+  rejected_units?: number;
+  rework_units?: number;
+  notes?: string;
+  correction_reason?: string;
+  recorded_by?: number;
+  recorded_by_username?: string;
+  last_edited_by?: number | null;
+  last_edited_by_username?: string | null;
+  created_at?: string;
   updated_at: string;
 }
 

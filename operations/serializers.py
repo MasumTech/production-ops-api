@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from typing import ClassVar
 
 from django.contrib.auth import get_user_model
@@ -1496,10 +1497,172 @@ class ShiftHandoverFilterSerializer(serializers.Serializer):
 
 
 class HourlyOutputSerializer(serializers.ModelSerializer):
+    production_line = serializers.IntegerField(
+        source="assignment.production_line_id",
+        read_only=True,
+    )
+    production_line_code = serializers.CharField(
+        source="assignment.production_line.code",
+        read_only=True,
+    )
+    assignment_date = serializers.DateField(
+        source="assignment.date",
+        read_only=True,
+    )
+    shift_type = serializers.CharField(
+        source="assignment.shift_type",
+        read_only=True,
+    )
+    recorded_by_username = serializers.CharField(
+        source="recorded_by.username",
+        read_only=True,
+    )
+    last_edited_by_username = serializers.CharField(
+        source="last_edited_by.username",
+        read_only=True,
+    )
+
     class Meta:
         model = HourlyOutput
-        fields = ("id", "assignment", "hour_start_at", "actual_units", "updated_at")
-        read_only_fields = fields
+        fields = (
+            "id",
+            "assignment",
+            "assignment_date",
+            "shift_type",
+            "production_line",
+            "production_line_code",
+            "hour_start_at",
+            "actual_units",
+            "rejected_units",
+            "rework_units",
+            "notes",
+            "correction_reason",
+            "recorded_by",
+            "recorded_by_username",
+            "last_edited_by",
+            "last_edited_by_username",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "assignment_date",
+            "shift_type",
+            "production_line",
+            "production_line_code",
+            "recorded_by",
+            "recorded_by_username",
+            "last_edited_by",
+            "last_edited_by_username",
+            "created_at",
+            "updated_at",
+        )
+
+    def validate_assignment(self, value):
+        request = self.context.get("request")
+        if (
+            request
+            and request.user.is_authenticated
+            and not request.user.is_staff
+            and value.team_leader_id != request.user.id
+        ):
+            raise serializers.ValidationError(
+                "You can only record output for a line assigned to you."
+            )
+        if self.instance and value.id != self.instance.assignment_id:
+            raise serializers.ValidationError(
+                "The assignment cannot be changed after output is recorded."
+            )
+        return value
+
+    def validate(self, attrs):
+        assignment = attrs.get(
+            "assignment",
+            getattr(self.instance, "assignment", None),
+        )
+        hour_start_at = attrs.get(
+            "hour_start_at",
+            getattr(self.instance, "hour_start_at", None),
+        )
+        request = self.context.get("request")
+        errors = {}
+
+        if self.instance and "hour_start_at" in attrs:
+            existing_hour = timezone.localtime(self.instance.hour_start_at)
+            requested_hour = timezone.localtime(hour_start_at)
+            if requested_hour != existing_hour:
+                errors["hour_start_at"] = (
+                    "The clock hour cannot be changed after output is recorded."
+                )
+
+        if assignment and hour_start_at:
+            candidate = HourlyOutput(
+                assignment=assignment,
+                hour_start_at=hour_start_at,
+                actual_units=attrs.get(
+                    "actual_units",
+                    getattr(self.instance, "actual_units", 0),
+                ),
+            )
+            try:
+                candidate.clean()
+            except DjangoValidationError as error:
+                errors.update(error.message_dict)
+
+            shift = Shift.objects.filter(
+                production_line=assignment.production_line,
+                date=assignment.date,
+                shift_type=assignment.shift_type,
+            ).first()
+            if shift is None:
+                errors["assignment"] = (
+                    "A matching shift record is required before output can be recorded."
+                )
+            else:
+                local_hour = timezone.localtime(hour_start_at)
+                shift_start = timezone.make_aware(
+                    datetime.combine(assignment.date, shift.start_time),
+                    timezone.get_current_timezone(),
+                )
+                shift_end_date = assignment.date
+                if shift.end_time <= shift.start_time:
+                    shift_end_date += timedelta(days=1)
+                shift_end = timezone.make_aware(
+                    datetime.combine(shift_end_date, shift.end_time),
+                    timezone.get_current_timezone(),
+                )
+                if (
+                    local_hour >= shift_end
+                    or local_hour + timedelta(hours=1) <= shift_start
+                ):
+                    errors["hour_start_at"] = (
+                        "The selected clock hour must overlap the recorded shift."
+                    )
+
+            duplicate = HourlyOutput.objects.filter(
+                assignment=assignment,
+                hour_start_at=hour_start_at,
+            )
+            if self.instance:
+                duplicate = duplicate.exclude(pk=self.instance.pk)
+            if duplicate.exists():
+                errors["hour_start_at"] = (
+                    "Output has already been recorded for this clock hour."
+                )
+
+        if (
+            self.instance
+            and request
+            and request.user.is_staff
+            and not attrs.get("correction_reason", "").strip()
+        ):
+            errors["correction_reason"] = (
+                "Managers must record a reason when correcting hourly output."
+            )
+
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
 
 
 class DailyPlanBlockSerializer(serializers.ModelSerializer):

@@ -280,7 +280,8 @@ Roadmap completion is tracked by the published delivery phases and their defined
 | `GET, POST` | `/api/hourly-line-updates/` | List or create hourly line updates |
 | `GET, PUT, PATCH, DELETE` | `/api/hourly-line-updates/{id}/` | Manage one accessible hourly update |
 | `GET` | `/api/hourly-line-updates/latest-status/` | Return the latest update for every accessible assignment |
-| `GET` | `/api/hourly-outputs/?date=YYYY-MM-DD&shift_type=day` | Recorded units per clock hour for assigned lines; absent hours remain unreported |
+| `GET, POST` | `/api/hourly-outputs/?date=YYYY-MM-DD&shift_type=day` | List assigned-line hourly production or record good, reject and rework units; each write reconciles the shift actual total |
+| `GET, PATCH, DELETE` | `/api/hourly-outputs/{id}/` | Review, correct or delete one hourly record; Manager changes require a correction reason and all writes create audit events |
 | `GET, POST` | `/api/product-material-readiness/` | List or create accessible product/material readiness items |
 | `GET, PUT, PATCH, DELETE` | `/api/product-material-readiness/{id}/` | Manage one accessible readiness item |
 | `POST` | `/api/product-material-readiness/{id}/release/` | Staff-only audited release of a held item |

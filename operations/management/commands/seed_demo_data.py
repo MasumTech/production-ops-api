@@ -936,7 +936,12 @@ class Command(BaseCommand):
                     hour_start_at=hour,
                     defaults={
                         "actual_units": units,
+                        "rejected_units": round(units * 0.01),
+                        "rework_units": round(units * 0.005),
+                        "notes": "Verified hourly counter reading for the showcase shift.",
+                        "correction_reason": "",
                         "recorded_by": assignment.team_leader,
+                        "last_edited_by": assignment.team_leader,
                     },
                 )
                 outputs.append(output)

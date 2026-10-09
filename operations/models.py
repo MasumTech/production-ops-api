@@ -500,10 +500,21 @@ class HourlyOutput(TimeStampedModel):
     )
     hour_start_at = models.DateTimeField()
     actual_units = models.PositiveIntegerField()
+    rejected_units = models.PositiveIntegerField(default=0)
+    rework_units = models.PositiveIntegerField(default=0)
+    notes = models.TextField(blank=True)
+    correction_reason = models.TextField(blank=True)
     recorded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="recorded_hourly_outputs",
+    )
+    last_edited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="edited_hourly_outputs",
+        null=True,
+        blank=True,
     )
 
     class Meta:
@@ -521,8 +532,14 @@ class HourlyOutput(TimeStampedModel):
             hour = timezone.localtime(self.hour_start_at)
             if hour.minute or hour.second or hour.microsecond:
                 errors["hour_start_at"] = "Output must start on a clock hour."
-            if self.assignment_id and hour.date() != self.assignment.date:
-                errors["hour_start_at"] = "Output must be on the assignment date."
+            if self.assignment_id:
+                valid_dates = {self.assignment.date}
+                if self.assignment.shift_type == Shift.ShiftType.NIGHT:
+                    valid_dates.add(self.assignment.date + timedelta(days=1))
+                if hour.date() not in valid_dates:
+                    errors["hour_start_at"] = (
+                        "Output must be within the assignment shift date."
+                    )
         if errors:
             raise ValidationError(errors)
 

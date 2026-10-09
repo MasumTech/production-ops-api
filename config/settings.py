@@ -236,5 +236,14 @@ SPECTACULAR_SETTINGS = {
             ("safety", "Safety"),
             ("other", "Other"),
         ],
+        "WorkspaceRoleEnum": [
+            ("manager", "manager"),
+            ("team_leader", "team_leader"),
+            ("support", "support"),
+        ],
+        "AssignableWorkspaceRoleEnum": [
+            ("team_leader", "team_leader"),
+            ("support", "support"),
+        ],
     },
 }

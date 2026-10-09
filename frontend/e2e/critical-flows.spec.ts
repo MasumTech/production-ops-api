@@ -61,7 +61,7 @@ test("team leader is routed to the assigned-line workspace", async ({ page }) =>
   await page.getByLabel("Operational date").fill(operationalDate);
   await expect(page.getByLabel("Shift pattern")).toHaveValue("day");
   await expect(page.getByRole("group", { name: "Data view" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Alerts/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Notifications/ })).toBeVisible();
   await expect(page.getByLabel(/Open profile menu/)).toBeVisible();
   await expect(page.locator(".team-control-card")).toHaveCount(2);
   await expect(page.getByLabel("Assigned-line summary")).toBeVisible();

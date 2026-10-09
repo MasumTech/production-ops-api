@@ -439,7 +439,7 @@ def test_seed_demo_data_creates_complete_dataset():
         date=DEMO_DATE,
         stdout=verification_output,
     )
-    assert "All 34 showcase checks passed." in verification_output.getvalue()
+    assert "All 35 showcase checks passed." in verification_output.getvalue()
 
 
 @pytest.mark.django_db

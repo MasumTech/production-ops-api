@@ -101,6 +101,10 @@ class Command(BaseCommand):
             == shift.actual_output
             for shift in shifts
         )
+        output_details_complete = all(
+            output.last_edited_by_id is not None and bool(output.notes.strip())
+            for output in hourly_outputs
+        )
         day_four = opportunities.filter(
             assignment__production_line__code="DEMO-LINE-02",
             status=BreakOpportunity.Status.RECOVERED,
@@ -368,6 +372,11 @@ class Command(BaseCommand):
                 "hourly output reconciles",
                 output_totals_match,
                 "hourly totals equal each shift actual",
+            ),
+            (
+                "hourly output detail",
+                output_details_complete,
+                "every hourly record includes recorder metadata and a showcase note",
             ),
             (
                 "complete plan rows",
