@@ -120,19 +120,19 @@ def test_seed_demo_data_creates_complete_dataset():
 
     assert demo_counts() == {
         "users": 5,
-        "lines": 6,
+        "lines": 20,
         "assets": 3,
         "assignments": 10,
         "shifts": 6,
         "downtime_events": 7,
         "plan_blocks": 30,
         "hourly_outputs": 66,
-        "updates": 9,
+        "updates": 10,
         "evidence": 1,
         "materials": 4,
         "escalations": 6,
         "breaks": 2,
-        "break_opportunities": 4,
+        "break_opportunities": 5,
         "handovers": 1,
         "incidents": 1,
         "pilot_trials": 4,
@@ -357,6 +357,7 @@ def test_seed_demo_data_creates_complete_dataset():
     assert held_material.expected_action == "Do not use"
     assert set(BreakOpportunity.objects.values_list("status", flat=True)) == {
         BreakOpportunity.Status.SUGGESTED,
+        BreakOpportunity.Status.CHECKS_COMPLETE,
         BreakOpportunity.Status.RECOVERED,
     }
     historical_escalations = OperationalEscalation.objects.filter(
@@ -542,7 +543,7 @@ def test_full_reset_flushes_every_record_then_creates_persona_dataset():
     assert not get_user_model().objects.filter(username="old.local.user").exists()
     assert not ProductionLine.objects.filter(code="OLD-LOCAL-LINE").exists()
     assert get_user_model().objects.count() == 5
-    assert ProductionLine.objects.count() == 6
+    assert ProductionLine.objects.count() == 20
     assert "Demo dataset is ready." in output
 
 

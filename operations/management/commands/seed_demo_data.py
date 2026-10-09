@@ -409,6 +409,17 @@ class Command(BaseCommand):
                 "target_units_per_hour": 650,
             },
         }
+        definitions.update(
+            {
+                f"line_{number}": {
+                    "code": f"DEMO-LINE-{number:02d}",
+                    "name": f"Production Line {number}",
+                    "location": f"Hall {chr(65 + (number - 1) // 4)}",
+                    "target_units_per_hour": 600,
+                }
+                for number in range(7, 21)
+            }
+        )
         lines = {}
 
         for key, definition in definitions.items():
@@ -998,6 +1009,17 @@ class Command(BaseCommand):
                 "recorded_at": recorded_time(16, 5),
                 "next_update_due_at": deadline_time(17, 5),
             },
+            "line_3_stop": {
+                "assignment": assignments["line_3"],
+                "status": HourlyLineUpdate.Status.RED,
+                "current_product": "Vegetable Spring Rolls",
+                "issue_summary": "Label sensor stopped before protected break",
+                "action_taken": "Line stopped safely and sensor reset completed",
+                "support_required": "Manager restart approval after checks",
+                "requires_follow_up": True,
+                "recorded_at": recorded_time(14, 55),
+                "next_update_due_at": deadline_time(15, 45),
+            },
             "line_4_current": {
                 "assignment": assignments["line_4"],
                 "status": HourlyLineUpdate.Status.RED,
@@ -1169,11 +1191,36 @@ class Command(BaseCommand):
             },
         )
 
+        checks_complete, _ = BreakOpportunity.objects.update_or_create(
+            source_update=updates["line_3_stop"],
+            defaults={
+                "assignment": assignments["line_3"],
+                "break_block": plan_blocks["line_3_4"],
+                "status": BreakOpportunity.Status.CHECKS_COMPLETE,
+                "fault_at": event_time(14, 55),
+                "suggested_start_at": event_time(15, 0),
+                "expected_return_at": event_time(15, 40),
+                "confirmed_at": event_time(15, 0),
+                "confirmed_by": users["leader_2"],
+                "returned_at": event_time(15, 40),
+                "checks_completed_at": event_time(15, 45),
+                "run_resumed_at": None,
+                "recovery_notes": (
+                    "Safety, quality and label sensor checks complete; awaiting "
+                    "manager restart evidence."
+                ),
+                "declined_at": None,
+                "declined_by": None,
+                "decline_reason": "",
+            },
+        )
+
         return {
             "recovered": recovered,
             "day_four_recovery": day_four_recovery,
             "suggested": suggested,
             "line_four_suggested": line_four_suggested,
+            "checks_complete": checks_complete,
         }
 
     @staticmethod

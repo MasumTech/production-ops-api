@@ -818,6 +818,19 @@ class ProductMaterialReadinessFilterSerializer(serializers.Serializer):
     )
 
 
+class ProductMaterialReleaseSerializer(serializers.Serializer):
+    notes = serializers.CharField(
+        required=False, allow_blank=True, trim_whitespace=True
+    )
+    shortage_quantity = serializers.IntegerField(required=False, min_value=0)
+
+
+class OperationalEscalationAssignSerializer(serializers.Serializer):
+    owner = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.filter(is_active=True),
+    )
+
+
 class OperationalEscalationSerializer(serializers.ModelSerializer):
     assignment_date = serializers.DateField(
         source="assignment.date",
