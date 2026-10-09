@@ -10,6 +10,7 @@ from rest_framework.test import APIClient
 
 from operations.models import (
     DowntimeEvent,
+    OperationalEvent,
     ProductionLine,
     Shift,
     TeamLeaderAssignment,
@@ -210,7 +211,7 @@ def test_dashboard_uses_recorded_downtime_events(downtime_user, downtime_shift):
 
 
 @pytest.mark.django_db
-def test_only_management_staff_can_edit_downtime(downtime_shift):
+def test_unassigned_team_leader_cannot_edit_downtime(downtime_shift):
     event = DowntimeEvent.objects.create(
         shift=downtime_shift,
         started_at=shift_time(downtime_shift, 10),
@@ -231,7 +232,7 @@ def test_only_management_staff_can_edit_downtime(downtime_shift):
         reverse("downtime-event-detail", args=[event.id]),
         {"description": "Changed without permission"},
     )
-    assert denied.status_code == status.HTTP_403_FORBIDDEN
+    assert denied.status_code == status.HTTP_404_NOT_FOUND
 
     client.force_authenticate(downtime_shift.supervisor)
     allowed = client.patch(
@@ -282,6 +283,17 @@ def test_team_leader_can_create_downtime_only_for_assigned_shift(downtime_shift)
     assert response.data["duration_minutes"] == 9
     assert response.data["production_line_code"] == "LINE-DT"
 
+    updated = client.patch(
+        reverse("downtime-event-detail", args=(response.data["id"],)),
+        {
+            "description": "Conveyor sensor replaced and line restarted",
+            "resolution_note": "Replacement tested at operating speed.",
+        },
+        format="json",
+    )
+    assert updated.status_code == status.HTTP_200_OK
+    assert updated.data["description"] == "Conveyor sensor replaced and line restarted"
+
     unassigned_line = ProductionLine.objects.create(
         code="LINE-DT-OTHER",
         name="Unassigned downtime line",
@@ -311,6 +323,18 @@ def test_team_leader_can_create_downtime_only_for_assigned_shift(downtime_shift)
 
     assert denied.status_code == status.HTTP_403_FORBIDDEN
     assert not DowntimeEvent.objects.filter(shift=unassigned_shift).exists()
+
+    deleted = client.delete(
+        reverse("downtime-event-detail", args=(response.data["id"],)),
+    )
+    assert deleted.status_code == status.HTTP_204_NO_CONTENT
+    assert not DowntimeEvent.objects.filter(id=response.data["id"]).exists()
+    assert list(
+        OperationalEvent.objects.filter(
+            resource_type="downtimeevent",
+            resource_id=response.data["id"],
+        ).values_list("event_type", flat=True)
+    ) == ["downtime.created", "downtime.changed", "downtime.deleted"]
 
 
 @pytest.mark.django_db

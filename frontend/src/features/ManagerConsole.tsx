@@ -407,6 +407,7 @@ export function ManagerConsole({
   onDateChange,
   onShiftPatternChange,
   onRefresh,
+  onEditProfile,
   onSignOut,
 }: {
   profile: UserSummary;
@@ -421,6 +422,7 @@ export function ManagerConsole({
   onDateChange: (value: string) => void;
   onShiftPatternChange: (value: ManagerShiftPattern) => void;
   onRefresh: () => void;
+  onEditProfile?: () => void;
   onSignOut: () => void;
 }) {
   const [view, setView] = useState<ManagerWorkspaceView>("overview");
@@ -577,15 +579,9 @@ export function ManagerConsole({
     : data.productionLines.find(
         (line) => planAssignment === `line-${line.id}`,
       ) ?? null;
-  const planLeaderOptions = [...new Map(data.assignments.map((assignment) => [
-    assignment.team_leader,
-    {
-      id: assignment.team_leader,
-      username: assignment.team_leader_username,
-      display_name: data.users.find((user) => user.id === assignment.team_leader)?.display_name
-        ?? assignment.team_leader_username,
-    },
-  ])).values()];
+  const planLeaderOptions = data.users.filter(
+    (user) => user.workspace === "team_leader" || user.workspace === undefined,
+  );
   const aggregatePosition = aggregateManagerPosition(progressLines);
   const snapshotFraction = Math.max(0, Math.min(100,
     ((snapshotMinutes - scheduleWindow.startMinutes) /
@@ -1087,6 +1083,7 @@ export function ManagerConsole({
               <strong>{profile.display_name}</strong>
               <span>{profile.username}</span>
               <span>Operations Manager</span>
+              {onEditProfile ? <button type="button" onClick={onEditProfile}>Edit profile</button> : null}
               <button type="button" onClick={onSignOut}>Sign out</button>
             </div>
           </details>

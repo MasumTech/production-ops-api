@@ -310,7 +310,7 @@ class Command(BaseCommand):
             ).count(),
         }
         expected_inventory = {
-            "users": 5,
+            "users": 17,
             "lines": 20,
             "assets": 3,
             "assignments": 10,
@@ -337,7 +337,7 @@ class Command(BaseCommand):
                 exact_inventory == expected_inventory,
                 str(exact_inventory),
             ),
-            ("personas", users.count() == 5, f"{users.count()} demo accounts"),
+            ("personas", users.count() == 17, f"{users.count()} demo accounts"),
             (
                 "two lines per Team Leader",
                 leader_line_counts == [2, 2, 2],

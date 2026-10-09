@@ -12,6 +12,7 @@ from .views import (
     HourlyOutputViewSet,
     IssueCaptureView,
     NotificationInboxView,
+    NotificationReadAllView,
     NotificationReadView,
     ObservabilitySummaryView,
     OperationalEscalationViewSet,
@@ -156,6 +157,11 @@ urlpatterns = [
         "notifications/",
         NotificationInboxView.as_view(),
         name="notification-inbox",
+    ),
+    path(
+        "notifications/read-all/",
+        NotificationReadAllView.as_view(),
+        name="notification-read-all",
     ),
     path(
         "notifications/<int:event_id>/read/",

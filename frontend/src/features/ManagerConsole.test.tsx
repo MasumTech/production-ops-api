@@ -371,7 +371,7 @@ describe("manager console", () => {
     );
     expect(within(controls).getByRole("button", { name: "Refresh" })).toBeInTheDocument();
     expect(
-      within(controls).getByRole("button", { name: "Alerts" }),
+      within(controls).getByRole("button", { name: "Notifications" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Open navigation" }),
@@ -498,6 +498,12 @@ describe("manager console", () => {
     const request = vi.mocked(api.apiRequest);
     request.mockResolvedValue({} as never);
     const today = localDate();
+    const teamLeaders = Array.from({ length: 15 }, (_, index) => ({
+      id: 201 + index,
+      username: `leader.${index + 1}`,
+      display_name: `Team Leader ${index + 1}`,
+      workspace: "team_leader" as const,
+    }));
     const planBlock = {
       id: 70,
       assignment: 1,
@@ -518,7 +524,7 @@ describe("manager console", () => {
     render(
       <ManagerConsole
         profile={profile}
-        data={{ ...data, planBlocks: [planBlock] }}
+        data={{ ...data, users: teamLeaders, planBlocks: [planBlock] }}
         operationalDate={today}
         shiftPattern="day"
         lastUpdatedAt={`${today}T10:00:00Z`}
@@ -542,6 +548,11 @@ describe("manager console", () => {
     expect(lineOptions).toHaveLength(20);
     expect(lineOptions.filter((option) => option.hasAttribute("disabled"))).toHaveLength(0);
     expect(within(addDialog).getByRole("option", { name: /Line 20.*Assignment required/ })).toBeEnabled();
+    await actor.selectOptions(within(addDialog).getByLabelText("Production line"), "line-120");
+    const leaderSelect = within(addDialog).getByLabelText("Team Leader");
+    expect(within(leaderSelect).getAllByRole("option")).toHaveLength(16);
+    expect(within(leaderSelect).getByRole("option", { name: "Team Leader 15" })).toBeEnabled();
+    await actor.selectOptions(within(addDialog).getByLabelText("Production line"), "2");
     await actor.type(within(addDialog).getByLabelText("Product code"), "NEW-01");
     await actor.type(within(addDialog).getByLabelText("Product name"), "New product");
     await actor.type(within(addDialog).getByLabelText("Target units / hour"), "120");

@@ -110,6 +110,42 @@ def test_notification_read_is_repeatable_and_removes_unread_event(support_user):
 
 
 @pytest.mark.django_db
+def test_notification_read_all_marks_only_visible_events(support_user, team_leader):
+    first, _ = create_operational_event(
+        event_type="escalation.created",
+        resource_type="operationalescalation",
+        resource_id=21,
+        recipients=(support_user,),
+    )
+    second, _ = create_operational_event(
+        event_type="material.changed",
+        resource_type="productmaterialreadiness",
+        resource_id=22,
+        recipients=(support_user,),
+    )
+    hidden, _ = create_operational_event(
+        event_type="line_update.changed",
+        resource_type="hourlylineupdate",
+        resource_id=23,
+        recipients=(team_leader,),
+    )
+
+    response = authenticated_client(support_user).post(reverse("notification-read-all"))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data == {"marked_read": 2}
+    assert set(
+        OperationalEventReadReceipt.objects.filter(user=support_user).values_list(
+            "event_id", flat=True
+        )
+    ) == {first.id, second.id}
+    assert not OperationalEventReadReceipt.objects.filter(
+        user=support_user,
+        event=hidden,
+    ).exists()
+
+
+@pytest.mark.django_db
 def test_user_cannot_read_another_users_notification(support_user, team_leader):
     event, _ = create_operational_event(
         event_type="handover.changed",

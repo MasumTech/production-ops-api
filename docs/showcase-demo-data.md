@@ -53,6 +53,7 @@ date to **2026-09-04**.
 | Team Leader 1 | `demo.leader` | Lines 1 and 2 |
 | Team Leader 2 | `demo.leader.two` | Lines 3 and 4 |
 | Team Leader 3 | `demo.leader.three` | Lines 5 and 6 |
+| Team Leaders 4–15 | `demo.leader.04` … `demo.leader.15` | Available choices when Operations creates a plan for an unassigned line |
 | Operational Support | `demo.support` | Only scoped support actions and related operational context |
 
 The Support persona exists only to demonstrate the implemented Support
@@ -63,8 +64,8 @@ functional owners, not login personas. All names and records are fictional.
 
 | Record | Count | What it demonstrates |
 |---|---:|---|
-| Login personas | 5 | Manager, three Team Leaders and scoped Support |
-| Production lines | 6 | Exactly two live lines per Team Leader |
+| Login personas | 17 | Manager, fifteen Team Leaders and scoped Support |
+| Production lines | 20 | Six populated showcase lines plus Lines 7–20 for new-plan creation |
 | Assets | 3 | Filler, packer and labeler loss attribution |
 | Assignments | 10 | Six day, two incoming night and two historical assignments |
 | Day shifts | 6 | Weekday 06:45–18:00 contract |

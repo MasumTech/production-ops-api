@@ -56,6 +56,7 @@ from .models import (
     Shift,
     ShiftHandover,
     TeamLeaderAssignment,
+    UserProfile,
 )
 from .permissions import (
     IsAssignedTeamLeaderDowntimeOrStaff,
@@ -131,7 +132,20 @@ class CurrentUserView(APIView):
 
     @extend_schema(responses=CurrentUserSerializer)
     def get(self, request):
+        UserProfile.objects.get_or_create(user=request.user)
         return Response(CurrentUserSerializer(request.user).data)
+
+    @extend_schema(request=CurrentUserSerializer, responses=CurrentUserSerializer)
+    def patch(self, request):
+        UserProfile.objects.get_or_create(user=request.user)
+        serializer = CurrentUserSerializer(
+            request.user,
+            data=request.data,
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
 
 class IssueCaptureView(APIView):
@@ -318,6 +332,25 @@ class NotificationReadView(APIView):
             user=request.user,
         )
         return Response(OperationalEventReadReceiptSerializer(receipt).data)
+
+
+class NotificationReadAllView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    @extend_schema(request=None, responses={200: dict})
+    def post(self, request):
+        unread_events = event_queryset_for_user(request.user).exclude(
+            read_receipts__user=request.user,
+        )
+        event_ids = list(unread_events.values_list("id", flat=True))
+        OperationalEventReadReceipt.objects.bulk_create(
+            [
+                OperationalEventReadReceipt(event_id=event_id, user=request.user)
+                for event_id in event_ids
+            ],
+            ignore_conflicts=True,
+        )
+        return Response({"marked_read": len(event_ids)})
 
 
 class WorkspaceRoleView(APIView):
@@ -1182,7 +1215,48 @@ class DowntimeEventViewSet(viewsets.ModelViewSet):
             raise PermissionDenied(
                 "You can only record downtime for your assigned lines."
             )
-        serializer.save()
+        downtime = serializer.save()
+        self._publish_downtime_event(downtime, "created")
+
+    def perform_update(self, serializer):
+        downtime = serializer.save()
+        self._publish_downtime_event(downtime, "changed")
+
+    def perform_destroy(self, instance):
+        self._publish_downtime_event(instance, "deleted")
+        instance.delete()
+
+    def _publish_downtime_event(self, downtime, action):
+        assignment = (
+            TeamLeaderAssignment.objects.filter(
+                production_line=downtime.shift.production_line,
+                date=downtime.shift.date,
+                shift_type=downtime.shift.shift_type,
+            )
+            .select_related("team_leader")
+            .first()
+        )
+        recipients = (assignment.team_leader,) if assignment else ()
+        create_operational_event(
+            event_type=f"downtime.{action}",
+            resource_type="downtimeevent",
+            resource_id=downtime.id,
+            assignment=assignment,
+            production_line=downtime.shift.production_line,
+            actor=self.request.user,
+            severity=(
+                OperationalEvent.Severity.WARNING
+                if downtime.status == DowntimeEvent.Status.OPEN
+                else OperationalEvent.Severity.INFO
+            ),
+            metadata={
+                "production_line_code": downtime.shift.production_line.code,
+                "status": downtime.status,
+                "description": downtime.description,
+                "duration_minutes": downtime.duration_minutes,
+            },
+            recipients=recipients,
+        )
 
 
 class QualityIncidentViewSet(viewsets.ModelViewSet):
