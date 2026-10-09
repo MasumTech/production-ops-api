@@ -271,7 +271,7 @@ describe("daily plan and break opportunity workspace", () => {
     );
 
     await actor.click(screen.getByRole("button", { name: /Line 3 ▾/ }));
-    await actor.click(screen.getByRole("button", { name: /07:00–08:00, 4 downtime minutes/ }));
+    await actor.click(screen.getByRole("button", { name: /Manage downtime for 07:00–08:00, 4 minutes recorded/ }));
     const dialog = screen.getByRole("dialog", { name: "Line 3 · 07:00–08:00" });
     expect(within(dialog).getByText("Printer sensor fault")).toBeInTheDocument();
 

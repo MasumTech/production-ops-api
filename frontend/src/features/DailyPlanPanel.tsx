@@ -4,6 +4,10 @@ import { AppIcon } from "../AppIcon";
 import { ApiError, apiRequest } from "../api";
 import { EmptyState } from "../components";
 import {
+  HourlyOutputEditor,
+  type HourlyOutputContext,
+} from "../HourlyOutputEditor";
+import {
   dateTimeToShiftMinutes,
   formatClockMinutes,
   formatScheduleClock,
@@ -106,6 +110,8 @@ export function DailyPlanPanel({
   const [sequenceView, setSequenceView] =
     useState<SequenceView>("products");
   const [selectedLine, setSelectedLine] = useState<number | null>(null);
+  const [selectedOutputHour, setSelectedOutputHour] =
+    useState<HourlyOutputContext | null>(null);
   const [selectedDowntimeHour, setSelectedDowntimeHour] = useState<SelectedDowntimeHour | null>(null);
   const [editingDowntimeId, setEditingDowntimeId] = useState<number | null>(null);
   const [downtimeStartedAt, setDowntimeStartedAt] = useState("");
@@ -160,6 +166,24 @@ export function DailyPlanPanel({
     const selected = { assignment, shift, hour };
     setSelectedDowntimeHour(selected);
     resetDowntimeForm(selected);
+  };
+
+  const openOutputHour = (assignment: Assignment, hour: PlanHour) => {
+    const clockHour = Math.floor(hour.startMinutes / 60) * 60;
+    const output = hourlyOutputs.find(
+      (item) =>
+        item.assignment === assignment.id &&
+        dateTimeToShiftMinutes(item.hour_start_at, window) === clockHour,
+    ) ?? null;
+    const localHour = localDateTimeForMinute(operationalDate, clockHour);
+    setSelectedOutputHour({
+      assignmentId: assignment.id,
+      lineLabel: displayLine(assignment.production_line_code),
+      hourLabel: hour.label,
+      hourStartAt: new Date(localHour).toISOString(),
+      target: hour.target,
+      output,
+    });
   };
 
   const editDowntime = (event: DowntimeEvent) => {
@@ -626,7 +650,7 @@ export function DailyPlanPanel({
                       const green = hour.target && hour.done !== null ? Math.min(100, hour.done / hour.target * 100) : 0;
                       const amber = hour.target && short !== null ? Math.min(100 - green, short / hour.target * 100) : 0;
                       const downtimeMinutes = downtimeMinutesForHour(shift, hour);
-                      return <button type="button" disabled={!shift} onClick={() => shift && openDowntimeHour(assignment, shift, hour)} className={`tl-plan-v2__hour${hour.current ? " is-current" : ""}${downtimeMinutes ? " has-downtime" : ""}`} key={hour.label} aria-label={`${hour.label}, ${downtimeMinutes} downtime minutes. Open downtime details.`}>
+                      return <article className={`tl-plan-v2__hour${hour.current ? " is-current" : ""}${downtimeMinutes ? " has-downtime" : ""}`} key={hour.label} aria-label={`${hour.label}, ${downtimeMinutes} downtime minutes.`}>
                         <strong>{hour.label}</strong>
                         <span>{hour.breakMinutes ? `${hour.breakMinutes}m break` : "Production"}</span>
                         <span>T {hour.target === null ? "—" : NUMBER.format(hour.target)}</span>
@@ -634,7 +658,25 @@ export function DailyPlanPanel({
                         <span>S {short === null ? "—" : NUMBER.format(short)}</span>
                         <span className="tl-plan-v2__downtime">DT {downtimeMinutes}m</span>
                         <div className="tl-plan-v2__hour-bar" aria-label={`${hour.label}: ${hour.done === null ? "actual output unavailable" : `${hour.done} done`}, ${short === null ? "shortage unavailable" : `${short} short`}`}><i style={{ width: `${green}%` }} /><b style={{ width: `${amber}%` }} /></div>
-                      </button>;
+                        <div className="tl-plan-v2__hour-actions">
+                          <button
+                            type="button"
+                            aria-label={`${hour.done === null ? "Record" : "Edit"} output for ${hour.label}`}
+                            disabled={!shift || !live || hour.future}
+                            onClick={() => openOutputHour(assignment, hour)}
+                          >
+                            {hour.done === null ? "Record output" : "Edit output"}
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Manage downtime for ${hour.label}, ${downtimeMinutes} minutes recorded`}
+                            disabled={!shift}
+                            onClick={() => shift && openDowntimeHour(assignment, shift, hour)}
+                          >
+                            Downtime
+                          </button>
+                        </div>
+                      </article>;
                     })}
                   </div>
                   {!recorded ? <p className="tl-plan-v2__data-note">Hourly actuals have not been recorded for this line. Targets are shown without estimated done or short figures.</p> : null}
@@ -683,6 +725,15 @@ export function DailyPlanPanel({
                 </form>
               </section>
             </div>
+          ) : null}
+          {selectedOutputHour ? (
+            <HourlyOutputEditor
+              context={selectedOutputHour}
+              onClose={() => setSelectedOutputHour(null)}
+              onSaved={async (message) => {
+                await onSaved?.(message);
+              }}
+            />
           ) : null}
         </>
       )}

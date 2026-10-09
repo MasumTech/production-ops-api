@@ -8095,7 +8095,7 @@ td span {
 .tl-plan-v2__progress { position: relative; height: 11px; border-radius: 8px; background: #dce8f4; }
 .tl-plan-v2__progress > span { display: block; height: 100%; border-radius: 8px; background: #189b68; }
 .tl-plan-v2__progress > i { position: absolute; top: -4px; height: 19px; width: 2px; background: #143550; }
-.tl-plan-v2__hours { display: grid; grid-template-columns: repeat(auto-fit,minmax(76px,1fr)); gap: 5px; }
+.tl-plan-v2__hours { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 7px; }
 .tl-plan-v2__hour { display: grid; gap: 3px; min-width: 0; padding: 7px; border: 1px solid #d5e2ee; border-radius: 4px; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
 .tl-plan-v2__hour.is-current { border-color: #e0ac5d; background: #fff9ef; }
 .tl-plan-v2__hour span { white-space: nowrap; }
@@ -8106,6 +8106,11 @@ td span {
 .tl-plan-v2__hour:hover:not(:disabled),.tl-plan-v2__hour:focus-visible { border-color: #2884d8; box-shadow: 0 0 0 2px rgb(40 132 216 / 14%); }
 .tl-plan-v2__hour:disabled { cursor: not-allowed; opacity: .66; }
 .tl-plan-v2__hour.has-downtime { border-color: #e89b9b; background: #fff8f8; }
+.tl-plan-v2__hour { cursor: default; }
+.tl-plan-v2__hour-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 4px; }
+.tl-plan-v2__hour-actions button { min-height: 30px; padding: 4px 6px; border: 1px solid #b9cee0; border-radius: 5px; color: #145f9d; background: #f5faff; font: inherit; font-size: .66rem; font-weight: 750; cursor: pointer; }
+.tl-plan-v2__hour-actions button:last-child { color: #9a3f42; border-color: #e4bcbc; background: #fff8f8; }
+.tl-plan-v2__hour-actions button:disabled { cursor: not-allowed; opacity: .5; }
 .tl-plan-v2__downtime { color: #bd2736; font-weight: 800; }
 .tl-plan-v2__data-note { margin: 0; color: #536a88; font-size: 0.82rem; }
 
@@ -10509,6 +10514,33 @@ td span {
 .manager-output-hour small { overflow-wrap: anywhere; color: #536984; font-size: .72rem; }
 .manager-output-hour-track { height: 9px; margin: 8px 0 6px; border-radius: 999px; background: #dce9f5; }
 .manager-output-hour-track i { display: block; height: 100%; border-radius: inherit; background: #149e6b; }
+.manager-output-hour-edit { width: 100%; min-height: 34px; margin-top: 8px; padding: 5px 8px; border: 1px solid #aac8df; border-radius: 6px; color: #0c679f; background: #fff; font: inherit; font-size: .72rem; font-weight: 750; }
+.manager-output-hour-edit:disabled { cursor: not-allowed; opacity: .5; }
+
+.hourly-output-backdrop { position: fixed; z-index: 1200; inset: 0; display: grid; overflow-y: auto; place-items: center; padding: 24px; background: rgb(6 25 45 / 66%); }
+.hourly-output-editor { width: min(720px, 100%); max-height: calc(100vh - 48px); overflow-y: auto; border: 1px solid #c9d9e6; border-radius: 14px; background: #fff; box-shadow: 0 24px 70px rgb(3 23 43 / 28%); }
+.hourly-output-editor > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 22px 24px 18px; border-bottom: 1px solid #dce6ee; background: linear-gradient(135deg, #f5faff, #eef7fb); }
+.hourly-output-editor > header h2 { margin: 3px 0 0; color: #0a2d53; font-size: 1.45rem; }
+.hourly-output-editor > header p { margin: 6px 0 0; color: #536984; font-size: .82rem; }
+.hourly-output-editor > header > button { width: 38px; height: 38px; flex: 0 0 auto; border: 1px solid #c6d7e4; border-radius: 50%; color: #264b6c; background: #fff; font-size: 1.45rem; }
+.hourly-output-editor__audit { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; padding: 10px 24px; color: #4e647c; background: #f8fafc; font-size: .76rem; }
+.hourly-output-editor form { display: grid; gap: 16px; padding: 22px 24px 24px; }
+.hourly-output-editor label { display: grid; gap: 6px; color: #29465f; font-size: .79rem; font-weight: 720; }
+.hourly-output-editor input,.hourly-output-editor textarea { width: 100%; border: 1px solid #bdcedd; border-radius: 7px; color: #102f4d; background: #fff; font: inherit; }
+.hourly-output-editor input { min-height: 42px; padding: 8px 10px; }
+.hourly-output-editor textarea { padding: 10px; resize: vertical; }
+.hourly-output-editor__grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+.hourly-output-editor__summary { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); overflow: hidden; border: 1px solid #d5e1eb; border-radius: 9px; background: #f7fafc; }
+.hourly-output-editor__summary > div { min-width: 0; padding: 12px 14px; border-right: 1px solid #d5e1eb; }
+.hourly-output-editor__summary > div:last-child { border-right: 0; }
+.hourly-output-editor__summary span,.hourly-output-editor__summary strong { display: block; }
+.hourly-output-editor__summary span { color: #5a6f85; font-size: .7rem; }
+.hourly-output-editor__summary strong { margin-top: 4px; color: #0a3159; font-size: 1.05rem; }
+.hourly-output-editor__message { margin: 0; padding: 10px 12px; border-radius: 7px; color: #8b3036; background: #fff0f1; font-size: .8rem; }
+.hourly-output-editor footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 4px; }
+.hourly-output-editor footer > div { display: flex; gap: 8px; }
+.hourly-output-editor__delete-confirm { align-items: center; flex-wrap: wrap; }
+.hourly-output-editor__delete-confirm span { width: 100%; color: #8b3036; font-size: .75rem; font-weight: 700; }
 
 @media (max-width: 1250px) {
   .manager-overview-primary-grid { grid-template-columns: 1fr; }
@@ -10528,6 +10560,13 @@ td span {
   .manager-output-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .manager-output-detail > header { flex-direction: column; }
   .manager-leader-progress-label { flex-wrap: wrap; }
+  .hourly-output-backdrop { align-items: end; padding: 0; }
+  .hourly-output-editor { max-height: 94vh; border-radius: 14px 14px 0 0; }
+  .hourly-output-editor__grid,.hourly-output-editor__summary { grid-template-columns: 1fr; }
+  .hourly-output-editor__summary > div { border-right: 0; border-bottom: 1px solid #d5e1eb; }
+  .hourly-output-editor__summary > div:last-child { border-bottom: 0; }
+  .hourly-output-editor footer { align-items: stretch; flex-direction: column-reverse; }
+  .hourly-output-editor footer > div { display: grid; grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 760px) {
   .daily-plan-axis { min-width: 720px; }

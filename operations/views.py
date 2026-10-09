@@ -2234,23 +2234,118 @@ class ShiftHandoverViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-class HourlyOutputViewSet(viewsets.ReadOnlyModelViewSet):
+class HourlyOutputViewSet(viewsets.ModelViewSet):
     queryset = HourlyOutput.objects.all()
     serializer_class = HourlyOutputSerializer
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAssignedTeamLeaderOrStaff,)
+    http_method_names = ("get", "post", "patch", "delete", "head", "options")
     ordering = ("hour_start_at",)
 
     def get_queryset(self):
-        queryset = self.queryset.select_related("assignment")
+        queryset = self.queryset.select_related(
+            "assignment",
+            "assignment__production_line",
+            "assignment__team_leader",
+            "recorded_by",
+            "last_edited_by",
+        )
         if not self.request.user.is_staff:
             queryset = queryset.filter(assignment__team_leader=self.request.user)
         date = self.request.query_params.get("date")
         shift_type = self.request.query_params.get("shift_type")
+        assignment = self.request.query_params.get("assignment")
+        production_line = self.request.query_params.get("production_line")
         if date:
             queryset = queryset.filter(assignment__date=date)
         if shift_type:
             queryset = queryset.filter(assignment__shift_type=shift_type)
+        if assignment:
+            queryset = queryset.filter(assignment_id=assignment)
+        if production_line:
+            queryset = queryset.filter(
+                assignment__production_line_id=production_line,
+            )
         return queryset
+
+    def perform_create(self, serializer):
+        with transaction.atomic():
+            output = serializer.save(
+                recorded_by=self.request.user,
+                last_edited_by=self.request.user,
+            )
+            self._reconcile_shift(output.assignment)
+            self._publish_output_event(output, "created")
+
+    def perform_update(self, serializer):
+        with transaction.atomic():
+            output = serializer.save(last_edited_by=self.request.user)
+            self._reconcile_shift(output.assignment)
+            action_name = "corrected" if self.request.user.is_staff else "changed"
+            self._publish_output_event(output, action_name)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if request.user.is_staff:
+            correction_reason = str(request.data.get("correction_reason", "")).strip()
+            if not correction_reason:
+                raise ValidationError(
+                    {
+                        "correction_reason": (
+                            "Managers must record a reason when deleting hourly output."
+                        )
+                    }
+                )
+            instance.correction_reason = correction_reason
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def perform_destroy(self, instance):
+        assignment = instance.assignment
+        with transaction.atomic():
+            self._publish_output_event(instance, "deleted")
+            instance.delete()
+            self._reconcile_shift(assignment)
+
+    @staticmethod
+    def _reconcile_shift(assignment):
+        shift = (
+            Shift.objects.select_for_update()
+            .filter(
+                production_line=assignment.production_line,
+                date=assignment.date,
+                shift_type=assignment.shift_type,
+            )
+            .first()
+        )
+        if shift is None:
+            return
+        actual_output = (
+            HourlyOutput.objects.filter(assignment=assignment).aggregate(
+                total=Coalesce(Sum("actual_units"), 0),
+            )["total"]
+            or 0
+        )
+        shift.actual_output = actual_output
+        shift.save(update_fields=("actual_output", "updated_at"))
+
+    def _publish_output_event(self, output, action_name):
+        create_operational_event(
+            event_type=f"hourly_output.{action_name}",
+            resource_type="hourlyoutput",
+            resource_id=output.id,
+            assignment=output.assignment,
+            production_line=output.assignment.production_line,
+            actor=self.request.user,
+            severity=OperationalEvent.Severity.INFO,
+            metadata={
+                "hour_start_at": output.hour_start_at.isoformat(),
+                "actual_units": output.actual_units,
+                "rejected_units": output.rejected_units,
+                "rework_units": output.rework_units,
+                "correction_reason": output.correction_reason,
+            },
+            recipients=(output.assignment.team_leader,),
+        )
 
 
 @extend_schema_view(
