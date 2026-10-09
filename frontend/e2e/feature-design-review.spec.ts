@@ -36,7 +36,8 @@ test("manager design exposes fifteen plan leaders and the profile editor", async
   await editor.getByLabel("Production line").selectOption("line-7");
   const leaders = editor.getByLabel("Team Leader");
   await expect(leaders.getByRole("option")).toHaveCount(16);
-  await expect(leaders.getByRole("option", { name: "Team Leader 15" })).toBeVisible();
+  await leaders.selectOption({ label: "Team Leader 15" });
+  await expect(leaders.locator("option:checked")).toHaveText("Team Leader 15");
   await page.screenshot({
     path: testInfo.outputPath("manager-daily-plan-fifteen-leaders.png"),
     animations: "disabled",
