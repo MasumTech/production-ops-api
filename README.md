@@ -723,11 +723,12 @@ The default local accounts are:
 | Team Leader 1 — Lines 1 and 2 | `demo.leader` |
 | Team Leader 2 — Lines 3 and 4 | `demo.leader.two` |
 | Team Leader 3 — Lines 5 and 6 | `demo.leader.three` |
+| Team Leaders 4–15 — available for new line plans | `demo.leader.04` … `demo.leader.15` |
 | Operational Support | `demo.support` |
 
 Set a local demo password explicitly with `--password` or the `DEMO_SEED_PASSWORD` environment variable.
 
-Running the command again updates the same demo records rather than creating duplicates. The `--reset` option deletes and recreates only demo users and records identified by the `demo.` username or `DEMO-` data prefix. The local-only `demo.support` persona has one assigned action and one available action to exercise the scoped Operational Support workflow. Engineer, QA, Cover, and Materials remain functional responsibility labels inside the Manager and Team Leader workflows.
+Running the command again updates the same demo records rather than creating duplicates. The `--reset` option deletes and recreates only demo users and records identified by the `demo.` username or `DEMO-` data prefix. Fifteen Team Leader accounts are available in the Manager plan editor; the first three retain the six fully populated showcase lines. The local-only `demo.support` persona has one assigned action and one available action to exercise the scoped Operational Support workflow. Engineer, QA, Cover, and Materials remain functional responsibility labels inside the Manager and Team Leader workflows.
 
 The command refuses to run when `DJANGO_DEBUG=False`. These accounts, credentials, and records must never be used in staging or production.
 

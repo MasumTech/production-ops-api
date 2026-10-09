@@ -59,6 +59,7 @@ export function TeamLeaderShell({
   onShiftPatternChange,
   onViewModeChange,
   onRefresh,
+  onEditProfile,
   onSignOut,
 }: {
   profile: UserSummary;
@@ -76,6 +77,7 @@ export function TeamLeaderShell({
   onShiftPatternChange: (value: "day" | "night") => void;
   onViewModeChange: (value: "live" | "historical") => void;
   onRefresh: () => void;
+  onEditProfile?: () => void;
   onSignOut: () => void;
 }) {
   const [navigationOpen, setNavigationOpen] = useState(false);
@@ -211,6 +213,7 @@ export function TeamLeaderShell({
               <span>
                 {shiftPattern === "day" ? "Day" : "Night"} · {shiftWindow.startLabel}–{shiftWindow.endLabel}
               </span>
+              {onEditProfile ? <button type="button" onClick={onEditProfile}>Edit profile</button> : null}
               <button type="button" onClick={onSignOut}>Sign out</button>
             </div>
           </details>

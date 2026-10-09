@@ -30,18 +30,18 @@ describe("notification centre", () => {
     const actor = userEvent.setup();
     render(<NotificationCentre refreshToken="refresh-1" />);
 
-    expect(await screen.findByRole("button", { name: "Alerts (1)" })).toBeInTheDocument();
-    await actor.click(screen.getByRole("button", { name: "Alerts (1)" }));
+    expect(await screen.findByRole("button", { name: /^Notifications/ })).toBeInTheDocument();
+    await actor.click(screen.getByRole("button", { name: /^Notifications/ }));
     expect(screen.getByRole("heading", { name: "Notifications" })).toBeInTheDocument();
-    expect(screen.getByText("Escalation · Overdue")).toBeInTheDocument();
+    expect(screen.getByText("Response overdue")).toBeInTheDocument();
     expect(
       screen.getByText(/response deadline has passed/i),
     ).toBeInTheDocument();
 
-    await actor.click(screen.getByRole("button", { name: "Mark read" }));
+    await actor.click(screen.getByRole("button", { name: "Mark as seen" }));
 
     await waitFor(() => expect(postSpy).toHaveBeenCalledWith("/notifications/42/read/"));
-    expect(screen.getByText("No unread notifications.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Alerts" })).toBeInTheDocument();
+    expect(screen.getByText("You’re all caught up", { selector: "strong" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Notifications" })).toBeInTheDocument();
   });
 });

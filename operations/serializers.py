@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
@@ -26,6 +28,7 @@ from .models import (
     Shift,
     ShiftHandover,
     TeamLeaderAssignment,
+    UserProfile,
 )
 
 User = get_user_model()
@@ -33,6 +36,7 @@ User = get_user_model()
 
 class UserChoiceSerializer(serializers.ModelSerializer):
     display_name = serializers.SerializerMethodField()
+    workspace = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -40,22 +44,91 @@ class UserChoiceSerializer(serializers.ModelSerializer):
             "id",
             "username",
             "display_name",
+            "workspace",
         )
         read_only_fields = fields
 
     def get_display_name(self, obj) -> str:
         return obj.get_full_name() or obj.username
 
-
-class CurrentUserSerializer(UserChoiceSerializer):
-    workspace = serializers.SerializerMethodField()
-
-    class Meta(UserChoiceSerializer.Meta):
-        fields = (*UserChoiceSerializer.Meta.fields, "is_staff", "workspace")
-        read_only_fields = fields
-
     def get_workspace(self, obj) -> WorkspaceRole:
         return workspace_role_for_user(obj)
+
+
+class CurrentUserSerializer(UserChoiceSerializer):
+    phone_number = serializers.CharField(
+        source="operations_profile.phone_number",
+        required=False,
+        allow_blank=True,
+        max_length=32,
+    )
+
+    class Meta(UserChoiceSerializer.Meta):
+        fields = (
+            *UserChoiceSerializer.Meta.fields,
+            "first_name",
+            "last_name",
+            "email",
+            "phone_number",
+            "is_staff",
+        )
+        read_only_fields = ("id", "display_name", "workspace", "is_staff")
+        extra_kwargs: ClassVar = {
+            "username": {"required": False},
+            "first_name": {"required": False, "allow_blank": True},
+            "last_name": {"required": False, "allow_blank": True},
+            "email": {"required": False, "allow_blank": True},
+        }
+
+    def validate_username(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Username cannot be blank.")
+        conflict = User.objects.filter(username__iexact=value).exclude(
+            pk=self.instance.pk
+        )
+        if conflict.exists():
+            raise serializers.ValidationError(
+                "A user with this username already exists."
+            )
+        return value
+
+    def validate_email(self, value: str) -> str:
+        value = value.strip().lower()
+        if (
+            value
+            and User.objects.filter(email__iexact=value)
+            .exclude(pk=self.instance.pk)
+            .exists()
+        ):
+            raise serializers.ValidationError(
+                "A user with this email address already exists."
+            )
+        return value
+
+    def validate_phone_number(self, value: str) -> str:
+        value = value.strip()
+        if value and (
+            len(value) < 7
+            or any(character not in "+-() 0123456789" for character in value)
+        ):
+            raise serializers.ValidationError(
+                "Enter a valid phone number using digits, spaces, +, -, or parentheses."
+            )
+        return value
+
+    def update(self, instance, validated_data):
+        profile_data = validated_data.pop("operations_profile", {})
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        instance.save()
+        if "phone_number" in profile_data:
+            profile = getattr(instance, "operations_profile", None)
+            if profile is None:
+                profile = UserProfile.objects.create(user=instance)
+            profile.phone_number = profile_data["phone_number"]
+            profile.save(update_fields=("phone_number", "updated_at"))
+        return instance
 
 
 class OperationalEventSerializer(serializers.ModelSerializer):

@@ -137,10 +137,64 @@ def test_current_user_endpoint_returns_safe_profile(
         "id": api_user.id,
         "username": api_user.username,
         "display_name": api_user.username,
-        "is_staff": False,
         "workspace": "team_leader",
+        "first_name": "",
+        "last_name": "",
+        "email": "api.user@example.com",
+        "phone_number": "",
+        "is_staff": False,
     }
-    assert "email" not in response.data
+
+
+@pytest.mark.django_db
+def test_current_user_can_update_own_complete_profile(authenticated_client, api_user):
+    response = authenticated_client.patch(
+        reverse("current-user"),
+        {
+            "username": "updated.operator",
+            "first_name": "Updated",
+            "last_name": "Operator",
+            "email": "updated.operator@example.com",
+            "phone_number": "+44 7700 900999",
+            "is_staff": True,
+            "workspace": "manager",
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data == {
+        "id": api_user.id,
+        "username": "updated.operator",
+        "display_name": "Updated Operator",
+        "workspace": "team_leader",
+        "first_name": "Updated",
+        "last_name": "Operator",
+        "email": "updated.operator@example.com",
+        "phone_number": "+44 7700 900999",
+        "is_staff": False,
+    }
+    api_user.refresh_from_db()
+    assert api_user.username == "updated.operator"
+    assert api_user.operations_profile.phone_number == "+44 7700 900999"
+
+
+@pytest.mark.django_db
+def test_current_user_profile_rejects_duplicate_email(
+    authenticated_client,
+    other_user,
+):
+    other_user.email = "taken@example.com"
+    other_user.save(update_fields=("email",))
+
+    response = authenticated_client.patch(
+        reverse("current-user"),
+        {"email": "TAKEN@example.com"},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "email" in response.data
 
 
 @pytest.mark.django_db

@@ -1,6 +1,7 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties, type FormEvent } from "react";
 
 import { AppIcon } from "../AppIcon";
+import { ApiError, apiRequest } from "../api";
 import { EmptyState } from "../components";
 import {
   dateTimeToShiftMinutes,
@@ -13,11 +14,12 @@ import {
 import type {
   Assignment,
   DailyPlanBlock,
+  DowntimeEvent,
   HourlyOutput,
   LineUpdate,
   ShiftRecord,
 } from "../types";
-import { completedFractionForBlock, expectedUnitsNow, hourlyPlan } from "./dailyPlanMath";
+import { completedFractionForBlock, expectedUnitsNow, hourlyPlan, type PlanHour } from "./dailyPlanMath";
 
 const NUMBER = new Intl.NumberFormat("en-GB");
 
@@ -62,22 +64,39 @@ function completionPercentage(shift: ShiftRecord | undefined): number {
   return Math.round((shift.actual_output / shift.planned_output) * 100);
 }
 
+function localDateTimeForMinute(operationalDate: string, minutes: number): string {
+  const dayOffset = Math.floor(minutes / (24 * 60));
+  const date = new Date(`${operationalDate}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + dayOffset);
+  return `${date.toISOString().slice(0, 10)}T${formatClockMinutes(minutes)}`;
+}
+
+type SelectedDowntimeHour = {
+  assignment: Assignment;
+  shift: ShiftRecord;
+  hour: PlanHour;
+};
+
 export function DailyPlanPanel({
   assignments,
   planBlocks,
   hourlyOutputs = [],
   shifts = [],
   updates = [],
+  downtimeEvents = [],
   live = false,
   onRequestPlanChange,
+  onSaved,
 }: {
   assignments: Assignment[];
   planBlocks: DailyPlanBlock[];
   hourlyOutputs?: HourlyOutput[];
   shifts?: ShiftRecord[];
   updates?: LineUpdate[];
+  downtimeEvents?: DowntimeEvent[];
   live?: boolean;
   onRequestPlanChange?: (assignmentId: number) => void;
+  onSaved?: (message: string) => Promise<void> | void;
 }) {
   const visibleAssignments = assignments;
   const operationalDate =
@@ -87,6 +106,123 @@ export function DailyPlanPanel({
   const [sequenceView, setSequenceView] =
     useState<SequenceView>("products");
   const [selectedLine, setSelectedLine] = useState<number | null>(null);
+  const [selectedDowntimeHour, setSelectedDowntimeHour] = useState<SelectedDowntimeHour | null>(null);
+  const [editingDowntimeId, setEditingDowntimeId] = useState<number | null>(null);
+  const [downtimeStartedAt, setDowntimeStartedAt] = useState("");
+  const [downtimeEndedAt, setDowntimeEndedAt] = useState("");
+  const [downtimeReason, setDowntimeReason] = useState<DowntimeEvent["reason_category"]>("equipment");
+  const [downtimeOwner, setDowntimeOwner] = useState<DowntimeEvent["owner_group"]>("engineering");
+  const [downtimeStatus, setDowntimeStatus] = useState<DowntimeEvent["status"]>("resolved");
+  const [downtimeDescription, setDowntimeDescription] = useState("");
+  const [downtimeResolution, setDowntimeResolution] = useState("");
+  const [downtimeSaving, setDowntimeSaving] = useState(false);
+  const [downtimeMessage, setDowntimeMessage] = useState("");
+  const [deleteDowntimeId, setDeleteDowntimeId] = useState<number | null>(null);
+
+  const eventsForHour = (selected: SelectedDowntimeHour): DowntimeEvent[] =>
+    downtimeEvents.filter((event) => {
+      if (event.shift !== selected.shift.id) return false;
+      const started = dateTimeToShiftMinutes(event.started_at, window);
+      const ended = event.ended_at
+        ? dateTimeToShiftMinutes(event.ended_at, window)
+        : selected.hour.endMinutes;
+      return started < selected.hour.endMinutes && ended > selected.hour.startMinutes;
+    });
+
+  const downtimeMinutesForHour = (shift: ShiftRecord | undefined, hour: PlanHour): number => {
+    if (!shift) return 0;
+    return downtimeEvents
+      .filter((event) => event.shift === shift.id)
+      .reduce((total, event) => {
+        const started = dateTimeToShiftMinutes(event.started_at, window);
+        const ended = event.ended_at
+          ? dateTimeToShiftMinutes(event.ended_at, window)
+          : hour.endMinutes;
+        return total + Math.max(0, Math.min(hour.endMinutes, ended) - Math.max(hour.startMinutes, started));
+      }, 0);
+  };
+
+  const resetDowntimeForm = (selected: SelectedDowntimeHour) => {
+    const defaultEnd = Math.min(selected.hour.endMinutes, selected.hour.startMinutes + 10);
+    setEditingDowntimeId(null);
+    setDowntimeStartedAt(localDateTimeForMinute(operationalDate, selected.hour.startMinutes));
+    setDowntimeEndedAt(localDateTimeForMinute(operationalDate, defaultEnd));
+    setDowntimeReason("equipment");
+    setDowntimeOwner("engineering");
+    setDowntimeStatus("resolved");
+    setDowntimeDescription("");
+    setDowntimeResolution("");
+    setDowntimeMessage("");
+    setDeleteDowntimeId(null);
+  };
+
+  const openDowntimeHour = (assignment: Assignment, shift: ShiftRecord, hour: PlanHour) => {
+    const selected = { assignment, shift, hour };
+    setSelectedDowntimeHour(selected);
+    resetDowntimeForm(selected);
+  };
+
+  const editDowntime = (event: DowntimeEvent) => {
+    setEditingDowntimeId(event.id);
+    setDowntimeStartedAt(event.started_at.slice(0, 16));
+    setDowntimeEndedAt(event.ended_at?.slice(0, 16) ?? "");
+    setDowntimeReason(event.reason_category);
+    setDowntimeOwner(event.owner_group);
+    setDowntimeStatus(event.status);
+    setDowntimeDescription(event.description);
+    setDowntimeResolution(event.resolution_note);
+    setDowntimeMessage("");
+    setDeleteDowntimeId(null);
+  };
+
+  const saveDowntime = async (submitEvent: FormEvent) => {
+    submitEvent.preventDefault();
+    if (!selectedDowntimeHour || !downtimeDescription.trim()) return;
+    setDowntimeSaving(true);
+    setDowntimeMessage("");
+    try {
+      await apiRequest(
+        editingDowntimeId ? `/downtime-events/${editingDowntimeId}/` : "/downtime-events/",
+        {
+          method: editingDowntimeId ? "PATCH" : "POST",
+          body: JSON.stringify({
+            shift: selectedDowntimeHour.shift.id,
+            started_at: new Date(downtimeStartedAt).toISOString(),
+            ended_at: downtimeEndedAt ? new Date(downtimeEndedAt).toISOString() : null,
+            reason_category: downtimeReason,
+            description: downtimeDescription.trim(),
+            owner_group: downtimeOwner,
+            status: downtimeStatus,
+            resolution_note: downtimeResolution.trim(),
+          }),
+        },
+      );
+      const message = editingDowntimeId ? "Hourly downtime updated." : "Hourly downtime added.";
+      setDowntimeMessage(message);
+      await onSaved?.(message);
+      resetDowntimeForm(selectedDowntimeHour);
+    } catch (caught) {
+      setDowntimeMessage(caught instanceof ApiError ? caught.message : "Could not save downtime.");
+    } finally {
+      setDowntimeSaving(false);
+    }
+  };
+
+  const removeDowntime = async (eventId: number) => {
+    setDowntimeSaving(true);
+    setDowntimeMessage("");
+    try {
+      await apiRequest(`/downtime-events/${eventId}/`, { method: "DELETE" });
+      setDeleteDowntimeId(null);
+      setDowntimeMessage("Hourly downtime deleted.");
+      await onSaved?.("Hourly downtime deleted.");
+      if (editingDowntimeId === eventId && selectedDowntimeHour) resetDowntimeForm(selectedDowntimeHour);
+    } catch (caught) {
+      setDowntimeMessage(caught instanceof ApiError ? caught.message : "Could not delete downtime.");
+    } finally {
+      setDowntimeSaving(false);
+    }
+  };
 
   const shownAssignments = useMemo(
     () =>
@@ -489,14 +625,16 @@ export function DailyPlanPanel({
                       const short = hour.done !== null && hour.dueNow !== null ? Math.max(0, hour.dueNow - hour.done) : null;
                       const green = hour.target && hour.done !== null ? Math.min(100, hour.done / hour.target * 100) : 0;
                       const amber = hour.target && short !== null ? Math.min(100 - green, short / hour.target * 100) : 0;
-                      return <div className={`tl-plan-v2__hour${hour.current ? " is-current" : ""}`} key={hour.label}>
+                      const downtimeMinutes = downtimeMinutesForHour(shift, hour);
+                      return <button type="button" disabled={!shift} onClick={() => shift && openDowntimeHour(assignment, shift, hour)} className={`tl-plan-v2__hour${hour.current ? " is-current" : ""}${downtimeMinutes ? " has-downtime" : ""}`} key={hour.label} aria-label={`${hour.label}, ${downtimeMinutes} downtime minutes. Open downtime details.`}>
                         <strong>{hour.label}</strong>
                         <span>{hour.breakMinutes ? `${hour.breakMinutes}m break` : "Production"}</span>
                         <span>T {hour.target === null ? "—" : NUMBER.format(hour.target)}</span>
                         <span>D {hour.done === null ? "—" : NUMBER.format(hour.done)}</span>
                         <span>S {short === null ? "—" : NUMBER.format(short)}</span>
+                        <span className="tl-plan-v2__downtime">DT {downtimeMinutes}m</span>
                         <div className="tl-plan-v2__hour-bar" aria-label={`${hour.label}: ${hour.done === null ? "actual output unavailable" : `${hour.done} done`}, ${short === null ? "shortage unavailable" : `${short} short`}`}><i style={{ width: `${green}%` }} /><b style={{ width: `${amber}%` }} /></div>
-                      </div>;
+                      </button>;
                     })}
                   </div>
                   {!recorded ? <p className="tl-plan-v2__data-note">Hourly actuals have not been recorded for this line. Targets are shown without estimated done or short figures.</p> : null}
@@ -510,6 +648,42 @@ export function DailyPlanPanel({
               Operations Manager review.
             </p>
           </section>
+          {selectedDowntimeHour ? (
+            <div className="hourly-downtime-backdrop" role="presentation">
+              <section className="hourly-downtime-editor" role="dialog" aria-modal="true" aria-labelledby="hourly-downtime-title">
+                <header>
+                  <div><span className="eyebrow">Team Leader · My Plan</span><h2 id="hourly-downtime-title">{displayLine(selectedDowntimeHour.assignment.production_line_code)} · {selectedDowntimeHour.hour.label}</h2><p>Add, update or remove downtime recorded in this hour.</p></div>
+                  <button type="button" aria-label="Close hourly downtime" onClick={() => setSelectedDowntimeHour(null)}>×</button>
+                </header>
+                <div className="hourly-downtime-editor__events">
+                  <h3>Recorded downtime</h3>
+                  {eventsForHour(selectedDowntimeHour).length ? eventsForHour(selectedDowntimeHour).map((event) => (
+                    <article key={event.id}>
+                      <div><strong>{event.description}</strong><span>{shortTime(event.started_at)}–{shortTime(event.ended_at ?? event.started_at)} · {event.duration_minutes} min · {event.reason_category}</span></div>
+                      <div className="hourly-downtime-editor__actions">
+                        <button type="button" onClick={() => editDowntime(event)}>Edit</button>
+                        {deleteDowntimeId === event.id ? <><button type="button" className="is-danger" disabled={downtimeSaving} onClick={() => void removeDowntime(event.id)}>Confirm delete</button><button type="button" onClick={() => setDeleteDowntimeId(null)}>Keep</button></> : <button type="button" className="is-danger" onClick={() => setDeleteDowntimeId(event.id)}>Delete</button>}
+                      </div>
+                    </article>
+                  )) : <p className="empty-state">No downtime recorded in this hour.</p>}
+                </div>
+                <form onSubmit={saveDowntime}>
+                  <div className="hourly-downtime-editor__form-heading"><h3>{editingDowntimeId ? "Update downtime" : "Add downtime"}</h3>{editingDowntimeId ? <button type="button" onClick={() => resetDowntimeForm(selectedDowntimeHour)}>Add new instead</button> : null}</div>
+                  <div className="hourly-downtime-editor__grid">
+                    <label>Start<input type="datetime-local" value={downtimeStartedAt} onChange={(event) => setDowntimeStartedAt(event.target.value)} required /></label>
+                    <label>End<input type="datetime-local" value={downtimeEndedAt} onChange={(event) => setDowntimeEndedAt(event.target.value)} required={downtimeStatus === "resolved"} /></label>
+                    <label>Reason<select value={downtimeReason} onChange={(event) => setDowntimeReason(event.target.value as DowntimeEvent["reason_category"])}><option value="equipment">Equipment</option><option value="material">Material</option><option value="quality">Quality</option><option value="staffing">Staffing</option><option value="changeover">Changeover</option><option value="other">Other</option></select></label>
+                    <label>Owner group<select value={downtimeOwner} onChange={(event) => setDowntimeOwner(event.target.value as DowntimeEvent["owner_group"])}><option value="operations">Operations</option><option value="engineering">Engineering</option><option value="qa">QA</option><option value="machine_minder">Machine Minder</option></select></label>
+                    <label>Status<select value={downtimeStatus} onChange={(event) => setDowntimeStatus(event.target.value as DowntimeEvent["status"])}><option value="open">Open</option><option value="resolved">Resolved</option></select></label>
+                    <label className="is-wide">Description<input value={downtimeDescription} maxLength={160} onChange={(event) => setDowntimeDescription(event.target.value)} placeholder="What stopped or slowed the line?" required /></label>
+                    <label className="is-wide">Resolution / handover note<textarea rows={2} value={downtimeResolution} maxLength={255} onChange={(event) => setDowntimeResolution(event.target.value)} placeholder="What was done, or what must happen next?" /></label>
+                  </div>
+                  {downtimeMessage ? <p className="hourly-downtime-editor__message" role="status">{downtimeMessage}</p> : null}
+                  <footer><button type="button" className="button button--ghost" onClick={() => setSelectedDowntimeHour(null)}>Close</button><button type="submit" className="button button--primary" disabled={downtimeSaving || !downtimeDescription.trim()}>{downtimeSaving ? "Saving…" : editingDowntimeId ? "Save changes" : "Add downtime"}</button></footer>
+                </form>
+              </section>
+            </div>
+          ) : null}
         </>
       )}
     </section>

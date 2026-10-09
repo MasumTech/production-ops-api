@@ -20,7 +20,20 @@ from .models import (
     Shift,
     ShiftHandover,
     TeamLeaderAssignment,
+    UserProfile,
 )
+
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    list_display = ("user", "phone_number", "updated_at")
+    search_fields = (
+        "user__username",
+        "user__first_name",
+        "user__last_name",
+        "phone_number",
+    )
+    autocomplete_fields = ("user",)
 
 
 @admin.register(DowntimeEvent)

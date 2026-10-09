@@ -19,6 +19,7 @@ export interface UserChoice {
   id: number;
   username: string;
   display_name: string;
+  workspace?: "manager" | "team_leader" | "support";
 }
 
 export interface ProductionLine {
@@ -33,6 +34,10 @@ export interface ProductionLine {
 export interface UserSummary extends UserChoice {
   is_staff: boolean;
   workspace: "manager" | "team_leader" | "support";
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  phone_number?: string;
 }
 
 export interface Assignment {

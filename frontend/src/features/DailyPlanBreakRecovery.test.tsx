@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -7,6 +7,7 @@ import type {
   Assignment,
   BreakOpportunity,
   DailyPlanBlock,
+  DowntimeEvent,
   LineUpdate,
   ShiftRecord,
 } from "../types";
@@ -236,6 +237,57 @@ describe("daily plan and break opportunity workspace", () => {
     expect(screen.getByRole("button", { name: /Line 3 ▴/ })).toHaveAttribute("aria-expanded", "true");
     await actor.click(screen.getByRole("button", { name: "Close details" }));
     expect(screen.queryByRole("heading", { name: "Line 3 · Hourly details" })).not.toBeInTheDocument();
+  });
+
+  it("lets the assigned Team Leader add, update and delete hourly downtime", async () => {
+    const actor = userEvent.setup();
+    const request = vi.spyOn(api, "apiRequest").mockResolvedValue({} as never);
+    const onSaved = vi.fn().mockResolvedValue(undefined);
+    const downtime: DowntimeEvent = {
+      id: 55,
+      shift: shift.id,
+      production_line: assignment.production_line,
+      production_line_code: assignment.production_line_code,
+      shift_date: assignment.date,
+      started_at: "2026-09-04T07:05:00+01:00",
+      ended_at: "2026-09-04T07:09:00+01:00",
+      duration_minutes: 4,
+      reason_category: "equipment",
+      description: "Printer sensor fault",
+      owner_group: "engineering",
+      status: "resolved",
+      resolution_note: "Sensor reset",
+    };
+
+    render(
+      <DailyPlanPanel
+        assignments={[assignment]}
+        planBlocks={planBlocks}
+        shifts={[shift]}
+        updates={[update]}
+        downtimeEvents={[downtime]}
+        onSaved={onSaved}
+      />,
+    );
+
+    await actor.click(screen.getByRole("button", { name: /Line 3 ▾/ }));
+    await actor.click(screen.getByRole("button", { name: /07:00–08:00, 4 downtime minutes/ }));
+    const dialog = screen.getByRole("dialog", { name: "Line 3 · 07:00–08:00" });
+    expect(within(dialog).getByText("Printer sensor fault")).toBeInTheDocument();
+
+    await actor.type(within(dialog).getByLabelText("Description"), "New line stop");
+    await actor.click(within(dialog).getByRole("button", { name: "Add downtime" }));
+    expect(request).toHaveBeenCalledWith("/downtime-events/", expect.objectContaining({ method: "POST" }));
+
+    await actor.click(within(dialog).getByRole("button", { name: "Edit" }));
+    await actor.clear(within(dialog).getByLabelText("Description"));
+    await actor.type(within(dialog).getByLabelText("Description"), "Printer sensor replaced");
+    await actor.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    expect(request).toHaveBeenCalledWith("/downtime-events/55/", expect.objectContaining({ method: "PATCH" }));
+
+    await actor.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await actor.click(within(dialog).getByRole("button", { name: "Confirm delete" }));
+    expect(request).toHaveBeenCalledWith("/downtime-events/55/", { method: "DELETE" });
   });
 
   it("supports a legitimate third assigned line", () => {

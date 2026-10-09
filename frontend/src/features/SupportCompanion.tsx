@@ -106,6 +106,7 @@ export function SupportCompanion({
   error,
   onDateChange,
   onRefresh,
+  onEditProfile,
   onSignOut,
   onSaved,
 }: {
@@ -119,6 +120,7 @@ export function SupportCompanion({
   error: string;
   onDateChange: (date: string) => void;
   onRefresh: () => void;
+  onEditProfile?: () => void;
   onSignOut: () => void;
   onSaved: (message: string) => Promise<void>;
 }) {
@@ -194,6 +196,7 @@ export function SupportCompanion({
           <span className="user-chip">{profile.display_name}</span>
           <NotificationCentre refreshToken={lastUpdatedAt} />
           <button className="button button--ghost" onClick={onRefresh} disabled={busy}>Refresh</button>
+          {onEditProfile ? <button className="button button--ghost" onClick={onEditProfile}>Edit profile</button> : null}
           <button className="button button--ghost" onClick={onSignOut}>Sign out</button>
         </div>
       </header>

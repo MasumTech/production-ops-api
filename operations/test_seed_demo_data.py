@@ -119,7 +119,7 @@ def test_seed_demo_data_creates_complete_dataset():
     )
 
     assert demo_counts() == {
-        "users": 5,
+        "users": 17,
         "lines": 20,
         "assets": 3,
         "assignments": 10,
@@ -174,6 +174,7 @@ def test_seed_demo_data_creates_complete_dataset():
         "demo.leader.two",
         "demo.leader.three",
         "demo.support",
+        *(f"demo.leader.{number:02d}" for number in range(4, 16)),
     }
     support = get_user_model().objects.get(username="demo.support")
     assert support.is_staff is False
@@ -542,7 +543,7 @@ def test_full_reset_flushes_every_record_then_creates_persona_dataset():
 
     assert not get_user_model().objects.filter(username="old.local.user").exists()
     assert not ProductionLine.objects.filter(code="OLD-LOCAL-LINE").exists()
-    assert get_user_model().objects.count() == 5
+    assert get_user_model().objects.count() == 17
     assert ProductionLine.objects.count() == 20
     assert "Demo dataset is ready." in output
 

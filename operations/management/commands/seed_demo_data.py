@@ -40,6 +40,7 @@ from operations.models import (
     Shift,
     ShiftHandover,
     TeamLeaderAssignment,
+    UserProfile,
 )
 
 DEMO_PREFIX = "DEMO-"
@@ -154,6 +155,7 @@ class Command(BaseCommand):
         self.stdout.write("  Team Leader 1:      demo.leader")
         self.stdout.write("  Team Leader 2:      demo.leader.two")
         self.stdout.write("  Team Leader 3:      demo.leader.three")
+        self.stdout.write("  Team Leaders 4–15:  demo.leader.04 … demo.leader.15")
         self.stdout.write("  Operational Support: demo.support (workflow demo only)")
         self.stdout.write("  Password: use the value supplied by you")
         self.stdout.write("")
@@ -347,15 +349,23 @@ class Command(BaseCommand):
                 "is_staff": False,
             },
         }
+        for number in range(4, 16):
+            definitions[f"leader_{number}"] = {
+                "username": f"demo.leader.{number:02d}",
+                "first_name": "Team",
+                "last_name": f"Leader {number}",
+                "is_staff": False,
+            }
         users = {}
         support_group, _ = Group.objects.get_or_create(name=OPERATIONAL_SUPPORT_GROUP)
 
-        for key, definition in definitions.items():
+        for index, (key, definition) in enumerate(definitions.items(), start=1):
             user, _ = user_model.objects.update_or_create(
                 username=definition["username"],
                 defaults={
                     "first_name": definition["first_name"],
                     "last_name": definition["last_name"],
+                    "email": f"{definition['username']}@showcase.local",
                     "is_staff": definition["is_staff"],
                     "is_active": True,
                 },
@@ -365,6 +375,10 @@ class Command(BaseCommand):
             user.groups.remove(support_group)
             if key == "support":
                 user.groups.add(support_group)
+            UserProfile.objects.update_or_create(
+                user=user,
+                defaults={"phone_number": f"+44 7700 900{index:03d}"},
+            )
             users[key] = user
 
         return users

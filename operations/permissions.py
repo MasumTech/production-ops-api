@@ -34,13 +34,11 @@ class IsAssignedTeamLeaderDowntimeOrStaff(BasePermission):
             return False
         if request.user.is_staff:
             return True
-        return request.method in SAFE_METHODS or request.method == "POST"
+        return True
 
     def has_object_permission(self, request, view, obj):
         if request.user.is_staff:
             return True
-        if request.method not in SAFE_METHODS:
-            return False
         return obj.shift.production_line.team_leader_assignments.filter(
             team_leader=request.user,
             date=obj.shift.date,

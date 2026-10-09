@@ -15,6 +15,18 @@ class TimeStampedModel(models.Model):
         abstract = True
 
 
+class UserProfile(TimeStampedModel):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="operations_profile",
+    )
+    phone_number = models.CharField(max_length=32, blank=True)
+
+    def __str__(self):
+        return f"Profile for {self.user.username}"
+
+
 class ProductionLine(TimeStampedModel):
     class Status(models.TextChoices):
         ACTIVE = "active", "Active"

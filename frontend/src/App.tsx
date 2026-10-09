@@ -13,6 +13,7 @@ import {
   subscribeToOutbox,
 } from "./api";
 import { ErrorBanner } from "./components";
+import { ProfileEditor } from "./ProfileEditor";
 import productionLineIllustration from "./assets/production-line-illustration.png";
 import { BreakRecoveryPanel } from "./features/BreakRecoveryPanel";
 import { DailyPlanPanel } from "./features/DailyPlanPanel";
@@ -361,6 +362,7 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: () => void }
 
 export default function App() {
   const [profile, setProfile] = useState<UserSummary | null>(null);
+  const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [data, setData] = useState<WorkspaceData>(EMPTY_DATA);
   const [managerData, setManagerData] = useState<ManagerWorkspaceData>(EMPTY_MANAGER_DATA);
   const [supportData, setSupportData] = useState<SupportCompanionData>(EMPTY_SUPPORT_DATA);
@@ -567,6 +569,17 @@ export default function App() {
     setSupportData(EMPTY_SUPPORT_DATA);
     setLastUpdatedAt(null);
   };
+  const profileEditor = profile ? (
+    <ProfileEditor
+      profile={profile}
+      open={profileEditorOpen}
+      onClose={() => setProfileEditorOpen(false)}
+      onSaved={(updated) => {
+        setProfile(updated);
+        setToast("Profile updated successfully.");
+      }}
+    />
+  ) : null;
 
   if (profile?.workspace === "manager") {
     return (
@@ -595,8 +608,10 @@ export default function App() {
             setManagerShiftPattern(value);
           }}
           onRefresh={() => void refresh()}
+          onEditProfile={() => setProfileEditorOpen(true)}
           onSignOut={signOut}
         />
+        {profileEditor}
       </>
     );
   }
@@ -623,6 +638,7 @@ export default function App() {
           error={error}
           onDateChange={setOperationalDate}
           onRefresh={() => void refresh()}
+          onEditProfile={() => setProfileEditorOpen(true)}
           onSignOut={signOut}
           onSaved={async (message) => {
             if (online) await refresh();
@@ -630,6 +646,7 @@ export default function App() {
           }}
         />
         {toast ? <div className="toast" role="status">{toast}</div> : null}
+        {profileEditor}
       </>
     );
   }
@@ -672,6 +689,7 @@ export default function App() {
             if (value === "live") setOperationalDate(localDate());
           }}
           onRefresh={() => void refresh()}
+          onEditProfile={() => setProfileEditorOpen(true)}
           onSignOut={signOut}
         >
         {error ? <ErrorBanner message={error} /> : null}
@@ -707,8 +725,13 @@ export default function App() {
             hourlyOutputs={data.hourlyOutputs}
             shifts={data.shifts}
             updates={data.updates}
+            downtimeEvents={data.downtimeEvents}
             live={teamViewMode === "live"}
             onRequestPlanChange={openPlanChangeRequest}
+            onSaved={async (message) => {
+              if (online) await refresh();
+              setToast(message);
+            }}
           />
         ) : null}
         {tab === "materials" && profile ? (
@@ -755,6 +778,7 @@ export default function App() {
           {toast}
         </div>
       ) : null}
+      {profileEditor}
     </>
   );
 }
