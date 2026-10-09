@@ -87,6 +87,18 @@ const updates: LineUpdate[] = [
 ];
 
 const data: ManagerWorkspaceData = {
+  productionLines: Array.from({ length: 20 }, (_, index) => ({
+    id: 101 + index,
+    code: `LINE-${String(index + 1).padStart(2, "0")}`,
+    name: `Production Line ${index + 1}`,
+    location: `Hall ${String.fromCharCode(65 + Math.floor(index / 4))}`,
+    target_units_per_hour: index === 1 ? 455 : 500,
+    status: "active" as const,
+  })),
+  users: [
+    { id: 10, username: "manager.one", display_name: "Manager One" },
+    { id: 11, username: "leader.one", display_name: "Leader One" },
+  ],
   assignments,
   updates,
   planBlocks: [
@@ -526,6 +538,10 @@ describe("manager console", () => {
     const addDialog = screen.getByRole("dialog", { name: "Add plan block" });
     expect(within(addDialog).getByText("Selected line: Line 2")).toBeInTheDocument();
     expect(within(addDialog).getByText(/LINE-02 · Ready Meals · Day shift/)).toBeInTheDocument();
+    const lineOptions = within(within(addDialog).getByLabelText("Production line")).getAllByRole("option");
+    expect(lineOptions).toHaveLength(20);
+    expect(lineOptions.filter((option) => option.hasAttribute("disabled"))).toHaveLength(0);
+    expect(within(addDialog).getByRole("option", { name: /Line 20.*Assignment required/ })).toBeEnabled();
     await actor.type(within(addDialog).getByLabelText("Product code"), "NEW-01");
     await actor.type(within(addDialog).getByLabelText("Product name"), "New product");
     await actor.type(within(addDialog).getByLabelText("Target units / hour"), "120");
@@ -539,6 +555,273 @@ describe("manager console", () => {
     await actor.type(within(editDialog).getByLabelText("Product name"), "Product A revised");
     await actor.click(within(editDialog).getByRole("button", { name: "Save changes" }));
     expect(request).toHaveBeenCalledWith("/daily-plan-blocks/70/", expect.objectContaining({ method: "PATCH" }));
+
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    await actor.click(screen.getByRole("button", { name: /Product A/ }));
+    await actor.click(screen.getByRole("button", { name: "Delete block" }));
+    expect(request).toHaveBeenCalledWith("/daily-plan-blocks/70/", { method: "DELETE" });
+  });
+
+  it("releases held material and raises a complete material escalation", async () => {
+    const actor = userEvent.setup();
+    const request = vi.mocked(api.apiRequest);
+    request.mockResolvedValue({} as never);
+    const heldMaterial = {
+      ...data.materials[0],
+      id: 21,
+      product_code: "HELD-01",
+      product_name: "Held Product",
+      status: "held" as const,
+      shortage_quantity: 0,
+      hold_reason: "QA release pending",
+      notes: "Release after QA verification.",
+    };
+
+    render(
+      <ManagerConsole
+        profile={profile}
+        data={{ ...data, materials: [...data.materials, heldMaterial] }}
+        operationalDate={localDate()}
+        shiftPattern="day"
+        lastUpdatedAt={new Date().toISOString()}
+        online
+        liveState="live"
+        busy={false}
+        error=""
+        onDateChange={vi.fn()}
+        onShiftPatternChange={vi.fn()}
+        onRefresh={vi.fn()}
+        onSignOut={vi.fn()}
+      />,
+    );
+
+    await actor.click(within(screen.getByRole("navigation", { name: "Manager sections" })).getByRole("button", { name: "Materials" }));
+    await actor.click(screen.getByText("Held Product"));
+    await actor.click(screen.getByRole("button", { name: "Update status" }));
+    const releaseDialog = screen.getByRole("dialog", { name: "Release held material" });
+    await actor.click(within(releaseDialog).getByRole("button", { name: "Release material" }));
+    expect(request).toHaveBeenCalledWith(
+      "/product-material-readiness/21/release/",
+      expect.objectContaining({ method: "POST" }),
+    );
+
+    await actor.click(screen.getByText("Product B"));
+    await actor.click(screen.getByRole("button", { name: "Raise issue" }));
+    const issueDialog = screen.getByRole("dialog", { name: "Raise material issue" });
+    expect(within(issueDialog).getByLabelText("Response deadline")).toHaveValue();
+    await actor.type(within(issueDialog).getByLabelText("Short note"), "Warehouse delivery is late.");
+    await actor.click(within(issueDialog).getByRole("button", { name: "Raise issue" }));
+
+    const escalationCall = request.mock.calls.find(([path]) => path === "/operational-escalations/");
+    expect(escalationCall?.[1]).toEqual(expect.objectContaining({ method: "POST" }));
+    const escalationPayload = JSON.parse(String(escalationCall?.[1]?.body));
+    expect(escalationPayload.owner_role).toBe("materials");
+    expect(escalationPayload.response_due_at).toBeTruthy();
+  });
+
+  it("creates a Team Leader assignment when planning an unassigned master line", async () => {
+    const actor = userEvent.setup();
+    const request = vi.mocked(api.apiRequest);
+    request.mockImplementation(async (path) => {
+      if (path === "/team-leader-assignments/") {
+        return {
+          ...assignments[0],
+          id: 99,
+          production_line: 120,
+          production_line_code: "LINE-20",
+          production_line_name: "Production Line 20",
+        } as never;
+      }
+      return { unread_count: 0, results: [] } as never;
+    });
+    const today = localDate();
+
+    render(
+      <ManagerConsole
+        profile={profile}
+        data={data}
+        operationalDate={today}
+        shiftPattern="day"
+        lastUpdatedAt={new Date().toISOString()}
+        online
+        liveState="live"
+        busy={false}
+        error=""
+        onDateChange={vi.fn()}
+        onShiftPatternChange={vi.fn()}
+        onRefresh={vi.fn()}
+        onSignOut={vi.fn()}
+      />,
+    );
+
+    await actor.click(within(screen.getByRole("navigation", { name: "Manager sections" })).getByRole("button", { name: "Daily plans" }));
+    await actor.click(screen.getByRole("button", { name: "Add plan block" }));
+    const dialog = screen.getByRole("dialog", { name: "Add plan block" });
+    await actor.selectOptions(within(dialog).getByLabelText("Production line"), "line-120");
+    await actor.selectOptions(within(dialog).getByLabelText("Team Leader"), "11");
+    await actor.type(within(dialog).getByLabelText("Product code"), "L20-01");
+    await actor.type(within(dialog).getByLabelText("Product name"), "Line 20 showcase product");
+    await actor.type(within(dialog).getByLabelText("Target units / hour"), "600");
+    await actor.click(within(dialog).getByRole("button", { name: "Add block" }));
+
+    expect(request).toHaveBeenCalledWith(
+      "/team-leader-assignments/",
+      expect.objectContaining({ method: "POST" }),
+    );
+    const planCall = request.mock.calls.find(([path]) => path === "/daily-plan-blocks/");
+    expect(JSON.parse(String(planCall?.[1]?.body)).assignment).toBe(99);
+  });
+
+  it("lets a manager assign and acknowledge an open action", async () => {
+    const actor = userEvent.setup();
+    const request = vi.mocked(api.apiRequest);
+    request.mockResolvedValue({} as never);
+
+    render(
+      <ManagerConsole
+        profile={profile}
+        data={data}
+        operationalDate={localDate()}
+        shiftPattern="day"
+        lastUpdatedAt={new Date().toISOString()}
+        online
+        liveState="live"
+        busy={false}
+        error=""
+        onDateChange={vi.fn()}
+        onShiftPatternChange={vi.fn()}
+        onRefresh={vi.fn()}
+        onSignOut={vi.fn()}
+      />,
+    );
+
+    await actor.click(within(screen.getByRole("navigation", { name: "Manager sections" })).getByRole("button", { name: "Materials" }));
+    await actor.click(screen.getByRole("tab", { name: /Open actions/ }));
+    await actor.selectOptions(screen.getByLabelText("Assign owner for Filler stopped"), "11");
+    expect(request).toHaveBeenCalledWith(
+      "/operational-escalations/30/assign/",
+      expect.objectContaining({ method: "POST" }),
+    );
+    await actor.click(screen.getByRole("button", { name: "Acknowledge" }));
+    expect(request).toHaveBeenCalledWith(
+      "/operational-escalations/30/acknowledge/",
+      { method: "POST" },
+    );
+  });
+
+  it("lets a manager resolve an acknowledged action with evidence", async () => {
+    const actor = userEvent.setup();
+    const request = vi.mocked(api.apiRequest);
+    request.mockResolvedValue({} as never);
+    const acknowledged = { ...data.escalations[0], status: "acknowledged" as const };
+
+    render(
+      <ManagerConsole
+        profile={profile}
+        data={{ ...data, escalations: [acknowledged] }}
+        operationalDate={localDate()}
+        shiftPattern="day"
+        lastUpdatedAt={new Date().toISOString()}
+        online
+        liveState="live"
+        busy={false}
+        error=""
+        onDateChange={vi.fn()}
+        onShiftPatternChange={vi.fn()}
+        onRefresh={vi.fn()}
+        onSignOut={vi.fn()}
+      />,
+    );
+
+    await actor.click(within(screen.getByRole("navigation", { name: "Manager sections" })).getByRole("button", { name: "Materials" }));
+    await actor.click(screen.getByRole("tab", { name: /Open actions/ }));
+    await actor.click(screen.getByRole("button", { name: "Resolve" }));
+    const dialog = screen.getByRole("dialog", { name: "Resolve action" });
+    await actor.type(within(dialog).getByLabelText("Resolution notes"), "Engineering reset verified and output restored.");
+    await actor.click(within(dialog).getByRole("button", { name: "Resolve action" }));
+    expect(request).toHaveBeenCalledWith(
+      "/operational-escalations/30/resolve/",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("filters recovery history by range and only resumes checks-complete records", async () => {
+    const actor = userEvent.setup();
+    const today = localDate();
+    const oldDate = new Date(`${today}T12:00:00Z`);
+    oldDate.setUTCDate(oldDate.getUTCDate() - 10);
+    const oldDay = oldDate.toISOString().slice(0, 10);
+    const currentOpportunity = {
+      id: 80,
+      assignment: 2,
+      assignment_date: today,
+      production_line: 102,
+      production_line_code: "LINE-02",
+      break_block: 81,
+      break_number: 2,
+      source_update: 82,
+      issue_summary: "Current recovery ready",
+      status: "checks_complete" as const,
+      fault_at: `${today}T10:00:00Z`,
+      suggested_start_at: `${today}T10:10:00Z`,
+      expected_return_at: `${today}T10:50:00Z`,
+      confirmed_at: `${today}T10:10:00Z`,
+      returned_at: `${today}T10:50:00Z`,
+      checks_completed_at: `${today}T10:55:00Z`,
+      run_resumed_at: null,
+      recovery_notes: "Safety and quality checks complete.",
+      declined_at: null,
+      decline_reason: "",
+    };
+    const oldOpportunity = {
+      ...currentOpportunity,
+      id: 90,
+      assignment_date: oldDay,
+      issue_summary: "Old recovery evidence",
+      status: "recovered" as const,
+      fault_at: `${oldDay}T10:00:00Z`,
+      suggested_start_at: `${oldDay}T10:10:00Z`,
+      expected_return_at: `${oldDay}T10:50:00Z`,
+      run_resumed_at: `${oldDay}T10:55:00Z`,
+    };
+    const currentDowntime = { ...data.downtimeEvents[0], shift_date: today, started_at: `${today}T08:05:00Z`, ended_at: `${today}T08:17:00Z` };
+    const oldDowntime = { ...data.downtimeEvents[0], id: 2, shift_date: oldDay, started_at: `${oldDay}T08:05:00Z`, ended_at: `${oldDay}T08:17:00Z`, description: "Old downtime evidence" };
+
+    render(
+      <ManagerConsole
+        profile={profile}
+        data={{
+          ...data,
+          breakOpportunities: [currentOpportunity],
+          recoveryBreakOpportunities: [currentOpportunity, oldOpportunity],
+          downtimeEvents: [currentDowntime],
+          recoveryDowntimeEvents: [currentDowntime, oldDowntime],
+        }}
+        operationalDate={today}
+        shiftPattern="day"
+        lastUpdatedAt={new Date().toISOString()}
+        online
+        liveState="live"
+        busy={false}
+        error=""
+        onDateChange={vi.fn()}
+        onShiftPatternChange={vi.fn()}
+        onRefresh={vi.fn()}
+        onSignOut={vi.fn()}
+      />,
+    );
+
+    await actor.click(within(screen.getByRole("navigation", { name: "Manager sections" })).getByRole("button", { name: "Break recovery" }));
+    await actor.selectOptions(screen.getByLabelText("Time range"), "7");
+    expect(screen.getAllByText("Current recovery ready").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Old recovery evidence")).not.toBeInTheDocument();
+    expect(screen.queryByText("Old downtime evidence")).not.toBeInTheDocument();
+    await actor.click(screen.getByRole("button", { name: "Record recovery" }));
+    expect(screen.getByRole("dialog", { name: "Record recovery" })).toBeInTheDocument();
+    await actor.click(screen.getByRole("button", { name: "Close recovery form" }));
+    await actor.selectOptions(screen.getByLabelText("Time range"), "30");
+    expect(screen.getAllByText("Old recovery evidence").length).toBeGreaterThan(0);
+    expect(screen.getByText("Old downtime evidence")).toBeInTheDocument();
   });
 
   it("filters the board to late or missing updates", async () => {

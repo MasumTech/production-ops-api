@@ -1550,12 +1550,19 @@ def test_staff_can_release_held_material(
             "product-material-readiness-release",
             args=(readiness.id,),
         ),
+        {
+            "notes": "QA release verified by Operations Manager.",
+            "shortage_quantity": 0,
+        },
+        format="json",
     )
 
     assert response.status_code == status.HTTP_200_OK
     assert response.data["status"] == ProductMaterialReadiness.Status.READY
     assert response.data["released_by"] == staff_user.id
     assert response.data["released_at"] is not None
+    assert response.data["notes"] == "QA release verified by Operations Manager."
+    assert response.data["shortage_quantity"] == 0
 
 
 @pytest.mark.django_db
@@ -1964,6 +1971,43 @@ def test_team_leader_cannot_claim_unassigned_escalation(
     escalation.refresh_from_db()
     assert escalation.owner is None
     assert escalation.status == OperationalEscalation.Status.OPEN
+
+
+@pytest.mark.django_db
+def test_management_can_assign_open_escalation(
+    staff_client,
+    other_user,
+    api_operational_escalation,
+):
+    response = staff_client.post(
+        reverse(
+            "operational-escalation-assign",
+            args=(api_operational_escalation.id,),
+        ),
+        {"owner": other_user.id},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["owner"] == other_user.id
+
+
+@pytest.mark.django_db
+def test_team_leader_cannot_assign_escalation(
+    authenticated_client,
+    other_user,
+    api_operational_escalation,
+):
+    response = authenticated_client.post(
+        reverse(
+            "operational-escalation-assign",
+            args=(api_operational_escalation.id,),
+        ),
+        {"owner": other_user.id},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.django_db
@@ -2750,6 +2794,33 @@ def test_team_leader_cannot_update_daily_plan_block(
     )
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_staff_can_delete_unlinked_daily_plan_block(
+    staff_client,
+    api_daily_break_block,
+):
+    response = staff_client.delete(
+        reverse("daily-plan-block-detail", args=(api_daily_break_block.id,)),
+    )
+
+    assert response.status_code == status.HTTP_204_NO_CONTENT
+    assert not DailyPlanBlock.objects.filter(pk=api_daily_break_block.id).exists()
+
+
+@pytest.mark.django_db
+def test_linked_daily_plan_block_preserves_recovery_audit_trail(
+    staff_client,
+    api_daily_break_block,
+    api_break_opportunity,
+):
+    response = staff_client.delete(
+        reverse("daily-plan-block-detail", args=(api_daily_break_block.id,)),
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert DailyPlanBlock.objects.filter(pk=api_daily_break_block.id).exists()
 
 
 @pytest.mark.django_db

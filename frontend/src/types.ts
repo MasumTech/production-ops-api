@@ -106,6 +106,7 @@ export interface Escalation {
   immediate_action: string;
   owner: number | null;
   owner_username: string | null;
+  owner_role?: string;
   raised_at?: string;
   response_due_at: string | null;
   is_overdue: boolean;
@@ -269,6 +270,8 @@ export interface WorkspaceData {
 }
 
 export interface ManagerWorkspaceData {
+  productionLines: ProductionLine[];
+  users: UserChoice[];
   assignments: Assignment[];
   updates: LineUpdate[];
   materials: MaterialReadiness[];
@@ -276,9 +279,11 @@ export interface ManagerWorkspaceData {
   planBlocks?: DailyPlanBlock[];
   hourlyOutputs?: HourlyOutput[];
   breakOpportunities?: BreakOpportunity[];
+  recoveryBreakOpportunities?: BreakOpportunity[];
   breaks?: BreakRecovery[];
   shifts: ShiftRecord[];
   downtimeEvents: DowntimeEvent[];
+  recoveryDowntimeEvents?: DowntimeEvent[];
   summary: DashboardSummary;
 }
 

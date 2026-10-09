@@ -311,17 +311,17 @@ class Command(BaseCommand):
         }
         expected_inventory = {
             "users": 5,
-            "lines": 6,
+            "lines": 20,
             "assets": 3,
             "assignments": 10,
             "shifts": 6,
             "downtime_events": 7,
             "plan_blocks": 30,
             "hourly_outputs": 66,
-            "updates": 9,
+            "updates": 10,
             "materials": 4,
             "escalations": 6,
-            "break_opportunities": 4,
+            "break_opportunities": 5,
             "legacy_breaks": 2,
             "handovers": 1,
             "quality_incidents": 1,
@@ -418,9 +418,10 @@ class Command(BaseCommand):
                 set(opportunities.values_list("status", flat=True))
                 == {
                     BreakOpportunity.Status.SUGGESTED,
+                    BreakOpportunity.Status.CHECKS_COMPLETE,
                     BreakOpportunity.Status.RECOVERED,
                 },
-                "suggested and recovered examples present",
+                "suggested, checks-complete and recovered examples present",
             ),
             (
                 "Line 4 recovery opportunity",

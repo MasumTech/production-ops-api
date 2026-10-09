@@ -37,6 +37,7 @@ import type {
   ManagerWorkspaceData,
   MaterialReadiness,
   OperationalEvent,
+  ProductionLine,
   ShiftRecord,
   ShiftHandover,
   SupportCompanionData,
@@ -67,14 +68,18 @@ const EMPTY_DATA: WorkspaceData = {
 };
 
 const EMPTY_MANAGER_DATA: ManagerWorkspaceData = {
+  productionLines: [],
+  users: [],
   assignments: [],
   breakOpportunities: [],
+  recoveryBreakOpportunities: [],
   breaks: [],
   updates: [],
   materials: [],
   escalations: [],
   shifts: [],
   downtimeEvents: [],
+  recoveryDowntimeEvents: [],
   summary: {
     total_shifts: 0,
     total_planned_output: 0,
@@ -177,7 +182,12 @@ async function loadManagerData(
   operationalDate: string,
   shiftType: "day" | "night",
 ): Promise<ManagerWorkspaceData> {
+  const recoveryDate = new Date(`${operationalDate}T12:00:00Z`);
+  recoveryDate.setUTCDate(recoveryDate.getUTCDate() - 29);
+  const recoveryDateFrom = recoveryDate.toISOString().slice(0, 10);
   const [
+    productionLines,
+    users,
     assignments,
     planBlocks,
     hourlyOutputs,
@@ -188,8 +198,12 @@ async function loadManagerData(
     escalations,
     shifts,
     downtimeEvents,
+    recoveryBreakOpportunities,
+    recoveryDowntimeEvents,
     summary,
   ] = await Promise.all([
+    apiList<ProductionLine>("/production-lines/?status=active&ordering=code"),
+    apiList<UserChoice>("/active-users/"),
     apiList<Assignment>(`/team-leader-assignments/?date=${operationalDate}&shift_type=${shiftType}`),
     apiList<DailyPlanBlock>(`/daily-plan-blocks/?date=${operationalDate}&shift_type=${shiftType}&ordering=sequence_number`),
     apiList<HourlyOutput>(`/hourly-outputs/?date=${operationalDate}&shift_type=${shiftType}`),
@@ -204,22 +218,28 @@ async function loadManagerData(
     ),
     apiList<ShiftRecord>(`/shifts/?date=${operationalDate}&shift_type=${shiftType}&ordering=-actual_output`),
     apiList<DowntimeEvent>(`/downtime-events/?date=${operationalDate}&shift_type=${shiftType}&ordering=started_at`),
+    apiList<BreakOpportunity>(`/break-opportunities/?date_from=${recoveryDateFrom}&date_to=${operationalDate}&shift_type=${shiftType}`),
+    apiList<DowntimeEvent>(`/downtime-events/?date_from=${recoveryDateFrom}&date_to=${operationalDate}&shift_type=${shiftType}&ordering=started_at`),
     apiRequest<ManagerWorkspaceData["summary"]>(
       `/dashboard/summary/?date_from=${operationalDate}&date_to=${operationalDate}&shift_type=${shiftType}`,
     ),
   ]);
 
   return {
+    productionLines,
+    users,
     assignments,
     planBlocks,
     hourlyOutputs: hourlyOutputs.filter((item) => assignments.some((assignment) => assignment.id === item.assignment)),
     breakOpportunities,
+    recoveryBreakOpportunities,
     breaks,
     updates,
     materials,
     escalations,
     shifts,
     downtimeEvents,
+    recoveryDowntimeEvents,
     summary,
   };
 }

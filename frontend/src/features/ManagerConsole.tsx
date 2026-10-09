@@ -307,6 +307,12 @@ function localDateTimeAfter(value: string, minutes: number): string {
   return date.toISOString().slice(0, 16);
 }
 
+function dateDaysBefore(value: string, days: number): string {
+  const date = new Date(`${value}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - days);
+  return date.toISOString().slice(0, 10);
+}
+
 function profileInitials(value: string): string {
   const initials = value
     .trim()
@@ -433,6 +439,7 @@ export function ManagerConsole({
   const [planEditorOpen, setPlanEditorOpen] = useState(false);
   const [editingPlanBlock, setEditingPlanBlock] = useState<DailyPlanBlock | null>(null);
   const [planAssignment, setPlanAssignment] = useState("");
+  const [planTeamLeader, setPlanTeamLeader] = useState("");
   const [planSequence, setPlanSequence] = useState("");
   const [planBlockType, setPlanBlockType] = useState<"production" | "break">("production");
   const [planStart, setPlanStart] = useState("");
@@ -459,8 +466,13 @@ export function ManagerConsole({
   const [materialQuantity, setMaterialQuantity] = useState("");
   const [materialNote, setMaterialNote] = useState("");
   const [materialNextStatus, setMaterialNextStatus] = useState<MaterialStatus>("ready");
+  const [materialResponseDueAt, setMaterialResponseDueAt] = useState("");
   const [materialSaving, setMaterialSaving] = useState(false);
   const [materialMessage, setMaterialMessage] = useState("");
+  const [selectedAction, setSelectedAction] = useState<Escalation | null>(null);
+  const [actionResolutionNotes, setActionResolutionNotes] = useState("");
+  const [actionSavingId, setActionSavingId] = useState<number | null>(null);
+  const [actionMessage, setActionMessage] = useState("");
   const [recoveryTab, setRecoveryTab] = useState<"shift" | "history">("shift");
   const [recoveryLineFilter, setRecoveryLineFilter] = useState("all");
   const [recoveryRange, setRecoveryRange] = useState("shift");
@@ -549,9 +561,31 @@ export function ManagerConsole({
   const selectedLineProgress = selectedLine
     ? progressLines.find((item) => item.row.assignment.id === selectedLine.assignment.id)
     : undefined;
-  const selectedPlanAssignment = rows.find(
-    (row) => String(row.assignment.id) === planAssignment,
-  )?.assignment;
+  const selectedPlanAssignment = data.assignments.find(
+    (assignment) => String(assignment.id) === planAssignment,
+  );
+  const planLineOptions = data.productionLines.map((line) => ({
+    line,
+    assignment: data.assignments.find(
+      (candidate) => candidate.production_line === line.id,
+    ) ?? null,
+  }));
+  const selectedPlanLine = selectedPlanAssignment
+    ? data.productionLines.find(
+        (line) => line.id === selectedPlanAssignment.production_line,
+      ) ?? null
+    : data.productionLines.find(
+        (line) => planAssignment === `line-${line.id}`,
+      ) ?? null;
+  const planLeaderOptions = [...new Map(data.assignments.map((assignment) => [
+    assignment.team_leader,
+    {
+      id: assignment.team_leader,
+      username: assignment.team_leader_username,
+      display_name: data.users.find((user) => user.id === assignment.team_leader)?.display_name
+        ?? assignment.team_leader_username,
+    },
+  ])).values()];
   const aggregatePosition = aggregateManagerPosition(progressLines);
   const snapshotFraction = Math.max(0, Math.min(100,
     ((snapshotMinutes - scheduleWindow.startMinutes) /
@@ -559,8 +593,29 @@ export function ManagerConsole({
   ));
   const snapshotInsideShift = snapshotMinutes >= scheduleWindow.startMinutes &&
     snapshotMinutes <= scheduleWindow.endMinutes;
-  const recoveryOpportunities = (data.breakOpportunities ?? []).filter((item) => recoveryLineFilter === "all" || String(item.production_line) === recoveryLineFilter);
-  const recordedDowntime = data.downtimeEvents.filter((event) => recoveryLineFilter === "all" || String(event.production_line) === recoveryLineFilter).reduce((total, event) => total + event.duration_minutes, 0);
+  const recoveryDateFrom = recoveryRange === "shift"
+    ? operationalDate
+    : dateDaysBefore(operationalDate, Number(recoveryRange) - 1);
+  const recoveryOpportunitySource = recoveryRange === "shift"
+    ? (data.breakOpportunities ?? [])
+    : (data.recoveryBreakOpportunities ?? data.breakOpportunities ?? []);
+  const recoveryDowntimeSource = recoveryRange === "shift"
+    ? data.downtimeEvents
+    : (data.recoveryDowntimeEvents ?? data.downtimeEvents);
+  const recoveryOpportunities = recoveryOpportunitySource.filter((item) =>
+    (!item.assignment_date || item.assignment_date >= recoveryDateFrom) &&
+    (!item.assignment_date || item.assignment_date <= operationalDate) &&
+    (recoveryLineFilter === "all" || String(item.production_line) === recoveryLineFilter),
+  );
+  const recoveryDowntimeEvents = recoveryDowntimeSource.filter((event) =>
+    event.shift_date >= recoveryDateFrom &&
+    event.shift_date <= operationalDate &&
+    (recoveryLineFilter === "all" || String(event.production_line) === recoveryLineFilter),
+  );
+  const eligibleRecovery = recoveryOpportunities.find(
+    (item) => item.status === "checks_complete",
+  ) ?? null;
+  const recordedDowntime = recoveryDowntimeEvents.reduce((total, event) => total + event.duration_minutes, 0);
   const recoveredMinutes = recoveryOpportunities.filter((item) => item.status === "recovered" && item.checks_completed_at).reduce((total, item) => total + Math.max(0, Math.round((new Date(item.checks_completed_at!).getTime() - new Date(item.suggested_start_at).getTime()) / 60000)), 0);
   const remainingLoss = Math.max(0, recordedDowntime - recoveredMinutes);
 
@@ -624,6 +679,7 @@ export function ManagerConsole({
       : 1;
     setEditingPlanBlock(block);
     setPlanAssignment(String(block?.assignment ?? assignment?.id ?? ""));
+    setPlanTeamLeader(String(block?.assignment ? assignment?.team_leader ?? "" : assignment?.team_leader ?? planLeaderOptions[0]?.id ?? ""));
     setPlanSequence(String(block?.sequence_number ?? nextSequence));
     setPlanBlockType(block?.block_type ?? "production");
     const defaultStart = `${operationalDate}T${configuredShiftStart}`;
@@ -640,11 +696,11 @@ export function ManagerConsole({
 
   const changePlanAssignment = (value: string) => {
     setPlanAssignment(value);
-    const assignmentId = Number(value);
+    const assignmentId = value.startsWith("line-") ? null : Number(value);
     const nextSequence = Math.max(
       0,
       ...(data.planBlocks ?? [])
-        .filter((item) => item.assignment === assignmentId)
+        .filter((item) => assignmentId !== null && item.assignment === assignmentId)
         .map((item) => item.sequence_number),
     ) + 1;
     setPlanSequence(String(nextSequence));
@@ -715,8 +771,26 @@ export function ManagerConsole({
     setPlanSaving(true);
     setPlanMessage("");
     try {
+      let assignmentId = selectedPlanAssignment?.id;
+      if (!assignmentId) {
+        if (!selectedPlanLine || !planTeamLeader) {
+          setPlanMessage("Choose a production line and Team Leader.");
+          return;
+        }
+        const assignment = await apiRequest<Assignment>("/team-leader-assignments/", {
+          method: "POST",
+          body: JSON.stringify({
+            team_leader: Number(planTeamLeader),
+            production_line: selectedPlanLine.id,
+            date: operationalDate,
+            shift_type: shiftPattern,
+            notes: "Created by Operations Manager during daily planning.",
+          }),
+        });
+        assignmentId = assignment.id;
+      }
       const payload = {
-        assignment: Number(planAssignment),
+        assignment: assignmentId,
         sequence_number: Number(planSequence),
         block_type: planBlockType,
         planned_start_at: new Date(planStart).toISOString(),
@@ -740,6 +814,22 @@ export function ManagerConsole({
       onRefresh();
     } catch (caught) {
       setPlanMessage(caught instanceof Error ? caught.message : "Could not save this plan block.");
+    } finally {
+      setPlanSaving(false);
+    }
+  };
+
+  const deletePlanBlock = async (block: DailyPlanBlock) => {
+    if (!window.confirm("Delete this plan block? This cannot be undone.")) return;
+    setPlanSaving(true);
+    setPlanMessage("");
+    try {
+      await apiRequest(`/daily-plan-blocks/${block.id}/`, { method: "DELETE" });
+      setPlanMessage("Plan block deleted.");
+      setSelectedPlanBlock(null);
+      onRefresh();
+    } catch (caught) {
+      setPlanMessage(caught instanceof Error ? caught.message : "Could not delete this plan block.");
     } finally {
       setPlanSaving(false);
     }
@@ -774,11 +864,21 @@ export function ManagerConsole({
     setMaterialSaving(true);
     setMaterialMessage("");
     try {
-      await apiRequest(`/product-material-readiness/${selectedMaterial.id}/`, {
-        method: "PATCH",
-        body: JSON.stringify({ status: materialNextStatus, shortage_quantity: Number(materialQuantity || 0), notes: materialNote.trim() }),
-      });
-      setMaterialMessage("Material status updated.");
+      const releasingHeldMaterial = selectedMaterial.status === "held" && materialNextStatus === "ready";
+      await apiRequest(
+        releasingHeldMaterial
+          ? `/product-material-readiness/${selectedMaterial.id}/release/`
+          : `/product-material-readiness/${selectedMaterial.id}/`,
+        {
+          method: releasingHeldMaterial ? "POST" : "PATCH",
+          body: JSON.stringify(
+            releasingHeldMaterial
+              ? { shortage_quantity: Number(materialQuantity || 0), notes: materialNote.trim() }
+              : { status: materialNextStatus, shortage_quantity: Number(materialQuantity || 0), notes: materialNote.trim() },
+          ),
+        },
+      );
+      setMaterialMessage(releasingHeldMaterial ? "Held material released." : "Material status updated.");
       setMaterialForm(null);
       onRefresh();
     } catch (caught) {
@@ -789,13 +889,26 @@ export function ManagerConsole({
   };
 
   const raiseMaterialIssue = async () => {
-    if (!selectedMaterial || !materialNote.trim()) return;
+    if (!selectedMaterial || !materialNote.trim() || !materialResponseDueAt) return;
+    if (new Date(materialResponseDueAt).getTime() <= Date.now()) {
+      setMaterialMessage("Response deadline must be in the future.");
+      return;
+    }
     setMaterialSaving(true);
     setMaterialMessage("");
     try {
       await apiRequest("/operational-escalations/", {
         method: "POST",
-        body: JSON.stringify({ assignment: selectedMaterial.assignment, category: "material", priority: "high", summary: `${selectedMaterial.product_name} supply issue`, details: materialNote.trim(), immediate_action: "Confirm replenishment", status: "open" }),
+        body: JSON.stringify({
+          assignment: selectedMaterial.assignment,
+          category: "material",
+          priority: "high",
+          summary: `${selectedMaterial.product_name} supply issue`,
+          details: materialNote.trim(),
+          immediate_action: "Confirm replenishment",
+          owner_role: "materials",
+          response_due_at: new Date(materialResponseDueAt).toISOString(),
+        }),
       });
       setMaterialMessage("Material issue raised.");
       setMaterialForm(null);
@@ -804,6 +917,58 @@ export function ManagerConsole({
       setMaterialMessage(caught instanceof Error ? caught.message : "Could not raise material issue.");
     } finally {
       setMaterialSaving(false);
+    }
+  };
+
+  const assignAction = async (item: Escalation, ownerId: string) => {
+    if (!ownerId) return;
+    setActionSavingId(item.id);
+    setActionMessage("");
+    try {
+      await apiRequest(`/operational-escalations/${item.id}/assign/`, {
+        method: "POST",
+        body: JSON.stringify({ owner: Number(ownerId) }),
+      });
+      setActionMessage("Action owner updated.");
+      onRefresh();
+    } catch (caught) {
+      setActionMessage(caught instanceof Error ? caught.message : "Could not assign this action.");
+    } finally {
+      setActionSavingId(null);
+    }
+  };
+
+  const acknowledgeAction = async (item: Escalation) => {
+    setActionSavingId(item.id);
+    setActionMessage("");
+    try {
+      await apiRequest(`/operational-escalations/${item.id}/acknowledge/`, { method: "POST" });
+      setActionMessage("Action acknowledged.");
+      onRefresh();
+    } catch (caught) {
+      setActionMessage(caught instanceof Error ? caught.message : "Could not acknowledge this action.");
+    } finally {
+      setActionSavingId(null);
+    }
+  };
+
+  const resolveAction = async () => {
+    if (!selectedAction || !actionResolutionNotes.trim()) return;
+    setActionSavingId(selectedAction.id);
+    setActionMessage("");
+    try {
+      await apiRequest(`/operational-escalations/${selectedAction.id}/resolve/`, {
+        method: "POST",
+        body: JSON.stringify({ resolution_notes: actionResolutionNotes.trim() }),
+      });
+      setActionMessage("Action resolved.");
+      setSelectedAction(null);
+      setActionResolutionNotes("");
+      onRefresh();
+    } catch (caught) {
+      setActionMessage(caught instanceof Error ? caught.message : "Could not resolve this action.");
+    } finally {
+      setActionSavingId(null);
     }
   };
 
@@ -1299,9 +1464,9 @@ export function ManagerConsole({
                   </Fragment>;
                 })}</tbody></table></div>
               </section>
-              {selectedPlanBlock ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="plan-block-title"><header><div><span className="eyebrow">Schedule detail</span><h2 id="plan-block-title">{selectedPlanBlock.block_type === "break" ? `Planned break ${selectedPlanBlock.break_number ?? ""}` : selectedPlanBlock.product_name}</h2></div><button type="button" aria-label="Close plan detail" onClick={() => setSelectedPlanBlock(null)}>×</button></header><dl className="plan-block-facts"><div><dt>Start</dt><dd>{formatScheduleClock(selectedPlanBlock.planned_start_at)}</dd></div><div><dt>End</dt><dd>{formatScheduleClock(selectedPlanBlock.planned_end_at)}</dd></div><div><dt>Target</dt><dd>{selectedPlanBlock.target_units_per_hour ?? "—"} / hour</dd></div><div><dt>Quantity</dt><dd>{NUMBER.format(selectedPlanBlock.planned_units)}</dd></div><div><dt>Materials</dt><dd>{data.materials.filter((item) => item.assignment === selectedPlanBlock.assignment && item.sequence_number === selectedPlanBlock.sequence_number).map((item) => item.product_name).join(", ") || "No material record"}</dd></div></dl><footer><button type="button" className="button button--ghost" onClick={() => setSelectedPlanBlock(null)}>Done</button>{profile.is_staff && !isHistorical ? <button type="button" className="button button--primary" onClick={() => openPlanEditor(selectedPlanBlock)}>Edit block</button> : null}</footer></section></div> : null}
+              {selectedPlanBlock ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="plan-block-title"><header><div><span className="eyebrow">Schedule detail</span><h2 id="plan-block-title">{selectedPlanBlock.block_type === "break" ? `Planned break ${selectedPlanBlock.break_number ?? ""}` : selectedPlanBlock.product_name}</h2></div><button type="button" aria-label="Close plan detail" onClick={() => setSelectedPlanBlock(null)}>×</button></header><dl className="plan-block-facts"><div><dt>Start</dt><dd>{formatScheduleClock(selectedPlanBlock.planned_start_at)}</dd></div><div><dt>End</dt><dd>{formatScheduleClock(selectedPlanBlock.planned_end_at)}</dd></div><div><dt>Target</dt><dd>{selectedPlanBlock.target_units_per_hour ?? "—"} / hour</dd></div><div><dt>Quantity</dt><dd>{NUMBER.format(selectedPlanBlock.planned_units)}</dd></div><div><dt>Materials</dt><dd>{data.materials.filter((item) => item.assignment === selectedPlanBlock.assignment && item.sequence_number === selectedPlanBlock.sequence_number).map((item) => item.product_name).join(", ") || "No material record"}</dd></div></dl>{planMessage ? <p role="status" className="downtime-editor__message">{planMessage}</p> : null}<footer><button type="button" className="button button--ghost" onClick={() => setSelectedPlanBlock(null)}>Done</button>{profile.is_staff && !isHistorical ? <><button type="button" className="button button--danger" disabled={planSaving} onClick={() => void deletePlanBlock(selectedPlanBlock)}>Delete block</button><button type="button" className="button button--primary" onClick={() => openPlanEditor(selectedPlanBlock)}>Edit block</button></> : null}</footer></section></div> : null}
               {shiftEditorOpen ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="shift-time-title"><header><div><span className="eyebrow">Operations control</span><h2 id="shift-time-title">Shift start & end</h2></div><button type="button" aria-label="Close shift time editor" onClick={() => setShiftEditorOpen(false)}>×</button></header><p>These times apply to every recorded {shiftPattern} shift line for {controlBoardDate(operationalDate)}.</p><label>Shift start<input type="time" value={shiftStart} onChange={(event) => setShiftStart(event.target.value)} /></label><label>Shift end<input type="time" value={shiftEnd} onChange={(event) => setShiftEnd(event.target.value)} /></label><p className="workflow-boundary">Default day shift: Monday–Friday 06:45–18:00; Saturday–Sunday 07:00–18:00. Operations may override the recorded shift when required.</p>{shiftTimeMessage ? <p role="status">{shiftTimeMessage}</p> : null}<footer><button type="button" className="button button--ghost" onClick={() => setShiftEditorOpen(false)}>Cancel</button><button type="button" className="button button--primary" disabled={shiftTimeSaving} onClick={() => void saveShiftTimes()}>{shiftTimeSaving ? "Saving…" : "Save shift time"}</button></footer></section></div> : null}
-              {planEditorOpen ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor plan-block-editor" role="dialog" aria-modal="true" aria-labelledby="plan-editor-title"><header><div><span className="eyebrow">Approved schedule</span><h2 id="plan-editor-title">{editingPlanBlock ? "Edit plan block" : "Add plan block"}</h2></div><button type="button" aria-label="Close plan editor" onClick={() => setPlanEditorOpen(false)}>×</button></header>{selectedPlanAssignment ? <div className="plan-editor-line-context"><strong>Selected line: {displayLine(selectedPlanAssignment.production_line_code)}</strong><span>{selectedPlanAssignment.production_line_code} · {selectedPlanAssignment.production_line_name} · {titleCase(selectedPlanAssignment.shift_type)} shift</span></div> : <p className="downtime-editor__message">No production line is available for this date and shift.</p>}<div className="plan-editor-grid"><label>Production line<select value={planAssignment} disabled={Boolean(editingPlanBlock)} onChange={(event) => changePlanAssignment(event.target.value)}>{planRows.map((row) => <option key={row.assignment.id} value={row.assignment.id}>{displayLine(row.assignment.production_line_code)} · {row.assignment.production_line_code} · {row.assignment.production_line_name}</option>)}</select></label><label>Sequence<input type="number" min="1" value={planSequence} onChange={(event) => setPlanSequence(event.target.value)} /></label><label>Block type<select value={planBlockType} onChange={(event) => setPlanBlockType(event.target.value as "production" | "break")}><option value="production">Production</option><option value="break">Planned break</option></select></label><label>Start<input type="datetime-local" value={planStart} onChange={(event) => setPlanStart(event.target.value)} /></label><label>End<input type="datetime-local" value={planEnd} onChange={(event) => setPlanEnd(event.target.value)} /></label>{planBlockType === "production" ? <><label>Product code<input value={planProductCode} onChange={(event) => setPlanProductCode(event.target.value)} /></label><label>Product name<input value={planProductName} onChange={(event) => setPlanProductName(event.target.value)} /></label><label>Target units / hour<input type="number" min="1" value={planHourlyTarget} onChange={(event) => setPlanHourlyTarget(event.target.value)} /></label></> : <label>Break number<select value={planBreakNumber} onChange={(event) => setPlanBreakNumber(event.target.value)}><option value="1">Break 1</option><option value="2">Break 2</option></select></label>}</div><p className="workflow-boundary">Blocks must stay inside the selected shift and cannot overlap. Approved breaks are exactly 40 minutes.</p>{planMessage ? <p role="status" className="downtime-editor__message">{planMessage}</p> : null}<footer><button type="button" className="button button--ghost" onClick={() => setPlanEditorOpen(false)}>Cancel</button><button type="button" className="button button--primary" disabled={planSaving || !selectedPlanAssignment} onClick={() => void savePlanBlock()}>{planSaving ? "Saving…" : editingPlanBlock ? "Save changes" : "Add block"}</button></footer></section></div> : null}
+              {planEditorOpen ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor plan-block-editor" role="dialog" aria-modal="true" aria-labelledby="plan-editor-title"><header><div><span className="eyebrow">Approved schedule</span><h2 id="plan-editor-title">{editingPlanBlock ? "Edit plan block" : "Add plan block"}</h2></div><button type="button" aria-label="Close plan editor" onClick={() => setPlanEditorOpen(false)}>×</button></header>{selectedPlanAssignment ? <div className="plan-editor-line-context"><strong>Selected line: {displayLine(selectedPlanAssignment.production_line_code)}</strong><span>{selectedPlanAssignment.production_line_code} · {selectedPlanAssignment.production_line_name} · {titleCase(selectedPlanAssignment.shift_type)} shift</span></div> : selectedPlanLine ? <div className="plan-editor-line-context"><strong>Selected line: {displayLine(selectedPlanLine.code)}</strong><span>{selectedPlanLine.code} · Assign a Team Leader below to activate this line for the shift.</span></div> : <p className="downtime-editor__message">Choose a production line.</p>}<div className="plan-editor-grid"><label>Production line<select value={planAssignment} disabled={Boolean(editingPlanBlock)} onChange={(event) => changePlanAssignment(event.target.value)}>{planLineOptions.map(({ line, assignment }) => <option key={line.id} value={assignment?.id ?? `line-${line.id}`}>{displayLine(line.code)} · {line.name}{assignment ? ` · ${assignment.team_leader_username}` : " · Assignment required"}</option>)}</select></label>{!selectedPlanAssignment && selectedPlanLine ? <label>Team Leader<select value={planTeamLeader} onChange={(event) => setPlanTeamLeader(event.target.value)}><option value="">Choose Team Leader</option>{planLeaderOptions.map((leader) => <option key={leader.id} value={leader.id}>{leader.display_name}</option>)}</select></label> : null}<label>Sequence<input type="number" min="1" value={planSequence} onChange={(event) => setPlanSequence(event.target.value)} /></label><label>Block type<select value={planBlockType} onChange={(event) => setPlanBlockType(event.target.value as "production" | "break")}><option value="production">Production</option><option value="break">Planned break</option></select></label><label>Start<input type="datetime-local" value={planStart} onChange={(event) => setPlanStart(event.target.value)} /></label><label>End<input type="datetime-local" value={planEnd} onChange={(event) => setPlanEnd(event.target.value)} /></label>{planBlockType === "production" ? <><label>Product code<input value={planProductCode} onChange={(event) => setPlanProductCode(event.target.value)} /></label><label>Product name<input value={planProductName} onChange={(event) => setPlanProductName(event.target.value)} /></label><label>Target units / hour<input type="number" min="1" value={planHourlyTarget} onChange={(event) => setPlanHourlyTarget(event.target.value)} /></label></> : <label>Break number<select value={planBreakNumber} onChange={(event) => setPlanBreakNumber(event.target.value)}><option value="1">Break 1</option><option value="2">Break 2</option></select></label>}</div><p className="workflow-boundary">The master list contains Lines 1–20. An unassigned line is activated by creating its Team Leader assignment when the first block is saved. Blocks must stay inside the selected shift and cannot overlap. Approved breaks are exactly 40 minutes.</p>{planMessage ? <p role="status" className="downtime-editor__message">{planMessage}</p> : null}<footer><button type="button" className="button button--ghost" onClick={() => setPlanEditorOpen(false)}>Cancel</button><button type="button" className="button button--primary" disabled={planSaving || !selectedPlanLine || (!selectedPlanAssignment && !planTeamLeader)} onClick={() => void savePlanBlock()}>{planSaving ? "Saving…" : editingPlanBlock ? "Save changes" : "Add block"}</button></footer></section></div> : null}
             </>
           ) : null}
 
@@ -1317,9 +1482,10 @@ export function ManagerConsole({
                 <div className="material-status-cards" aria-label="Filter materials by status">{(["ready", "in_process", "short", "held"] as MaterialStatus[]).map((status) => <button type="button" className={materialStatusFilter === status ? `is-selected status-${status}` : `status-${status}`} key={status} onClick={() => setMaterialStatusFilter(materialStatusFilter === status ? "all" : status)}><span>{titleCase(status)}</span><strong>{data.materials.filter((item) => item.status === status).length}</strong></button>)}</div>
                 <div className="materials-filter-row"><select aria-label="Filter materials by line" value={materialLineFilter} onChange={(event) => setMaterialLineFilter(event.target.value)}><option value="all">All lines</option>{rows.map((row) => <option key={row.assignment.id} value={row.assignment.production_line}>{displayLine(row.assignment.production_line_code)}</option>)}</select><input aria-label="Search materials" placeholder="Search materials…" value={materialSearch} onChange={(event) => setMaterialSearch(event.target.value)} /></div>
                 <div className="manager-table-card responsive-table"><table><thead><tr><th>Line</th><th>Product</th><th>Needed by</th><th>ETA / supply position</th><th>Status</th><th>Owner</th></tr></thead><tbody>{visibleMaterials.map((item) => <tr className={selectedMaterialId === item.id ? "is-selected" : ""} key={item.id} onClick={() => setSelectedMaterialId(item.id)}><td>{displayLine(item.production_line_code)}</td><td><strong>{item.product_name}</strong><small>{item.product_code}</small></td><td>{shortTime(item.needed_by_at)}</td><td><strong>{item.expected_available_at ? `ETA ${shortTime(item.expected_available_at)}` : "ETA not set"}</strong><small>{item.status === "held" ? item.hold_reason || "Reason not recorded" : item.shortage_quantity ? `${NUMBER.format(item.shortage_quantity)} units short` : item.notes || "Available"}</small></td><td><StatusPill value={item.status} /></td><td>{item.owner_username || item.responsible_role || "Unassigned"}</td></tr>)}</tbody></table></div>
-                {selectedMaterial ? <section className="material-detail-card" aria-labelledby="selected-material-title"><header><div><h2 id="selected-material-title">{selectedMaterial.product_name} · {displayLine(selectedMaterial.production_line_code)}</h2><StatusPill value={selectedMaterial.status} /></div></header><dl><div><dt>Supply position</dt><dd>{selectedMaterial.shortage_quantity ? `${NUMBER.format(selectedMaterial.shortage_quantity)} units short` : titleCase(selectedMaterial.status)}</dd></div><div><dt>Needed by</dt><dd>{shortTime(selectedMaterial.needed_by_at)}</dd></div><div><dt>Expected available</dt><dd>{shortTime(selectedMaterial.expected_available_at)}</dd></div><div><dt>Owner</dt><dd>{selectedMaterial.owner_username || selectedMaterial.responsible_role || "Unassigned"}</dd></div><div><dt>Held reason / next action</dt><dd>{selectedMaterial.hold_reason || selectedMaterial.next_action || selectedMaterial.notes || "Confirm replenishment"}</dd></div></dl><div className="material-detail-actions"><button type="button" className="button button--primary" onClick={() => { setMaterialForm("status"); setMaterialNextStatus(selectedMaterial.status); setMaterialQuantity(String(selectedMaterial.shortage_quantity || "")); setMaterialNote(selectedMaterial.notes); }}>Update status</button><button type="button" className="button button--ghost" onClick={() => { setMaterialForm("issue"); setMaterialNote(""); }}>Raise issue</button></div>{materialMessage ? <p role="status">{materialMessage}</p> : null}</section> : <p className="materials-action-note"><AppIcon name="info" size={18} /> Select a material to review its history and next action.</p>}
-              </> : <section className="manager-detail-card"><h2>Open actions</h2>{openActions.length ? <ul className="manager-risk-list">{openActions.map((item) => <li key={item.id}><StatusPill value={item.priority} /><div><strong>{item.production_line_code} · {item.summary}</strong><span>Responsible: {escalationRole(item.category)} · Due {formatDateTime(item.response_due_at)}</span></div>{item.is_overdue ? <span className="risk-label">Overdue</span> : null}</li>)}</ul> : <EmptyState title="No open actions" body="No unresolved escalation is visible for this date." />}</section>}
-              {selectedMaterial && materialForm ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="material-form-title"><header><div><span className="eyebrow">{displayLine(selectedMaterial.production_line_code)} · {selectedMaterial.product_name}</span><h2 id="material-form-title">{materialForm === "status" ? "Update material status" : "Raise material issue"}</h2></div><button type="button" aria-label="Close material form" onClick={() => setMaterialForm(null)}>×</button></header>{materialForm === "status" ? <><label>Status<select value={materialNextStatus} onChange={(event) => setMaterialNextStatus(event.target.value as MaterialStatus)}>{(["ready", "in_process", "short", "held"] as MaterialStatus[]).map((status) => <option key={status} value={status}>{titleCase(status)}</option>)}</select></label><label>Shortage quantity / units<input type="number" min="0" value={materialQuantity} onChange={(event) => setMaterialQuantity(event.target.value)} /></label></> : <p>Line and material are prefilled from the selected record.</p>}<label>Short note<textarea required rows={3} value={materialNote} onChange={(event) => setMaterialNote(event.target.value)} /></label><footer><button type="button" className="button button--ghost" onClick={() => setMaterialForm(null)}>Cancel</button><button type="button" className="button button--primary" disabled={materialSaving || !materialNote.trim()} onClick={materialForm === "status" ? saveMaterialStatus : raiseMaterialIssue}>{materialSaving ? "Saving…" : materialForm === "status" ? "Save update" : "Raise issue"}</button></footer></section></div> : null}
+                {selectedMaterial ? <section className="material-detail-card" aria-labelledby="selected-material-title"><header><div><h2 id="selected-material-title">{selectedMaterial.product_name} · {displayLine(selectedMaterial.production_line_code)}</h2><StatusPill value={selectedMaterial.status} /></div></header><dl><div><dt>Supply position</dt><dd>{selectedMaterial.shortage_quantity ? `${NUMBER.format(selectedMaterial.shortage_quantity)} units short` : titleCase(selectedMaterial.status)}</dd></div><div><dt>Needed by</dt><dd>{shortTime(selectedMaterial.needed_by_at)}</dd></div><div><dt>Expected available</dt><dd>{shortTime(selectedMaterial.expected_available_at)}</dd></div><div><dt>Owner</dt><dd>{selectedMaterial.owner_username || selectedMaterial.responsible_role || "Unassigned"}</dd></div><div><dt>Held reason / next action</dt><dd>{selectedMaterial.hold_reason || selectedMaterial.next_action || selectedMaterial.notes || "Confirm replenishment"}</dd></div></dl><div className="material-detail-actions"><button type="button" className="button button--primary" onClick={() => { setMaterialForm("status"); setMaterialNextStatus(selectedMaterial.status === "held" ? "ready" : selectedMaterial.status); setMaterialQuantity(String(selectedMaterial.shortage_quantity || "")); setMaterialNote(selectedMaterial.notes); }}>Update status</button><button type="button" className="button button--ghost" onClick={() => { setMaterialForm("issue"); setMaterialNote(""); setMaterialResponseDueAt(localDateTimeAfter(new Date().toISOString(), 30)); }}>Raise issue</button></div>{materialMessage ? <p role="status">{materialMessage}</p> : null}</section> : <p className="materials-action-note"><AppIcon name="info" size={18} /> Select a material to review its history and next action.</p>}
+              </> : <section className="manager-detail-card"><h2>Open actions</h2>{actionMessage ? <p role="status">{actionMessage}</p> : null}{openActions.length ? <ul className="manager-risk-list manager-action-list">{openActions.map((item) => <li key={item.id}><StatusPill value={item.priority} /><div><strong>{item.production_line_code} · {item.summary}</strong><span>Responsible: {item.owner_username || item.owner_role || escalationRole(item.category)} · Due {formatDateTime(item.response_due_at)}</span><small>Status: {titleCase(item.status)}</small></div><div className="manager-action-controls"><select aria-label={`Assign owner for ${item.summary}`} value={item.owner ?? ""} disabled={actionSavingId === item.id} onChange={(event) => void assignAction(item, event.target.value)}><option value="">Unassigned</option>{data.users.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select>{item.status === "open" ? <button type="button" className="button button--ghost" disabled={actionSavingId === item.id} onClick={() => void acknowledgeAction(item)}>Acknowledge</button> : <button type="button" className="button button--primary" disabled={actionSavingId === item.id} onClick={() => { setSelectedAction(item); setActionResolutionNotes(""); }}>Resolve</button>}</div>{item.is_overdue ? <span className="risk-label">Overdue</span> : null}</li>)}</ul> : <EmptyState title="No open actions" body="No unresolved escalation is visible for this date." />}</section>}
+              {selectedMaterial && materialForm ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="material-form-title"><header><div><span className="eyebrow">{displayLine(selectedMaterial.production_line_code)} · {selectedMaterial.product_name}</span><h2 id="material-form-title">{materialForm === "status" ? selectedMaterial.status === "held" ? "Release held material" : "Update material status" : "Raise material issue"}</h2></div><button type="button" aria-label="Close material form" onClick={() => setMaterialForm(null)}>×</button></header>{materialForm === "status" ? <><label>Status<select value={materialNextStatus} onChange={(event) => setMaterialNextStatus(event.target.value as MaterialStatus)}>{(selectedMaterial.status === "held" ? ["ready"] : ["ready", "in_process", "short", "held"] as MaterialStatus[]).map((status) => <option key={status} value={status}>{titleCase(status)}</option>)}</select></label><label>Shortage quantity / units<input type="number" min="0" value={materialQuantity} onChange={(event) => setMaterialQuantity(event.target.value)} /></label></> : <><p>Line and material are prefilled from the selected record.</p><label>Response deadline<input type="datetime-local" required value={materialResponseDueAt} onChange={(event) => setMaterialResponseDueAt(event.target.value)} /></label></>}<label>Short note<textarea required rows={3} value={materialNote} onChange={(event) => setMaterialNote(event.target.value)} /></label><footer><button type="button" className="button button--ghost" onClick={() => setMaterialForm(null)}>Cancel</button><button type="button" className="button button--primary" disabled={materialSaving || !materialNote.trim() || (materialForm === "issue" && !materialResponseDueAt)} onClick={materialForm === "status" ? saveMaterialStatus : raiseMaterialIssue}>{materialSaving ? "Saving…" : materialForm === "status" ? selectedMaterial.status === "held" ? "Release material" : "Save update" : "Raise issue"}</button></footer></section></div> : null}
+              {selectedAction ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="resolve-action-title"><header><div><span className="eyebrow">{selectedAction.production_line_code} · {titleCase(selectedAction.category)}</span><h2 id="resolve-action-title">Resolve action</h2></div><button type="button" aria-label="Close resolve action form" onClick={() => setSelectedAction(null)}>×</button></header><p>{selectedAction.summary}</p><label>Resolution notes<textarea required rows={4} value={actionResolutionNotes} onChange={(event) => setActionResolutionNotes(event.target.value)} /></label><footer><button type="button" className="button button--ghost" onClick={() => setSelectedAction(null)}>Cancel</button><button type="button" className="button button--primary" disabled={actionSavingId === selectedAction.id || !actionResolutionNotes.trim()} onClick={() => void resolveAction()}>{actionSavingId === selectedAction.id ? "Saving…" : "Resolve action"}</button></footer></section></div> : null}
             </>
           ) : null}
 
@@ -1353,8 +1519,8 @@ export function ManagerConsole({
               {recoveryTab === "history" ? <LossAnalyticsPanel assignments={data.assignments} /> : <>
                 <div className="break-recovery-filters"><label>Date<input type="date" value={operationalDate} onChange={(event) => onDateChange(event.target.value)} /></label><label>Production line<select value={recoveryLineFilter} onChange={(event) => setRecoveryLineFilter(event.target.value)}><option value="all">All lines</option>{rows.map((row) => <option key={row.assignment.id} value={row.assignment.production_line}>{displayLine(row.assignment.production_line_code)}</option>)}</select></label><label>Time range<select value={recoveryRange} onChange={(event) => setRecoveryRange(event.target.value)}><option value="shift">This shift</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option></select></label><button type="button" className="button button--primary" onClick={onRefresh}>Apply filters</button></div>
                 <section className="recovery-kpis" aria-label="Recovery summary"><article><span>Recorded downtime</span><strong>{recordedDowntime} min</strong></article><article><span>Recovered time</span><strong>{recoveredMinutes} min</strong></article><article><span>Remaining loss</span><strong>{remainingLoss} min</strong></article><article><span>Opportunities</span><strong>{recoveryOpportunities.length}</strong></article></section>
-                <section className="recovery-activity"><header><h2>Recovery activity</h2><button type="button" className="button button--primary" disabled={!recoveryOpportunities.length} onClick={() => { const item = recoveryOpportunities.find((candidate) => candidate.status === "checks_complete") ?? recoveryOpportunities[0]; if (item) { setSelectedRecovery(item); setRecoveryTime(new Date().toISOString().slice(0, 16)); setRecoveryEvidence(item.recovery_notes); } }}>Record recovery</button></header>{recoveryOpportunities.length ? recoveryOpportunities.map((item) => <details key={item.id} open={item === recoveryOpportunities[0]}><summary><strong>{displayLine(item.production_line_code)}</strong><span>{item.issue_summary}</span><small>{titleCase(item.status)}</small></summary><ol className="recovery-timeline"><li><time>{shortTime(item.fault_at)}</time><strong>Fault recorded</strong><span>{item.issue_summary}</span></li><li><time>{shortTime(item.suggested_start_at)}</time><strong>Planned break starts</strong><span>Approved recovery window</span></li><li><time>{shortTime(item.checks_completed_at)}</time><strong>Repair complete</strong><span>Checks and evidence recorded</span></li><li><time>{shortTime(item.run_resumed_at)}</time><strong>Production resumes</strong><span>{item.recovery_notes || "Awaiting resume evidence"}</span></li></ol></details>) : <EmptyState title="No recovery activity" body="No linked break opportunity is recorded for this selection." />}</section>
-                <section className="hourly-recovery-history"><h2>Hourly event history</h2><div className="responsive-table"><table><thead><tr><th>Hour</th><th>Line</th><th>Duration</th><th>Description</th></tr></thead><tbody>{data.downtimeEvents.filter((event) => recoveryLineFilter === "all" || String(event.production_line) === recoveryLineFilter).map((event) => <tr key={event.id}><td>{shortTime(event.started_at)} – {shortTime(event.ended_at)}</td><td>{displayLine(event.production_line_code)}</td><td>{event.duration_minutes} min</td><td>{event.description}</td></tr>)}</tbody></table></div></section>
+                <section className="recovery-activity"><header><div><h2>Recovery activity</h2>{recoveryOpportunities.length && !eligibleRecovery ? <small>Record recovery becomes available after checks are complete.</small> : null}</div><button type="button" className="button button--primary" disabled={!eligibleRecovery} onClick={() => { if (eligibleRecovery) { setSelectedRecovery(eligibleRecovery); setRecoveryTime(localDateTimeAfter(new Date().toISOString(), 0)); setRecoveryEvidence(eligibleRecovery.recovery_notes); } }}>Record recovery</button></header>{recoveryOpportunities.length ? recoveryOpportunities.map((item) => <details key={item.id} open={item === recoveryOpportunities[0]}><summary><strong>{displayLine(item.production_line_code)}</strong><span>{item.issue_summary}</span><small>{titleCase(item.status)}</small></summary><ol className="recovery-timeline"><li><time>{shortTime(item.fault_at)}</time><strong>Fault recorded</strong><span>{item.issue_summary}</span></li><li><time>{shortTime(item.suggested_start_at)}</time><strong>Planned break starts</strong><span>Approved recovery window</span></li><li><time>{shortTime(item.checks_completed_at)}</time><strong>Repair complete</strong><span>Checks and evidence recorded</span></li><li><time>{shortTime(item.run_resumed_at)}</time><strong>Production resumes</strong><span>{item.recovery_notes || "Awaiting resume evidence"}</span></li></ol></details>) : <EmptyState title="No recovery activity" body="No linked break opportunity is recorded for this selection." />}</section>
+                <section className="hourly-recovery-history"><h2>Hourly event history</h2><div className="responsive-table"><table><thead><tr><th>Hour</th><th>Line</th><th>Duration</th><th>Description</th></tr></thead><tbody>{recoveryDowntimeEvents.map((event) => <tr key={event.id}><td>{shortTime(event.started_at)} – {shortTime(event.ended_at)}</td><td>{displayLine(event.production_line_code)}</td><td>{event.duration_minutes} min</td><td>{event.description}</td></tr>)}</tbody></table></div></section>
                 <p className="recovery-rule"><AppIcon name="info" size={18} /> Planned breaks are excluded from recorded downtime. Eligible recovered minutes are counted once; remaining loss never falls below zero.</p>
                 {recoveryMessage ? <p role="status">{recoveryMessage}</p> : null}
               </>}

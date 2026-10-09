@@ -16,6 +16,7 @@ from django.db.models import (
     Sum,
     When,
 )
+from django.db.models.deletion import ProtectedError
 from django.db.models.functions import Coalesce
 from django.http import FileResponse
 from django.utils import timezone
@@ -85,6 +86,7 @@ from .serializers import (
     IssueCaptureSerializer,
     NotificationInboxSerializer,
     ObservabilitySummarySerializer,
+    OperationalEscalationAssignSerializer,
     OperationalEscalationFilterSerializer,
     OperationalEscalationResolveSerializer,
     OperationalEscalationSerializer,
@@ -107,6 +109,7 @@ from .serializers import (
     ProductionLineSerializer,
     ProductMaterialReadinessFilterSerializer,
     ProductMaterialReadinessSerializer,
+    ProductMaterialReleaseSerializer,
     QualityIncidentSerializer,
     ShiftHandoverFilterSerializer,
     ShiftHandoverSerializer,
@@ -1145,12 +1148,18 @@ class DowntimeEventViewSet(viewsets.ModelViewSet):
                 assigned_to_requester=Exists(assigned_shift),
             ).filter(assigned_to_requester=True)
         shift_date = self.request.query_params.get("date")
+        shift_date_from = self.request.query_params.get("date_from")
+        shift_date_to = self.request.query_params.get("date_to")
         shift_type = self.request.query_params.get("shift_type")
         production_line = self.request.query_params.get("production_line")
         event_status = self.request.query_params.get("status")
 
         if shift_date:
             queryset = queryset.filter(shift__date=shift_date)
+        if shift_date_from:
+            queryset = queryset.filter(shift__date__gte=shift_date_from)
+        if shift_date_to:
+            queryset = queryset.filter(shift__date__lte=shift_date_to)
         if shift_type:
             queryset = queryset.filter(shift__shift_type=shift_type)
         if production_line:
@@ -1573,7 +1582,7 @@ class ProductMaterialReadinessViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
     @extend_schema(
-        request=None,
+        request=ProductMaterialReleaseSerializer,
         responses=ProductMaterialReadinessSerializer,
     )
     @action(
@@ -1590,14 +1599,23 @@ class ProductMaterialReadinessViewSet(viewsets.ModelViewSet):
         if readiness.status != ProductMaterialReadiness.Status.HELD:
             raise ValidationError({"status": "Only held material can be released."})
 
+        input_serializer = ProductMaterialReleaseSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+
         readiness.status = ProductMaterialReadiness.Status.READY
         readiness.released_at = timezone.now()
         readiness.released_by = request.user
+        readiness.notes = input_serializer.validated_data.get("notes", readiness.notes)
+        readiness.shortage_quantity = input_serializer.validated_data.get(
+            "shortage_quantity", readiness.shortage_quantity
+        )
         readiness.save(
             update_fields=(
                 "status",
                 "released_at",
                 "released_by",
+                "notes",
+                "shortage_quantity",
                 "updated_at",
             ),
         )
@@ -1745,6 +1763,29 @@ class OperationalEscalationViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(raised_by=self.request.user)
+
+    @extend_schema(
+        request=OperationalEscalationAssignSerializer,
+        responses=OperationalEscalationSerializer,
+    )
+    @action(
+        detail=True,
+        methods=("post",),
+        url_path="assign",
+    )
+    def assign(self, request, pk=None):
+        if not request.user.is_staff:
+            raise PermissionDenied("Only management staff can assign actions.")
+
+        escalation = self.get_object()
+        if escalation.status == OperationalEscalation.Status.RESOLVED:
+            raise ValidationError({"status": "Resolved actions cannot be reassigned."})
+
+        input_serializer = OperationalEscalationAssignSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        escalation.owner = input_serializer.validated_data["owner"]
+        escalation.save(update_fields=("owner", "updated_at"))
+        return Response(self.get_serializer(escalation).data)
 
     @extend_schema(
         request=None,
@@ -2145,7 +2186,7 @@ class DailyPlanBlockViewSet(viewsets.ModelViewSet):
     queryset = DailyPlanBlock.objects.all()
     serializer_class = DailyPlanBlockSerializer
     permission_classes = (IsStaffOrReadOnly,)
-    http_method_names = ("get", "post", "patch", "head", "options")
+    http_method_names = ("get", "post", "patch", "delete", "head", "options")
     ordering = ("planned_start_at", "sequence_number")
 
     def get_queryset(self):
@@ -2181,6 +2222,19 @@ class DailyPlanBlockViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    def perform_destroy(self, instance):
+        try:
+            instance.delete()
+        except ProtectedError as error:
+            raise ValidationError(
+                {
+                    "detail": (
+                        "This plan block has linked recovery evidence and cannot be "
+                        "deleted. Keep it as part of the operational audit trail."
+                    )
+                }
+            ) from error
 
 
 @extend_schema_view(

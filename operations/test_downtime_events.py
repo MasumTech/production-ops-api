@@ -130,6 +130,63 @@ def test_downtime_api_filters_by_date_and_exposes_line_context(
 
 
 @pytest.mark.django_db
+def test_downtime_api_filters_by_inclusive_date_range(
+    downtime_user,
+    downtime_shift,
+):
+    recent_shift = Shift.objects.create(
+        production_line=downtime_shift.production_line,
+        supervisor=downtime_user,
+        date=downtime_shift.date - timedelta(days=5),
+        shift_type=Shift.ShiftType.DAY,
+        start_time=time(7),
+        end_time=time(18),
+    )
+    old_shift = Shift.objects.create(
+        production_line=downtime_shift.production_line,
+        supervisor=downtime_user,
+        date=downtime_shift.date - timedelta(days=10),
+        shift_type=Shift.ShiftType.DAY,
+        start_time=time(7),
+        end_time=time(18),
+    )
+    recent_event = DowntimeEvent.objects.create(
+        shift=recent_shift,
+        started_at=shift_time(recent_shift, 9),
+        ended_at=shift_time(recent_shift, 9, 5),
+        reason_category=DowntimeEvent.ReasonCategory.MATERIAL,
+        description="Recent material wait",
+        owner_group=DowntimeEvent.OwnerGroup.OPERATIONS,
+        status=DowntimeEvent.Status.RESOLVED,
+    )
+    old_event = DowntimeEvent.objects.create(
+        shift=old_shift,
+        started_at=shift_time(old_shift, 9),
+        ended_at=shift_time(old_shift, 9, 5),
+        reason_category=DowntimeEvent.ReasonCategory.MATERIAL,
+        description="Old material wait",
+        owner_group=DowntimeEvent.OwnerGroup.OPERATIONS,
+        status=DowntimeEvent.Status.RESOLVED,
+    )
+    client = APIClient()
+    client.force_authenticate(downtime_user)
+
+    response = client.get(
+        reverse("downtime-event-list"),
+        {
+            "date_from": downtime_shift.date - timedelta(days=6),
+            "date_to": downtime_shift.date,
+            "shift_type": Shift.ShiftType.DAY,
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    result_ids = {item["id"] for item in response.data["results"]}
+    assert recent_event.id in result_ids
+    assert old_event.id not in result_ids
+
+
+@pytest.mark.django_db
 def test_dashboard_uses_recorded_downtime_events(downtime_user, downtime_shift):
     DowntimeEvent.objects.create(
         shift=downtime_shift,
