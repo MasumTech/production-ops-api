@@ -13,6 +13,7 @@ import type {
 import {
   buildManagerPriorities,
   buildManagerRows,
+  downtimeMinutesForPeriod,
   ManagerConsole,
 } from "./ManagerConsole";
 
@@ -227,6 +228,23 @@ beforeEach(() => {
 });
 
 describe("manager console", () => {
+  it("allocates downtime to the matching line and hour", () => {
+    expect(downtimeMinutesForPeriod(
+      data.downtimeEvents,
+      102,
+      { startMinutes: 405, endMinutes: 1080, startLabel: "06:45", endLabel: "18:00" },
+      540,
+      600,
+    )).toBe(12);
+    expect(downtimeMinutesForPeriod(
+      data.downtimeEvents,
+      101,
+      { startMinutes: 405, endMinutes: 1080, startLabel: "06:45", endLabel: "18:00" },
+      540,
+      600,
+    )).toBe(0);
+  });
+
   it("sorts urgent lines ahead of stable lines", () => {
     const rows = buildManagerRows(
       data,
@@ -427,6 +445,7 @@ describe("manager console", () => {
     expect(screen.getByRole("heading", { name: "Team Leaders & line control" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /Open details for LINE-/ })).toHaveLength(2);
     expect(screen.getByText("Team Leader 2")).toBeInTheDocument();
+    expect(screen.getByText("DT 12 min")).toBeInTheDocument();
 
     await actor.click(within(navigation).getByRole("button", { name: "Daily plans" }));
     expect(screen.getByRole("heading", { name: "Daily plans" })).toBeInTheDocument();
@@ -436,6 +455,11 @@ describe("manager console", () => {
     expect(screen.queryByRole("button", { name: "Add plan block" })).not.toBeInTheDocument();
     expect(screen.getByText("Full-day completion")).toBeInTheDocument();
     expect(screen.getByText("Position now")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Downtime" })).toBeInTheDocument();
+    await actor.click(screen.getByRole("button", { name: "Line 2 ▾" }));
+    const hourlyDetail = screen.getByLabelText("Line 2 hourly details");
+    expect(within(hourlyDetail).getByText("12 min")).toBeInTheDocument();
+    expect(within(hourlyDetail).getByText(/DT 12 min/)).toBeInTheDocument();
 
     await actor.click(within(navigation).getByRole("button", { name: "Materials" }));
     expect(screen.getByRole("heading", { name: "Materials & actions" })).toBeInTheDocument();
@@ -492,6 +516,7 @@ describe("manager console", () => {
     expect(within(lineDrawer).getByRole("heading", { name: "Hour-by-hour details" })).toBeInTheDocument();
     expect(within(lineDrawer).getAllByText("T 455").length).toBeGreaterThan(0);
     expect(within(lineDrawer).getByText("D 390")).toBeInTheDocument();
+    expect(within(lineDrawer).getByText("DT 12 min")).toBeInTheDocument();
     await actor.click(screen.getByRole("button", { name: /Filler sensor reset/ }));
 
     const dialog = screen.getByRole("dialog", { name: "Edit downtime & description" });

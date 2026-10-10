@@ -288,6 +288,28 @@ function lineDowntime(events: DowntimeEvent[], productionLine: number): number {
     .reduce((total, event) => total + event.duration_minutes, 0);
 }
 
+export function downtimeMinutesForPeriod(
+  events: DowntimeEvent[],
+  productionLine: number,
+  window: ReturnType<typeof getShiftWindow>,
+  startMinutes: number,
+  endMinutes: number,
+): number {
+  return events
+    .filter((event) => event.production_line === productionLine)
+    .reduce((total, event) => {
+      const eventStart = dateTimeToShiftMinutes(event.started_at, window);
+      const eventEnd = event.ended_at
+        ? dateTimeToShiftMinutes(event.ended_at, window)
+        : eventStart + event.duration_minutes;
+      const overlap = Math.max(
+        0,
+        Math.min(endMinutes, eventEnd) - Math.max(startMinutes, eventStart),
+      );
+      return total + overlap;
+    }, 0);
+}
+
 function shortTime(value: string | null | undefined): string {
   if (!value) return "—";
   return new Intl.DateTimeFormat("en-GB", {
@@ -339,7 +361,6 @@ function updatedTime(value: string | null): string {
 
 function hourlyDowntime(
   events: DowntimeEvent[],
-  operationalDate: string,
   startMinutes: number,
   endMinutes: number,
 ) {
@@ -350,25 +371,23 @@ function hourlyDowntime(
     endLabel: formatClockMinutes(endMinutes),
   };
   return timeBuckets(window).map((bucket) => {
-    const bucketStart = new Date(
-      `${operationalDate}T${formatClockMinutes(bucket.startMinutes)}:00`,
-    );
-    const bucketEnd = new Date(
-      bucketStart.getTime() +
-        (bucket.endMinutes - bucket.startMinutes) * 60 * 1000,
-    );
     const matching = events.filter((event) => {
-      const start = new Date(event.started_at);
-      const end = new Date(event.ended_at ?? Date.now());
-      return start < bucketEnd && end > bucketStart;
+      const eventStart = dateTimeToShiftMinutes(event.started_at, window);
+      const eventEnd = event.ended_at
+        ? dateTimeToShiftMinutes(event.ended_at, window)
+        : eventStart + event.duration_minutes;
+      return eventStart < bucket.endMinutes && eventEnd > bucket.startMinutes;
     });
     const minutes = matching.reduce((total, event) => {
-      const start = Math.max(new Date(event.started_at).getTime(), bucketStart.getTime());
-      const end = Math.min(
-        new Date(event.ended_at ?? Date.now()).getTime(),
-        bucketEnd.getTime(),
+      const eventStart = dateTimeToShiftMinutes(event.started_at, window);
+      const eventEnd = event.ended_at
+        ? dateTimeToShiftMinutes(event.ended_at, window)
+        : eventStart + event.duration_minutes;
+      return total + Math.max(
+        0,
+        Math.min(bucket.endMinutes, eventEnd) -
+          Math.max(bucket.startMinutes, eventStart),
       );
-      return total + Math.max(0, Math.round((end - start) / 60_000));
     }, 0);
     return {
       label: bucket.label,
@@ -531,9 +550,19 @@ export function ManagerConsole({
   const scheduleWindow = getShiftWindow(operationalDate, data.shifts, shiftPattern);
   const downtimeHours = hourlyDowntime(
     selectedDowntimeEvents,
-    operationalDate,
     scheduleWindow.startMinutes,
     scheduleWindow.endMinutes,
+  );
+  const hourlyLineDowntime = (
+    productionLine: number,
+    startMinutes: number,
+    endMinutes: number,
+  ) => downtimeMinutesForPeriod(
+    data.downtimeEvents,
+    productionLine,
+    scheduleWindow,
+    startMinutes,
+    endMinutes,
   );
   const selectedDowntimeEvent = data.downtimeEvents.find(
     (event) => event.id === selectedDowntimeEventId,
@@ -744,6 +773,11 @@ export function ManagerConsole({
       hourLabel: hour.label,
       hourStartAt,
       target: hour.target,
+      downtimeMinutes: hourlyLineDowntime(
+        assignment.production_line,
+        hour.startMinutes,
+        hour.endMinutes,
+      ),
       output,
     });
   };
@@ -1192,11 +1226,11 @@ export function ManagerConsole({
                 </article>
                 <article className="control-kpi">
                   <span className="control-kpi__icon control-kpi__icon--blue control-kpi__target"><AppIcon name="chart" size={31} /></span>
-                  <div><strong>{Math.round(planCompletion)}%</strong><span>Plan complete</span><small>{NUMBER.format(summary.total_actual_output)} / {NUMBER.format(summary.total_planned_output)} planned cases</small></div>
+                  <div><strong>{Math.round(planCompletion)}%</strong><span>Plan complete</span><small>{NUMBER.format(summary.total_actual_output)} / {NUMBER.format(summary.total_planned_output)} planned cases · {NUMBER.format(summary.total_downtime_minutes)} min downtime</small></div>
                 </article>
                 <article className="control-kpi">
                   <span className="control-kpi__icon control-kpi__icon--green"><AppIcon name="chart" size={31} /></span>
-                  <div><strong>{aggregatePosition ? `${aggregatePosition.shiftAttainment}%` : "—"}</strong><span>Time attainment</span><small>{aggregatePosition ? `${NUMBER.format(aggregatePosition.actual)} / ${NUMBER.format(aggregatePosition.due)} target due now` : "Target unavailable for some lines"}</small></div>
+                  <div><strong>{aggregatePosition ? `${aggregatePosition.shiftAttainment}%` : "—"}</strong><span>Time attainment</span><small>{aggregatePosition ? `${NUMBER.format(aggregatePosition.actual)} / ${NUMBER.format(aggregatePosition.due)} target due now · ${NUMBER.format(summary.total_downtime_minutes)} min downtime` : `Target unavailable for some lines · ${NUMBER.format(summary.total_downtime_minutes)} min downtime`}</small></div>
                 </article>
                 <article className="control-kpi control-kpi--downtime">
                   <span className="control-kpi__icon control-kpi__icon--red"><AppIcon name="clock" size={31} /></span>
@@ -1230,7 +1264,7 @@ export function ManagerConsole({
                         <span style={{ width: `${row.shift?.planned_output && actual !== null ? Math.min(100, actual / row.shift.planned_output * 100) : 0}%` }} />
                         {row.shift?.planned_output && expectedNow !== null ? <i style={{ left: `${Math.min(100, expectedNow / row.shift.planned_output * 100)}%` }} /> : null}
                       </div>
-                      <small>{actual === null ? "Output unavailable" : `${NUMBER.format(actual)} done`} / {expectedNow === null ? "target unavailable" : `${NUMBER.format(expectedNow)} due`}</small>
+                      <small>{actual === null ? "Output unavailable" : `${NUMBER.format(actual)} done`} / {expectedNow === null ? "target unavailable" : `${NUMBER.format(expectedNow)} due`} · {lineDowntime(data.downtimeEvents, row.assignment.production_line)} min downtime</small>
                     </div>
                     <div className={`manager-position-result ${positionMinutes === null ? "" : positionMinutes >= 0 ? "metric-ahead" : "metric-behind"}`}><strong>{timePositionLabel(positionMinutes)}</strong><small>{unitPositionLabel(delta)} · {shiftAttainment === null ? "—" : `${shiftAttainment}% attainment`}</small></div>
                   </div>
@@ -1339,7 +1373,7 @@ export function ManagerConsole({
                       <div className="manager-leader-hours">
                         {recentHours.map((hour) => <div key={hour.label}>
                           <div className="manager-leader-hour-track"><i style={{ width: `${hour.done !== null && hour.target ? Math.min(100, hour.done / hour.target * 100) : 0}%` }} /></div>
-                          <small>{hour.current ? formatClockMinutes(snapshotMinutes) : hour.label.split("–")[0]}</small><span>{hour.done === null ? "—" : NUMBER.format(hour.done)} / {hour.dueNow === null ? "—" : NUMBER.format(hour.current ? hour.dueNow : hour.target ?? hour.dueNow)}</span>
+                          <small>{hour.current ? formatClockMinutes(snapshotMinutes) : hour.label.split("–")[0]}</small><span>D {hour.done === null ? "—" : NUMBER.format(hour.done)} / T {hour.dueNow === null ? "—" : NUMBER.format(hour.current ? hour.dueNow : hour.target ?? hour.dueNow)}</span><small className="manager-hour-downtime">DT {hourlyLineDowntime(row.assignment.production_line, hour.startMinutes, hour.endMinutes)} min</small>
                         </div>)}
                         {!recentHours.length ? <small>No hours due yet</small> : null}
                       </div>
@@ -1387,6 +1421,7 @@ export function ManagerConsole({
                       <div><span>Target now</span><strong>{selectedLineProgress?.expectedNow === null || selectedLineProgress?.expectedNow === undefined ? "—" : NUMBER.format(selectedLineProgress.expectedNow)}</strong></div>
                       <div><span>Position now</span><strong>{timePositionLabel(selectedLineProgress?.positionMinutes ?? null)}</strong></div>
                       <div><span>Shift plan</span><strong>{selectedLine.shift ? NUMBER.format(selectedLine.shift.planned_output) : "—"}</strong></div>
+                      <div><span>Downtime</span><strong>{lineDowntime(data.downtimeEvents, selectedLine.assignment.production_line)} min</strong></div>
                     </div>
                     <div className="tl-plan-v2__hours">
                       {selectedLineProgress?.hours.map((hour) => {
@@ -1405,6 +1440,7 @@ export function ManagerConsole({
                           <span>T {hour.target === null ? "—" : NUMBER.format(hour.target)}</span>
                           <span>D {hour.done === null ? "—" : NUMBER.format(hour.done)}</span>
                           <span>S {short === null ? "—" : NUMBER.format(short)}</span>
+                          <span className="manager-hour-downtime">DT {hourlyLineDowntime(selectedLine.assignment.production_line, hour.startMinutes, hour.endMinutes)} min</span>
                           <div className="tl-plan-v2__hour-bar" aria-label={`${hour.label}: ${hour.done === null ? "actual output unavailable" : `${hour.done} done`}, ${short === null ? "shortage unavailable" : `${short} short`}`}><i style={{ width: `${green}%` }} /><b style={{ width: `${amber}%` }} /></div>
                         </div>;
                       })}
@@ -1459,7 +1495,7 @@ export function ManagerConsole({
                     const blocks = (data.planBlocks ?? []).filter((block) => block.assignment === row.assignment.id).sort((left, right) => left.sequence_number - right.sequence_number);
                     const progress = progressLines.find((item) => item.row.assignment.id === row.assignment.id);
                     return <article className="daily-plan-row" key={row.assignment.id}>
-                      <div className="daily-plan-row-label"><strong>{displayLine(row.assignment.production_line_code)}</strong><span>{progress?.actual === null || progress?.actual === undefined ? "Output unavailable" : `${NUMBER.format(progress.actual)} done`}</span></div>
+                      <div className="daily-plan-row-label"><strong>{displayLine(row.assignment.production_line_code)}</strong><span>{progress?.actual === null || progress?.actual === undefined ? "Output unavailable" : `${NUMBER.format(progress.actual)} done`} · {lineDowntime(data.downtimeEvents, row.assignment.production_line)} min downtime</span></div>
                       <div className="daily-plan-track">
                         {blocks.length ? blocks.map((block) => {
                           return <button type="button" className={`daily-plan-block daily-plan-block--${block.block_type}`} style={{ ...timelineStyle(block.planned_start_at, block.planned_end_at, scheduleWindow), "--manager-plan-done": `${completedFractionForBlock(block, blocks, scheduleWindow, row.shift ?? undefined)}%` } as CSSProperties} key={block.id} onClick={() => setSelectedPlanBlock(block)}>
@@ -1476,7 +1512,7 @@ export function ManagerConsole({
               <section className="daily-plan-output-table" aria-label="Daily plan output table">
                 <h2>Output by line</h2>
                 <p>Select a line for hourly target, recorded done and short.</p>
-                <div className="responsive-table"><table><thead><tr><th>Line</th><th>Planned</th><th>Actual</th><th>Full-day completion</th><th>Position now</th></tr></thead><tbody>{planRows.map((row) => {
+                <div className="responsive-table"><table><thead><tr><th>Line</th><th>Planned</th><th>Actual</th><th>Downtime</th><th>Full-day completion</th><th>Position now</th></tr></thead><tbody>{planRows.map((row) => {
                   const progress = progressLines.find((item) => item.row.assignment.id === row.assignment.id);
                   const expanded = expandedPlanLine === row.assignment.id;
                   const delta = progress?.delta ?? null;
@@ -1485,19 +1521,20 @@ export function ManagerConsole({
                       <td><button type="button" className="manager-output-open" aria-expanded={expanded} aria-controls={`manager-hours-${row.assignment.id}`} onClick={() => setExpandedPlanLine(expanded ? null : row.assignment.id)}>{displayLine(row.assignment.production_line_code)} {expanded ? "▴" : "▾"}</button><small>{row.update?.current_product || row.assignment.production_line_name}</small></td>
                       <td>{row.shift ? NUMBER.format(row.shift.planned_output) : "—"}</td>
                       <td>{progress?.actual === null || progress?.actual === undefined ? "—" : NUMBER.format(progress.actual)}</td>
+                      <td>{lineDowntime(data.downtimeEvents, row.assignment.production_line)} min</td>
                       <td>{planPercent(row.shift) === null ? "—" : `${planPercent(row.shift)}%`}</td>
                       <td className={delta === null ? "" : delta < 0 ? "metric-behind" : "metric-ahead"}><strong>{timePositionLabel(progress?.positionMinutes ?? null)}</strong><small>{unitPositionLabel(delta)} · {progress?.shiftAttainment ?? "—"}% attainment</small></td>
                     </tr>
-                    {expanded ? <tr className="manager-output-detail-row"><td colSpan={5}><div id={`manager-hours-${row.assignment.id}`} className="manager-output-detail" aria-label={`${displayLine(row.assignment.production_line_code)} hourly details`}>
+                    {expanded ? <tr className="manager-output-detail-row"><td colSpan={6}><div id={`manager-hours-${row.assignment.id}`} className="manager-output-detail" aria-label={`${displayLine(row.assignment.production_line_code)} hourly details`}>
                       <header><div><h3>{displayLine(row.assignment.production_line_code)} · Hourly details</h3><p>Break-aware target · recorded hours only · partial hour due by {formatClockMinutes(snapshotMinutes)}</p></div><span>{progress?.expectedNow ? `${Math.round((progress.actual ?? 0) / progress.expectedNow * 100)}% of target due now` : "Target unavailable"}</span></header>
-                      <div className="manager-output-facts"><div><small>Actual now</small><strong>{progress?.actual === null || progress?.actual === undefined ? "—" : NUMBER.format(progress.actual)}</strong></div><div><small>Target due now</small><strong>{progress?.expectedNow === null || progress?.expectedNow === undefined ? "—" : NUMBER.format(progress.expectedNow)}</strong></div><div><small>Position now</small><strong>{timePositionLabel(progress?.positionMinutes ?? null)}</strong><span>{unitPositionLabel(delta)}</span></div><div><small>Shift attainment</small><strong>{progress?.shiftAttainment === null || progress?.shiftAttainment === undefined ? "—" : `${progress.shiftAttainment}%`}</strong><span>Full-shift time basis</span></div><div><small>Left in shift</small><strong>{row.shift && progress?.actual !== null && progress?.actual !== undefined ? NUMBER.format(Math.max(0, row.shift.planned_output - progress.actual)) : "—"}</strong></div></div>
+                      <div className="manager-output-facts"><div><small>Actual now</small><strong>{progress?.actual === null || progress?.actual === undefined ? "—" : NUMBER.format(progress.actual)}</strong></div><div><small>Target due now</small><strong>{progress?.expectedNow === null || progress?.expectedNow === undefined ? "—" : NUMBER.format(progress.expectedNow)}</strong></div><div><small>Downtime</small><strong>{lineDowntime(data.downtimeEvents, row.assignment.production_line)} min</strong><span>Full shift</span></div><div><small>Position now</small><strong>{timePositionLabel(progress?.positionMinutes ?? null)}</strong><span>{unitPositionLabel(delta)}</span></div><div><small>Shift attainment</small><strong>{progress?.shiftAttainment === null || progress?.shiftAttainment === undefined ? "—" : `${progress.shiftAttainment}%`}</strong><span>Full-shift time basis</span></div><div><small>Left in shift</small><strong>{row.shift && progress?.actual !== null && progress?.actual !== undefined ? NUMBER.format(Math.max(0, row.shift.planned_output - progress.actual)) : "—"}</strong></div></div>
                       <div className="manager-output-hours">{progress?.hours.map((hour) => {
                         const short = hour.done !== null && hour.dueNow !== null ? Math.max(0, hour.dueNow - hour.done) : null;
                         const recordedOutput = (data.hourlyOutputs ?? []).find((item) =>
                           item.assignment === row.assignment.id &&
                           dateTimeToShiftMinutes(item.hour_start_at, scheduleWindow) === Math.floor(hour.startMinutes / 60) * 60
                         );
-                        return <div className={`manager-output-hour${hour.current ? " is-current" : ""}`} key={hour.label}><strong>{hour.label}</strong><div className="manager-output-hour-track"><i style={{ width: `${hour.target && hour.done !== null ? Math.min(100, hour.done / hour.target * 100) : 0}%` }} /></div><small>{hour.breakMinutes ? `${hour.breakMinutes}m break · ` : ""}T {hour.target === null ? "—" : NUMBER.format(hour.current ? hour.dueNow ?? 0 : hour.target)} · D {hour.done === null ? "—" : NUMBER.format(hour.done)} · S {short === null ? "—" : NUMBER.format(short)}</small>{recordedOutput ? <small>Reject {NUMBER.format(recordedOutput.rejected_units ?? 0)} · Rework {NUMBER.format(recordedOutput.rework_units ?? 0)}</small> : null}<button type="button" className="manager-output-hour-edit" disabled={isHistorical || hour.future} onClick={() => openManagerOutputHour(row.assignment, hour)}>{hour.done === null ? "Record output" : "Review / correct"}</button></div>;
+                        return <div className={`manager-output-hour${hour.current ? " is-current" : ""}`} key={hour.label}><strong>{hour.label}</strong><div className="manager-output-hour-track"><i style={{ width: `${hour.target && hour.done !== null ? Math.min(100, hour.done / hour.target * 100) : 0}%` }} /></div><small>{hour.breakMinutes ? `${hour.breakMinutes}m break · ` : ""}T {hour.target === null ? "—" : NUMBER.format(hour.current ? hour.dueNow ?? 0 : hour.target)} · D {hour.done === null ? "—" : NUMBER.format(hour.done)} · S {short === null ? "—" : NUMBER.format(short)} · DT {hourlyLineDowntime(row.assignment.production_line, hour.startMinutes, hour.endMinutes)} min</small>{recordedOutput ? <small>Reject {NUMBER.format(recordedOutput.rejected_units ?? 0)} · Rework {NUMBER.format(recordedOutput.rework_units ?? 0)}</small> : null}<button type="button" className="manager-output-hour-edit" disabled={isHistorical || hour.future} onClick={() => openManagerOutputHour(row.assignment, hour)}>{hour.done === null ? "Record output" : "Review / correct"}</button></div>;
                       })}</div>
                       {progress && !progress.hours.some((hour) => hour.done !== null) ? <p>Hourly actuals have not been recorded for this line. Done and short are unavailable.</p> : null}
                     </div></td></tr> : null}

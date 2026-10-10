@@ -741,6 +741,21 @@ export DEMO_SEED_PASSWORD="Choose-A-Local-Demo-Password"
 bash scripts/build_showcase_database.sh
 ```
 
+For the cleanest full-stack showcase, use the isolated Docker loader. It starts
+PostgreSQL, Redis, the API and frontend, applies migrations, performs a guarded
+full reset, seeds every persona and feature record, then runs the complete
+verification contract:
+
+```bash
+export DEMO_UAT_PASSWORD="Choose-A-Local-Only-Password"
+./scripts/load_showcase_data.sh
+```
+
+The Docker project name must contain `showcase`, `.env.docker` must keep
+`DJANGO_DEBUG=True`, and `DATABASE_URL` must point to the Compose `db` service.
+Use `--stop-uat` if the local UAT stack is occupying ports 3000 or 8000. Run
+`./scripts/load_showcase_data.sh --help` for date, project-name and build options.
+
 The complete record inventory, role-by-role screen walkthrough, interaction
 tests and reset rules are in the
 [Showcase Database and Feature Walkthrough](docs/showcase-demo-data.md). To
