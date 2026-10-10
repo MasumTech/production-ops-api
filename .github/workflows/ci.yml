@@ -163,6 +163,7 @@ jobs:
           sh -n scripts/rollback_staging.sh
           sh -n scripts/backup_postgres.sh
           sh -n scripts/restore_postgres.sh
+          bash -n scripts/load_showcase_data.sh
 
       - name: Build Docker images
         run: |

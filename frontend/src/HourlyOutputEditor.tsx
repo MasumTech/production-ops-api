@@ -11,6 +11,7 @@ export interface HourlyOutputContext {
   hourLabel: string;
   hourStartAt: string;
   target: number | null;
+  downtimeMinutes?: number;
   output: HourlyOutput | null;
 }
 
@@ -162,6 +163,9 @@ export function HourlyOutputEditor({
               {context.target === null
                 ? "Hourly target is unavailable."
                 : `Hourly target ${NUMBER.format(context.target)} units.`}
+              {context.downtimeMinutes === undefined
+                ? ""
+                : ` Downtime ${NUMBER.format(context.downtimeMinutes)} min.`}
             </p>
           </div>
           <button type="button" aria-label="Close hourly production" onClick={onClose}>×</button>
@@ -218,7 +222,7 @@ export function HourlyOutputEditor({
             </label>
           </div>
 
-          <div className="hourly-output-editor__summary" aria-label="Hourly production summary">
+          <div className={`hourly-output-editor__summary${context.downtimeMinutes === undefined ? "" : " has-downtime"}`} aria-label="Hourly production summary">
             <div><span>Total handled</span><strong>{NUMBER.format(totals.handled)}</strong></div>
             <div><span>First-pass yield</span><strong>{totals.yieldPercent}%</strong></div>
             <div>
@@ -231,6 +235,9 @@ export function HourlyOutputEditor({
                     : `${NUMBER.format(context.target - totals.good)} short`}
               </strong>
             </div>
+            {context.downtimeMinutes === undefined ? null : (
+              <div><span>Downtime</span><strong>{NUMBER.format(context.downtimeMinutes)} min</strong></div>
+            )}
           </div>
 
           <label>

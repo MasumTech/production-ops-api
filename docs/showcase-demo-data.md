@@ -4,7 +4,22 @@ This guide creates and checks a deterministic, fictional database for the
 Production Operations platform. It is intended only for local development,
 portfolio demonstrations, screenshots, and controlled non-production UAT.
 
-## Fastest setup
+## Fastest full-stack setup (Docker)
+
+From the repository root:
+
+```bash
+export DEMO_UAT_PASSWORD="Choose-A-Local-Only-Password"
+./scripts/load_showcase_data.sh
+```
+
+This creates an isolated `production-ops-showcase` PostgreSQL stack, applies
+migrations before seeding, performs the guarded local full reset and runs the
+complete verification contract. Open `http://localhost:3000/`, then select the
+seeded operational date and Day shift. Add `--stop-uat` when the UAT stack is
+using ports 3000 or 8000.
+
+## Dedicated SQLite alternative
 
 From the repository root:
 
@@ -16,7 +31,7 @@ bash scripts/build_showcase_database.sh
 The default output is `showcase-production-ops.sqlite3` and the default
 operational date is Friday **04 September 2026**. The filename is ignored by
 Git. The build applies every migration, flushes only that dedicated showcase
-database, seeds it, and runs 34 coherence checks.
+database, seeds it, and runs all current coherence checks.
 
 To choose another safe output file or operational date:
 
