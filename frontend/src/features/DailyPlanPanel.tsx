@@ -170,6 +170,7 @@ export function DailyPlanPanel({
 
   const openOutputHour = (assignment: Assignment, hour: PlanHour) => {
     const clockHour = Math.floor(hour.startMinutes / 60) * 60;
+    const shift = lineShift(shifts, assignment);
     const output = hourlyOutputs.find(
       (item) =>
         item.assignment === assignment.id &&
@@ -182,6 +183,7 @@ export function DailyPlanPanel({
       hourLabel: hour.label,
       hourStartAt: new Date(localHour).toISOString(),
       target: hour.target,
+      downtimeMinutes: downtimeMinutesForHour(shift, hour),
       output,
     });
   };
@@ -643,7 +645,7 @@ export function DailyPlanPanel({
                     <span style={{ width: `${shift?.planned_output ? Math.min(100, actual / shift.planned_output * 100) : 0}%` }} />
                     {expectedNow !== null && shift?.planned_output ? <i style={{ left: `${Math.min(100, expectedNow / shift.planned_output * 100)}%` }} aria-label="Target due now" /> : null}
                   </div>
-                  <h4>Hour-by-hour details <small>Target · done · short by {formatClockMinutes(snapshotMinutes)}</small></h4>
+                  <h4>Hour-by-hour details <small>Target · done · short · DT by {formatClockMinutes(snapshotMinutes)}</small></h4>
                   <div className="tl-plan-v2__hours">
                     {hours.map((hour) => {
                       const short = hour.done !== null && hour.dueNow !== null ? Math.max(0, hour.dueNow - hour.done) : null;
@@ -657,7 +659,7 @@ export function DailyPlanPanel({
                         <span>D {hour.done === null ? "—" : NUMBER.format(hour.done)}</span>
                         <span>S {short === null ? "—" : NUMBER.format(short)}</span>
                         <span className="tl-plan-v2__downtime">DT {downtimeMinutes}m</span>
-                        <div className="tl-plan-v2__hour-bar" aria-label={`${hour.label}: ${hour.done === null ? "actual output unavailable" : `${hour.done} done`}, ${short === null ? "shortage unavailable" : `${short} short`}`}><i style={{ width: `${green}%` }} /><b style={{ width: `${amber}%` }} /></div>
+                        <div className="tl-plan-v2__hour-bar" aria-label={`${hour.label}: ${hour.done === null ? "actual output unavailable" : `${hour.done} done`}, ${short === null ? "shortage unavailable" : `${short} short`}, ${downtimeMinutes} downtime minutes`}><i style={{ width: `${green}%` }} /><b style={{ width: `${amber}%` }} /></div>
                         <div className="tl-plan-v2__hour-actions">
                           <button
                             type="button"

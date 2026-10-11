@@ -118,7 +118,8 @@ test("Daily Plan matches the approved timeline reference", async ({
   await output.getByRole("button", { name: /Line 1 ▾/ }).click();
   await expect(output.getByRole("heading", { name: "Line 1 · Hourly details" })).toBeVisible();
   await expect(output.locator(".tl-plan-v2__hour")).toHaveCount(12);
-  await expect(output.locator(".tl-plan-v2__hour").first()).toContainText("D ");
+  await expect(output.getByRole("heading", { name: /Target · done · short · DT/ })).toBeVisible();
+  await expect(output.locator(".tl-plan-v2__hour").first()).toContainText(/T .*D .*S .*DT \d+m/);
   await expect(
     page.getByText(
       /Published plans are read-only\. Request a change for Operations Manager review\./i,
