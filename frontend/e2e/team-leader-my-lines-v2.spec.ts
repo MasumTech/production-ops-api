@@ -164,14 +164,68 @@ async function installThreeLineReferenceData(page: Page) {
     },
   ];
 
+  const planBlocks = assignments.map((assignment, index) => ({
+    id: 401 + index,
+    assignment: assignment.id,
+    assignment_date: operationalDate,
+    production_line: assignment.production_line,
+    production_line_code: assignment.production_line_code,
+    sequence_number: 1,
+    block_type: "production",
+    planned_start_at: `${operationalDate}T07:00:00+01:00`,
+    planned_end_at: `${operationalDate}T18:00:00+01:00`,
+    product_code: `SHOWCASE-${index + 1}`,
+    product_name: updates[index].current_product,
+    target_units_per_hour: [840, 600, 640][index],
+    planned_units: shifts[index].planned_output,
+    break_number: null,
+  }));
+
+  const hourlyOutputs = assignments.flatMap((assignment, index) =>
+    [7, 8, 9, 10].map((hour, hourIndex) => ({
+      id: 501 + index * 10 + hourIndex,
+      assignment: assignment.id,
+      assignment_date: operationalDate,
+      shift_type: "day",
+      production_line: assignment.production_line,
+      production_line_code: assignment.production_line_code,
+      hour_start_at: `${operationalDate}T${String(hour).padStart(2, "0")}:00:00+01:00`,
+      actual_units: [
+        [790, 805, 780, 760],
+        [520, 500, 475, 460],
+        [555, 520, 485, 420],
+      ][index][hourIndex],
+      updated_at: `${operationalDate}T${String(hour + 1).padStart(2, "0")}:00:00+01:00`,
+    })),
+  );
+
+  const downtimeEvents = [
+    {
+      id: 601,
+      shift: 303,
+      production_line: 3,
+      production_line_code: "DEMO-LINE-03",
+      shift_date: operationalDate,
+      started_at: `${operationalDate}T08:14:00+01:00`,
+      ended_at: `${operationalDate}T08:28:00+01:00`,
+      duration_minutes: 14,
+      reason_category: "quality",
+      description: "Quality hold investigation",
+      owner_group: "qa",
+      status: "resolved",
+      resolution_note: "Product isolated and checks completed",
+    },
+  ];
+
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
     const fixtures: Record<string, unknown> = {
       "/api/team-leader-assignments/my-lines/": assignments,
       "/api/hourly-line-updates/latest-status/": updates,
       "/api/shifts/": shifts,
-      "/api/downtime-events/": [],
-      "/api/daily-plan-blocks/": [],
+      "/api/downtime-events/": downtimeEvents,
+      "/api/daily-plan-blocks/": planBlocks,
+      "/api/hourly-outputs/": hourlyOutputs,
       "/api/product-material-readiness/": [],
       "/api/operational-escalations/": [],
       "/api/break-opportunities/": [],
@@ -218,5 +272,21 @@ test("My Lines matches the latest three-card reference", async ({ page }, testIn
     path: testInfo.outputPath("team-leader-my-lines-v2-reference.png"),
     animations: "disabled",
     fullPage: false,
+  });
+
+  await page.getByRole("button", {
+    name: "View hourly production details for Line 3",
+  }).click();
+  const hourlyDetails = page.getByRole("region", {
+    name: "Line 3 hourly production details",
+  });
+  await expect(hourlyDetails).toBeVisible();
+  await expect(hourlyDetails.getByText("T · D · S · DT", { exact: false })).toBeVisible();
+  await expect(hourlyDetails.getByText("DT 14m")).toBeVisible();
+  await expect(hourlyDetails.getByText("D 520")).toBeVisible();
+
+  await page.locator(".team-control-card").first().screenshot({
+    path: testInfo.outputPath("team-leader-my-lines-hourly-details.png"),
+    animations: "disabled",
   });
 });

@@ -108,13 +108,60 @@ const data: WorkspaceData = {
   ],
   materials: [],
   escalations: [],
-  planBlocks: [],
+  planBlocks: assignments.map((assignment, index) => ({
+    id: 100 + index,
+    assignment: assignment.id,
+    assignment_date: assignment.date,
+    production_line: assignment.production_line,
+    production_line_code: assignment.production_line_code,
+    sequence_number: 1,
+    block_type: "production" as const,
+    planned_start_at: `${assignment.date}T07:00:00+01:00`,
+    planned_end_at: `${assignment.date}T18:00:00+01:00`,
+    product_code: `PRODUCT-${index + 1}`,
+    product_name: index ? "Oat Milk Chai" : "Salt & Pepper Chicken",
+    target_units_per_hour: index ? 600 : 840,
+    planned_units: index ? 6000 : 8400,
+    break_number: null,
+  })),
+  hourlyOutputs: [
+    {
+      id: 70,
+      assignment: 2,
+      hour_start_at: "2026-09-12T07:00:00+01:00",
+      actual_units: 520,
+      updated_at: "2026-09-12T08:00:00+01:00",
+    },
+    {
+      id: 71,
+      assignment: 1,
+      hour_start_at: "2026-09-12T07:00:00+01:00",
+      actual_units: 780,
+      updated_at: "2026-09-12T08:00:00+01:00",
+    },
+  ],
   breakOpportunities: [],
   breaks: [],
   handovers: [],
   users: [],
   shifts,
-  downtimeEvents: [],
+  downtimeEvents: [
+    {
+      id: 90,
+      shift: 21,
+      production_line: 102,
+      production_line_code: "DEMO-LINE-02",
+      shift_date: "2026-09-12",
+      started_at: "2026-09-12T07:10:00+01:00",
+      ended_at: "2026-09-12T07:18:00+01:00",
+      duration_minutes: 8,
+      reason_category: "equipment",
+      description: "Sealer temperature recovery",
+      owner_group: "engineering",
+      status: "resolved",
+      resolution_note: "Temperature stabilised",
+    },
+  ],
 };
 
 afterEach(() => vi.restoreAllMocks());
@@ -223,6 +270,46 @@ describe("Team Leader My Lines v2", () => {
 
     await actor.click(updateButtons[1]);
     expect(onRaiseIssue).toHaveBeenLastCalledWith(assignments[1].id, "update");
+  });
+
+  it("expands one line at a time with hourly target, done, short and downtime", async () => {
+    const actor = userEvent.setup();
+
+    render(<MyLinesPanel data={data} onRaiseIssue={vi.fn()} />);
+
+    await actor.click(
+      screen.getByRole("button", {
+        name: "View hourly production details for Line 2",
+      }),
+    );
+
+    const lineTwoDetails = screen.getByRole("region", {
+      name: "Line 2 hourly production details",
+    });
+    expect(
+      within(lineTwoDetails).getByText("Line 2 · Oat Milk Chai"),
+    ).toBeInTheDocument();
+    expect(within(lineTwoDetails).getByText("D 520")).toBeInTheDocument();
+    expect(within(lineTwoDetails).getByText("DT 8m")).toBeInTheDocument();
+    expect(within(lineTwoDetails).getAllByText(/^T /).length).toBeGreaterThan(0);
+    expect(within(lineTwoDetails).getAllByText(/^S /).length).toBeGreaterThan(0);
+
+    await actor.click(
+      screen.getByRole("button", {
+        name: "View hourly production details for Line 1",
+      }),
+    );
+
+    expect(
+      screen.queryByRole("region", {
+        name: "Line 2 hourly production details",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("region", {
+        name: "Line 1 hourly production details",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("records downtime from the selected Team Leader line", async () => {
