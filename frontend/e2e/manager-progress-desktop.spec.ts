@@ -24,6 +24,8 @@ test("manager progress views render at desktop width with recorded hourly detail
   await expect(page.locator(".manager-leader-progress-card")).toHaveCount(3);
   await expect(page.locator(".manager-leader-progress-line")).toHaveCount(6);
   await expect(page.locator(".manager-leader-progress-grid")).toHaveCSS("grid-template-columns", /\d+px \d+px/);
+  await expect(page.locator(".manager-leader-hours span").first()).toContainText(/T .* · D .* · S /);
+  await expect(page.locator(".manager-leader-hours .manager-hour-downtime").first()).toContainText(/DT \d+ min/);
   await page.screenshot({ path: testInfo.outputPath("manager-progress-team-leaders-desktop.png"), animations: "disabled", fullPage: true });
 
   await nav.getByRole("button", { name: "Daily plans" }).click();
@@ -33,6 +35,7 @@ test("manager progress views render at desktop width with recorded hourly detail
   await expect(page.locator(".manager-output-detail")).toBeVisible();
   await expect(page.getByText("Shift attainment")).toBeVisible();
   await expect(page.locator(".manager-output-hour").first()).toBeVisible();
+  await expect(page.locator(".manager-output-hour").first()).toContainText(/T .* · D .* · S .* · DT \d+ min/);
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: testInfo.outputPath("manager-progress-daily-plans-desktop.png"), animations: "disabled", fullPage: true });
 

@@ -11,7 +11,7 @@ export interface HourlyOutputContext {
   hourLabel: string;
   hourStartAt: string;
   target: number | null;
-  downtimeMinutes?: number;
+  downtimeMinutes: number;
   output: HourlyOutput | null;
 }
 
@@ -56,8 +56,9 @@ export function HourlyOutputEditor({
       rework,
       handled,
       yieldPercent: handled ? Math.round((good / handled) * 1000) / 10 : 0,
+      short: context.target === null ? null : Math.max(0, context.target - good),
     };
-  }, [actualUnits, rejectedUnits, reworkUnits]);
+  }, [actualUnits, context.target, rejectedUnits, reworkUnits]);
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
@@ -163,9 +164,7 @@ export function HourlyOutputEditor({
               {context.target === null
                 ? "Hourly target is unavailable."
                 : `Hourly target ${NUMBER.format(context.target)} units.`}
-              {context.downtimeMinutes === undefined
-                ? ""
-                : ` Downtime ${NUMBER.format(context.downtimeMinutes)} min.`}
+              {` Downtime ${NUMBER.format(context.downtimeMinutes)} min.`}
             </p>
           </div>
           <button type="button" aria-label="Close hourly production" onClick={onClose}>×</button>
@@ -222,22 +221,13 @@ export function HourlyOutputEditor({
             </label>
           </div>
 
-          <div className={`hourly-output-editor__summary${context.downtimeMinutes === undefined ? "" : " has-downtime"}`} aria-label="Hourly production summary">
+          <div className="hourly-output-editor__summary has-downtime" aria-label="Hourly target, done, short and downtime summary">
+            <div><span>Target</span><strong>{context.target === null ? "—" : NUMBER.format(context.target)}</strong></div>
+            <div><span>Done</span><strong>{NUMBER.format(totals.good)}</strong></div>
+            <div><span>Short</span><strong>{totals.short === null ? "—" : NUMBER.format(totals.short)}</strong></div>
+            <div><span>DT</span><strong>{NUMBER.format(context.downtimeMinutes)} min</strong></div>
             <div><span>Total handled</span><strong>{NUMBER.format(totals.handled)}</strong></div>
             <div><span>First-pass yield</span><strong>{totals.yieldPercent}%</strong></div>
-            <div>
-              <span>Target position</span>
-              <strong>
-                {context.target === null
-                  ? "—"
-                  : totals.good >= context.target
-                    ? `${NUMBER.format(totals.good - context.target)} ahead`
-                    : `${NUMBER.format(context.target - totals.good)} short`}
-              </strong>
-            </div>
-            {context.downtimeMinutes === undefined ? null : (
-              <div><span>Downtime</span><strong>{NUMBER.format(context.downtimeMinutes)} min</strong></div>
-            )}
           </div>
 
           <label>

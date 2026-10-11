@@ -11,6 +11,7 @@ const newOutputContext: HourlyOutputContext = {
   hourLabel: "07:00–08:00",
   hourStartAt: "2026-09-04T07:00:00Z",
   target: 800,
+  downtimeMinutes: 4,
   output: null,
 };
 
@@ -40,7 +41,14 @@ describe("HourlyOutputEditor", () => {
     await actor.type(within(dialog).getByLabelText("Rework units"), "2");
     await actor.type(within(dialog).getByLabelText("Production note"), "Verified counter reading");
 
-    expect(within(dialog).getByText("10 short")).toBeInTheDocument();
+    const summary = within(dialog).getByLabelText("Hourly target, done, short and downtime summary");
+    expect(within(summary).getByText("Target")).toBeInTheDocument();
+    expect(within(summary).getByText("Done")).toBeInTheDocument();
+    expect(within(summary).getByText("Short")).toBeInTheDocument();
+    expect(within(summary).getByText("DT")).toBeInTheDocument();
+    expect(within(summary).getByText("790")).toBeInTheDocument();
+    expect(within(summary).getByText("10")).toBeInTheDocument();
+    expect(within(summary).getByText("4 min")).toBeInTheDocument();
     await actor.click(within(dialog).getByRole("button", { name: "Record output" }));
 
     await waitFor(() => expect(request).toHaveBeenCalledWith(

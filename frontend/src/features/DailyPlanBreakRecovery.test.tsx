@@ -222,6 +222,21 @@ describe("daily plan and break opportunity workspace", () => {
 
   it("expands the selected output row with recorded hourly actuals", async () => {
     const actor = userEvent.setup();
+    const downtime: DowntimeEvent = {
+      id: 55,
+      shift: shift.id,
+      production_line: assignment.production_line,
+      production_line_code: assignment.production_line_code,
+      shift_date: assignment.date,
+      started_at: "2026-09-04T07:05:00+01:00",
+      ended_at: "2026-09-04T07:09:00+01:00",
+      duration_minutes: 4,
+      reason_category: "equipment",
+      description: "Printer sensor fault",
+      owner_group: "engineering",
+      status: "resolved",
+      resolution_note: "Sensor reset",
+    };
     render(
       <DailyPlanPanel
         assignments={[assignment]}
@@ -229,11 +244,18 @@ describe("daily plan and break opportunity workspace", () => {
         shifts={[shift]}
         updates={[update]}
         hourlyOutputs={[{ id: 3, assignment: assignment.id, hour_start_at: "2026-09-04T07:00:00Z", actual_units: 790, updated_at: "2026-09-04T08:00:00Z" }]}
+        downtimeEvents={[downtime]}
+        live
       />,
     );
     await actor.click(screen.getByRole("button", { name: /Line 3 ▾/ }));
     expect(screen.getByRole("heading", { name: "Line 3 · Hourly details" })).toBeInTheDocument();
     expect(screen.getByText("D 790")).toBeInTheDocument();
+    expect(screen.getByText("DT 4m")).toBeInTheDocument();
+    await actor.click(screen.getByRole("button", { name: "Record output for 07:00–08:00" }));
+    const editor = screen.getByRole("dialog", { name: "Line 3 · 07:00–08:00" });
+    expect(within(editor).getByLabelText("Hourly target, done, short and downtime summary")).toHaveTextContent("DT4 min");
+    await actor.click(within(editor).getByRole("button", { name: "Close hourly production" }));
     expect(screen.getByRole("button", { name: /Line 3 ▴/ })).toHaveAttribute("aria-expanded", "true");
     await actor.click(screen.getByRole("button", { name: "Close details" }));
     expect(screen.queryByRole("heading", { name: "Line 3 · Hourly details" })).not.toBeInTheDocument();

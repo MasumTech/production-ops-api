@@ -489,7 +489,7 @@ export function MyLinesPanel({
 
                   <div className={`team-control-state team-control-state--${line.status}`}>
                     <div>
-                      <strong>{liveGap ? "BEHIND NOW" : status.title}</strong>
+                      <strong>{line.status === "red" || !liveGap ? status.title : "BEHIND NOW"}</strong>
                       <small>{status.detail}</small>
                     </div>
                     <div className="team-control-state__gap">
