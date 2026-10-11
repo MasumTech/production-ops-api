@@ -3,12 +3,6 @@ import { useMemo, useState } from "react";
 import { AppIcon } from "../AppIcon";
 import { ApiError, OfflineQueuedError, postJson } from "../api";
 import { EmptyState } from "../components";
-import {
-  dateTimeToShiftMinutes,
-  formatClockMinutes,
-  getShiftWindow,
-  type ShiftWindow,
-} from "../shiftTiming";
 import type {
   Assignment,
   DowntimeEvent,
@@ -17,8 +11,6 @@ import type {
   ShiftRecord,
   WorkspaceData,
 } from "../types";
-import { hourlyPlan, type PlanHour } from "./dailyPlanMath";
-import "./myLinesHourlyDetails.css";
 
 type LineView = {
   assignment: Assignment;
@@ -206,27 +198,6 @@ function snapshotTime(lines: LineView[]): number {
   return recordedTimes.length ? Math.max(...recordedTimes) : Date.now();
 }
 
-function downtimeMinutesForHour(
-  events: DowntimeEvent[],
-  shift: ShiftRecord | undefined,
-  hour: PlanHour,
-  window: ShiftWindow,
-): number {
-  if (!shift) return 0;
-  return events
-    .filter((event) => event.shift === shift.id)
-    .reduce((total, event) => {
-      const started = dateTimeToShiftMinutes(event.started_at, window);
-      const ended = event.ended_at
-        ? dateTimeToShiftMinutes(event.ended_at, window)
-        : hour.endMinutes;
-      return total + Math.max(
-        0,
-        Math.min(hour.endMinutes, ended) - Math.max(hour.startMinutes, started),
-      );
-    }, 0);
-}
-
 function dueCopy(line: LineView, referenceTime: number): string {
   const due = line.update?.next_update_due_at;
   if (!due) return "Not set";
@@ -334,7 +305,6 @@ export function MyLinesPanel({
   const [downtimeResolution, setDowntimeResolution] = useState("");
   const [downtimeSaving, setDowntimeSaving] = useState(false);
   const [downtimeMessage, setDowntimeMessage] = useState("");
-  const [expandedLineId, setExpandedLineId] = useState<number | null>(null);
   const referenceTime = useMemo(() => snapshotTime(lines), [lines]);
   const counts = useMemo(
     () => ({
@@ -498,33 +468,10 @@ export function MyLinesPanel({
               const targetMarker = line.planned
                 ? clamp((nowTarget / line.planned) * 100, 0, 100)
                 : 0;
-              const expanded = expandedLineId === line.assignment.id;
               const displayName = lineLabel(
                 line.assignment.production_line_code,
                 index,
               );
-              const lineWindow = getShiftWindow(
-                line.assignment.date,
-                line.shift ? [line.shift] : data.shifts,
-                line.assignment.shift_type,
-              );
-              const snapshotMinutes = dateTimeToShiftMinutes(
-                new Date(referenceTime).toISOString(),
-                lineWindow,
-              );
-              const hours = expanded
-                ? hourlyPlan(
-                    data.planBlocks.filter(
-                      (block) => block.assignment === line.assignment.id,
-                    ),
-                    (data.hourlyOutputs ?? []).filter(
-                      (output) => output.assignment === line.assignment.id,
-                    ),
-                    lineWindow,
-                    line.shift,
-                    snapshotMinutes,
-                  )
-                : [];
               return (
                 <article
                   className={`team-control-card team-control-card--${line.status}`}
@@ -618,96 +565,6 @@ export function MyLinesPanel({
                       tone={liveGap ? "amber" : "green"}
                     />
                   </div>
-
-                  <button
-                    type="button"
-                    className="team-hourly-toggle"
-                    aria-expanded={expanded}
-                    aria-controls={`team-hourly-detail-${line.assignment.id}`}
-                    aria-label={`${expanded ? "Hide" : "View"} hourly production details for ${displayName}`}
-                    onClick={() =>
-                      setExpandedLineId(expanded ? null : line.assignment.id)
-                    }
-                  >
-                    <span>
-                      <AppIcon name="chart" size={19} />
-                      {expanded ? "Hide hourly details" : "View hourly details"}
-                    </span>
-                    <b aria-hidden="true">{expanded ? "−" : "+"}</b>
-                  </button>
-
-                  {expanded ? (
-                    <section
-                      className="team-hourly-detail"
-                      id={`team-hourly-detail-${line.assignment.id}`}
-                      role="region"
-                      aria-label={`${displayName} hourly production details`}
-                    >
-                      <header>
-                        <div>
-                          <span>Hourly production</span>
-                          <strong>{displayName} · {line.product}</strong>
-                        </div>
-                        <small>
-                          T · D · S · DT by {formatClockMinutes(snapshotMinutes)}
-                        </small>
-                      </header>
-                      <div className="team-hourly-detail__summary">
-                        <div><span>Target</span><strong>{formatNumber(line.planned)}</strong></div>
-                        <div><span>Done</span><strong>{formatNumber(line.actual)}</strong></div>
-                        <div><span>Short</span><strong>{formatNumber(planGap)}</strong></div>
-                        <div><span>DT</span><strong>{line.downtime} min</strong></div>
-                      </div>
-                      <div className="tl-plan-v2__hours">
-                        {hours.map((hour) => {
-                          const short =
-                            hour.done !== null && hour.dueNow !== null
-                              ? Math.max(0, hour.dueNow - hour.done)
-                              : null;
-                          const green =
-                            hour.target && hour.done !== null
-                              ? Math.min(100, (hour.done / hour.target) * 100)
-                              : 0;
-                          const amber =
-                            hour.target && short !== null
-                              ? Math.min(100 - green, (short / hour.target) * 100)
-                              : 0;
-                          const downtimeMinutes = downtimeMinutesForHour(
-                            data.downtimeEvents,
-                            line.shift,
-                            hour,
-                            lineWindow,
-                          );
-                          return (
-                            <article
-                              className={`tl-plan-v2__hour${hour.current ? " is-current" : ""}${downtimeMinutes ? " has-downtime" : ""}`}
-                              key={hour.label}
-                              aria-label={`${hour.label}, ${downtimeMinutes} downtime minutes.`}
-                            >
-                              <strong>{hour.label}</strong>
-                              <span>{hour.breakMinutes ? `${hour.breakMinutes}m break` : "Production"}</span>
-                              <span>T {hour.target === null ? "—" : formatNumber(hour.target)}</span>
-                              <span>D {hour.done === null ? "—" : formatNumber(hour.done)}</span>
-                              <span>S {short === null ? "—" : formatNumber(short)}</span>
-                              <span className="tl-plan-v2__downtime">DT {downtimeMinutes}m</span>
-                              <div
-                                className="tl-plan-v2__hour-bar"
-                                aria-label={`${hour.label}: ${hour.done === null ? "actual output unavailable" : `${hour.done} done`}, ${short === null ? "shortage unavailable" : `${short} short`}, ${downtimeMinutes} downtime minutes`}
-                              >
-                                <i style={{ width: `${green}%` }} />
-                                <b style={{ width: `${amber}%` }} />
-                              </div>
-                            </article>
-                          );
-                        })}
-                      </div>
-                      {!hours.some((hour) => hour.done !== null) ? (
-                        <p className="team-hourly-detail__note">
-                          Hourly actuals have not been recorded yet. Targets and downtime are still shown.
-                        </p>
-                      ) : null}
-                    </section>
-                  ) : null}
 
                   <div className="team-control-action-stack">
                     <section>

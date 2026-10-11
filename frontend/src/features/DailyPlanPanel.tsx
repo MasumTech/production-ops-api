@@ -648,7 +648,8 @@ export function DailyPlanPanel({
                   <h4>Hour-by-hour details <small>Target · done · short · DT by {formatClockMinutes(snapshotMinutes)}</small></h4>
                   <div className="tl-plan-v2__hours">
                     {hours.map((hour) => {
-                      const short = hour.done !== null && hour.dueNow !== null ? Math.max(0, hour.dueNow - hour.done) : null;
+                      const targetDue = hour.future ? hour.target : hour.dueNow;
+                      const short = hour.done !== null && targetDue !== null ? Math.max(0, targetDue - hour.done) : null;
                       const green = hour.target && hour.done !== null ? Math.min(100, hour.done / hour.target * 100) : 0;
                       const amber = hour.target && short !== null ? Math.min(100 - green, short / hour.target * 100) : 0;
                       const downtimeMinutes = downtimeMinutesForHour(shift, hour);
@@ -664,7 +665,7 @@ export function DailyPlanPanel({
                           <button
                             type="button"
                             aria-label={`${hour.done === null ? "Record" : "Edit"} output for ${hour.label}`}
-                            disabled={!shift || !live || hour.future}
+                            disabled={!shift || !live}
                             onClick={() => openOutputHour(assignment, hour)}
                           >
                             {hour.done === null ? "Record output" : "Edit output"}

@@ -274,19 +274,15 @@ test("My Lines matches the latest three-card reference", async ({ page }, testIn
     fullPage: false,
   });
 
-  await page.getByRole("button", {
-    name: "View hourly production details for Line 3",
-  }).click();
-  const hourlyDetails = page.getByRole("region", {
-    name: "Line 3 hourly production details",
-  });
-  await expect(hourlyDetails).toBeVisible();
-  await expect(hourlyDetails.getByText("T · D · S · DT", { exact: false })).toBeVisible();
-  await expect(hourlyDetails.getByText("DT 14m")).toBeVisible();
-  await expect(hourlyDetails.getByText("D 520")).toBeVisible();
+  await expect(page.getByRole("button", {
+    name: /hourly production details/i,
+  })).toHaveCount(0);
+  await expect(page.getByRole("region", {
+    name: /hourly production details/i,
+  })).toHaveCount(0);
 
   await page.locator(".team-control-card").first().screenshot({
-    path: testInfo.outputPath("team-leader-my-lines-v2-hourly-details.png"),
+    path: testInfo.outputPath("team-leader-my-lines-v2-card.png"),
     animations: "disabled",
   });
 });
