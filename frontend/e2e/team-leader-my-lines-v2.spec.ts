@@ -286,7 +286,7 @@ test("My Lines matches the latest three-card reference", async ({ page }, testIn
   await expect(hourlyDetails.getByText("D 520")).toBeVisible();
 
   await page.locator(".team-control-card").first().screenshot({
-    path: testInfo.outputPath("team-leader-my-lines-hourly-details.png"),
+    path: testInfo.outputPath("team-leader-my-lines-v2-hourly-details.png"),
     animations: "disabled",
   });
 });
