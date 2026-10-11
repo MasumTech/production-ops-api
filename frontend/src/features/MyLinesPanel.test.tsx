@@ -272,44 +272,10 @@ describe("Team Leader My Lines v2", () => {
     expect(onRaiseIssue).toHaveBeenLastCalledWith(assignments[1].id, "update");
   });
 
-  it("expands one line at a time with hourly target, done, short and downtime", async () => {
-    const actor = userEvent.setup();
-
+  it("keeps hourly production details out of My Lines", () => {
     render(<MyLinesPanel data={data} onRaiseIssue={vi.fn()} />);
-
-    await actor.click(
-      screen.getByRole("button", {
-        name: "View hourly production details for Line 2",
-      }),
-    );
-
-    const lineTwoDetails = screen.getByRole("region", {
-      name: "Line 2 hourly production details",
-    });
-    expect(
-      within(lineTwoDetails).getByText("Line 2 · Oat Milk Chai"),
-    ).toBeInTheDocument();
-    expect(within(lineTwoDetails).getByText("D 520")).toBeInTheDocument();
-    expect(within(lineTwoDetails).getByText("DT 8m")).toBeInTheDocument();
-    expect(within(lineTwoDetails).getAllByText(/^T /).length).toBeGreaterThan(0);
-    expect(within(lineTwoDetails).getAllByText(/^S /).length).toBeGreaterThan(0);
-
-    await actor.click(
-      screen.getByRole("button", {
-        name: "View hourly production details for Line 1",
-      }),
-    );
-
-    expect(
-      screen.queryByRole("region", {
-        name: "Line 2 hourly production details",
-      }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("region", {
-        name: "Line 1 hourly production details",
-      }),
-    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /hourly production details/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: /hourly production details/i })).not.toBeInTheDocument();
   });
 
   it("records downtime from the selected Team Leader line", async () => {

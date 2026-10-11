@@ -101,7 +101,9 @@ export function hourlyPlan(
       label: `${formatClockMinutes(from)}–${formatClockMinutes(to)}`,
       target: available && base !== null && full !== null ? full - base : null,
       dueNow: available && !future && base !== null && due !== null ? due - base : null,
-      done: !future && output ? output.actual_units : null,
+      // Keep a recorded value visible even when it was entered ahead of the
+      // current clock. Today's full shift is intentionally open for entry.
+      done: output ? output.actual_units : null,
       breakMinutes,
       future,
       current: !future && snapshotMinutes < to,

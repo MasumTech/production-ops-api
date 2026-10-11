@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -123,7 +123,10 @@ const opportunity: BreakOpportunity = {
   decline_reason: "",
 };
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 describe("daily plan and break opportunity workspace", () => {
   it("uses the configured shift time in the timeline board", () => {
@@ -259,6 +262,27 @@ describe("daily plan and break opportunity workspace", () => {
     expect(screen.getByRole("button", { name: /Line 3 ▴/ })).toHaveAttribute("aria-expanded", "true");
     await actor.click(screen.getByRole("button", { name: "Close details" }));
     expect(screen.queryByRole("heading", { name: "Line 3 · Hourly details" })).not.toBeInTheDocument();
+  });
+
+  it("allows the assigned Team Leader to enter any hour in today's live shift", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-04T07:30:00+01:00"));
+
+    render(
+      <DailyPlanPanel
+        assignments={[assignment]}
+        planBlocks={planBlocks}
+        shifts={[shift]}
+        updates={[update]}
+        live
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Line 3 ▾/ }));
+
+    expect(
+      screen.getByRole("button", { name: "Record output for 17:00–18:00" }),
+    ).toBeEnabled();
   });
 
   it("lets the assigned Team Leader add, update and delete hourly downtime", async () => {

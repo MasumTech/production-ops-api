@@ -31,6 +31,12 @@ test("manager progress views render at desktop width with recorded hourly detail
   await nav.getByRole("button", { name: "Daily plans" }).click();
   await expect(page.locator(".daily-plan-row")).toHaveCount(6);
   await expect(page.locator(".daily-plan-block--production").first()).toBeVisible();
+  const compactBlocks = page.locator(".daily-plan-block.is-compact");
+  expect(await compactBlocks.count()).toBeGreaterThan(0);
+  await expect(compactBlocks.first().locator(":scope > span")).toBeHidden();
+  expect(await page.locator(".daily-plan-block").evaluateAll((blocks) =>
+    blocks.every((block) => block.scrollWidth <= block.clientWidth),
+  )).toBe(true);
   await page.locator(".manager-output-open").first().click();
   await expect(page.locator(".manager-output-detail")).toBeVisible();
   await expect(page.getByText("Shift attainment")).toBeVisible();

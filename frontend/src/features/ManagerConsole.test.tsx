@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -217,6 +217,7 @@ const data: ManagerWorkspaceData = {
 };
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -607,6 +608,84 @@ describe("manager console", () => {
     await actor.click(screen.getByRole("button", { name: /Product A/ }));
     await actor.click(screen.getByRole("button", { name: "Delete block" }));
     expect(request).toHaveBeenCalledWith("/daily-plan-blocks/70/", { method: "DELETE" });
+  });
+
+  it("allows a manager to enter a future hour on today's assigned line", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-11T07:30:00+01:00"));
+    const today = localDate();
+    const productionBlock = (data.planBlocks ?? [])[0];
+    expect(productionBlock).toBeDefined();
+    const currentData: ManagerWorkspaceData = {
+      ...data,
+      assignments: data.assignments.map((assignment) => ({ ...assignment, date: today })),
+      shifts: data.shifts.map((shift) => ({ ...shift, date: today })),
+      planBlocks: [
+        {
+          ...productionBlock,
+          assignment_date: today,
+          planned_start_at: `${today}T07:00:00+01:00`,
+          planned_end_at: `${today}T09:00:00+01:00`,
+        },
+        {
+          ...productionBlock,
+          id: 62,
+          sequence_number: 2,
+          block_type: "break",
+          assignment_date: today,
+          planned_start_at: `${today}T09:00:00+01:00`,
+          planned_end_at: `${today}T09:40:00+01:00`,
+          product_code: "",
+          product_name: "",
+          target_units_per_hour: null,
+          planned_units: 0,
+          break_number: 1,
+        },
+        {
+          ...productionBlock,
+          id: 63,
+          sequence_number: 3,
+          assignment_date: today,
+          planned_start_at: `${today}T09:40:00+01:00`,
+          planned_end_at: `${today}T18:00:00+01:00`,
+        },
+      ],
+      hourlyOutputs: [],
+    };
+
+    render(
+      <ManagerConsole
+        profile={profile}
+        data={currentData}
+        operationalDate={today}
+        shiftPattern="day"
+        lastUpdatedAt={`${today}T07:30:00+01:00`}
+        online
+        liveState="live"
+        busy={false}
+        error=""
+        onDateChange={vi.fn()}
+        onShiftPatternChange={vi.fn()}
+        onRefresh={vi.fn()}
+        onSignOut={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(
+      within(screen.getByRole("navigation", { name: "Manager sections" })).getByRole(
+        "button",
+        { name: "Daily plans" },
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Line 2 ▾" }));
+
+    const compactBreak = screen.getByRole("button", { name: "Break 1, 09:00 to 09:40" });
+    expect(compactBreak).toHaveClass("is-compact");
+    expect(compactBreak).toHaveAttribute("title", "Break 1 · 09:00–09:40");
+
+    const futureHour = screen.getByText("17:00–18:00").closest(".manager-output-hour");
+    expect(futureHour).not.toBeNull();
+    expect(within(futureHour as HTMLElement).getByRole("button", { name: "Record output" })).toBeEnabled();
   });
 
   it("releases held material and raises a complete material escalation", async () => {

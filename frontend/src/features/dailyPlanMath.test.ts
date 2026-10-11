@@ -31,4 +31,10 @@ describe("Daily Plan output curve", () => {
     expect(hours[2]).toMatchObject({ label: "09:00–10:00", breakMinutes: 40, target: 34, done: 12, dueNow: 34 });
     expect(hours[3]).toMatchObject({ label: "10:00–11:00", current: true, done: null, dueNow: 17 });
   });
+
+  it("keeps an output entered for a later hour visible", () => {
+    const outputs: HourlyOutput[] = [{ id: 2, assignment: 1, hour_start_at: "2026-09-25T10:00:00+01:00", actual_units: 58, updated_at: "2026-09-25T08:15:00+01:00" }];
+    const hours = hourlyPlan(blocks, outputs, window, shift, 490);
+    expect(hours[3]).toMatchObject({ label: "10:00–11:00", future: true, target: 102, done: 58, dueNow: null });
+  });
 });
