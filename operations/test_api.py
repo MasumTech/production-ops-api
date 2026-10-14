@@ -3041,7 +3041,7 @@ def test_draft_plan_rejects_hourly_output(
 
 
 @pytest.mark.django_db
-def test_plan_block_creation_rejects_non_sequential_start(
+def test_plan_block_creation_allows_an_available_custom_start(
     staff_client,
     api_daily_break_block,
 ):
@@ -3061,8 +3061,34 @@ def test_plan_block_creation_rejects_non_sequential_start(
         format="json",
     )
 
+    assert response.status_code == status.HTTP_201_CREATED
+    created = DailyPlanBlock.objects.get(product_code="NEXT-01")
+    assert timezone.localtime(created.planned_start_at).time() == time(10)
+
+
+@pytest.mark.django_db
+def test_plan_block_creation_rejects_a_booked_start(
+    staff_client,
+    api_daily_break_block,
+):
+    assignment = api_daily_break_block.assignment
+
+    response = staff_client.post(
+        reverse("daily-plan-block-list"),
+        {
+            "assignment": assignment.id,
+            "block_type": DailyPlanBlock.BlockType.PRODUCTION,
+            "planned_start_at": at_assignment_time(assignment, 9, 20).isoformat(),
+            "planned_end_at": at_assignment_time(assignment, 10, 20).isoformat(),
+            "product_code": "OVERLAP-01",
+            "product_name": "Overlapping product",
+            "target_units_per_hour": 60,
+        },
+        format="json",
+    )
+
     assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert "09:40" in str(response.data)
+    assert "cannot overlap" in str(response.data)
 
 
 @pytest.mark.django_db
