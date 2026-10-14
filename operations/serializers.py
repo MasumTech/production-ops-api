@@ -1842,23 +1842,12 @@ class DailyPlanBlockSerializer(serializers.ModelSerializer):
                 assignment=assignment
             ).order_by("planned_end_at", "sequence_number")
             previous = existing_blocks.last()
-            expected_start = (
+            suggested_start = (
                 previous.planned_end_at
                 if previous
                 else self._shift_bounds(assignment)[0]
             )
-            supplied_start = attrs.get("planned_start_at")
-            if supplied_start and supplied_start != expected_start:
-                raise serializers.ValidationError(
-                    {
-                        "planned_start_at": (
-                            "This time is already allocated or unavailable. "
-                            f"The next plan block must start at "
-                            f"{timezone.localtime(expected_start):%H:%M}."
-                        )
-                    }
-                )
-            attrs["planned_start_at"] = expected_start
+            attrs["planned_start_at"] = attrs.get("planned_start_at", suggested_start)
             attrs["sequence_number"] = (
                 max(
                     existing_blocks.values_list("sequence_number", flat=True),
@@ -1869,7 +1858,9 @@ class DailyPlanBlockSerializer(serializers.ModelSerializer):
             if attrs.get(
                 "block_type"
             ) == DailyPlanBlock.BlockType.BREAK and not attrs.get("planned_end_at"):
-                attrs["planned_end_at"] = expected_start + timedelta(minutes=40)
+                attrs["planned_end_at"] = attrs["planned_start_at"] + timedelta(
+                    minutes=40
+                )
 
         instance = DailyPlanBlock(
             assignment=assignment,

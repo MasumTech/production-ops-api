@@ -590,6 +590,10 @@ describe("manager console", () => {
     expect(within(leaderSelect).getAllByRole("option")).toHaveLength(16);
     expect(within(leaderSelect).getByRole("option", { name: "Team Leader 15" })).toBeEnabled();
     await actor.selectOptions(within(addDialog).getByLabelText("Production line"), "2");
+    const suggestedStart = within(addDialog).getByLabelText(
+      "Start · suggested next available",
+    );
+    expect(suggestedStart).not.toHaveAttribute("readonly");
     await actor.type(within(addDialog).getByLabelText("Product code"), "NEW-01");
     await actor.type(within(addDialog).getByLabelText("Product name"), "New product");
     await actor.type(within(addDialog).getByLabelText("Target units / hour"), "120");
