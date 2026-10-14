@@ -142,6 +142,18 @@ test("Daily Plan matches the approved timeline reference", async ({
   });
 });
 
+test("published current plan enables hourly output and downtime", async ({ page }) => {
+  await page.clock.install({ time: new Date(`${operationalDate}T08:00:00Z`) });
+  await signInAsTeamLeader(page);
+  const workspace = page.locator('aside[aria-label="Team Leader workspace"]');
+  await workspace.getByRole("button", { name: "Daily Plan" }).click();
+  await page.getByRole("button", { name: /Line 1 ▾/ }).click();
+
+  const futureHour = page.locator(".tl-plan-v2__hour").filter({ hasText: "17:00–18:00" });
+  await expect(futureHour.getByRole("button", { name: "Record output for 17:00–18:00" })).toBeEnabled();
+  await expect(futureHour.getByRole("button", { name: /Manage downtime for 17:00–18:00/ })).toBeEnabled();
+});
+
 test("Request plan change routes to the selected-line review workflow", async ({
   page,
 }) => {

@@ -13,7 +13,7 @@ import {
   HourlyOutputEditor,
   type HourlyOutputContext,
 } from "../HourlyOutputEditor";
-import { formatDateTime, localDate, titleCase } from "../format";
+import { formatDateTime, isCurrentOperationalDate, localDate, titleCase } from "../format";
 import { escalationRole } from "../operationalRoles";
 import { NotificationCentre } from "../NotificationCentre";
 import { AppIcon, type AppIconName } from "../AppIcon";
@@ -455,7 +455,7 @@ export function ManagerConsole({
   const [selectedDowntimeLine, setSelectedDowntimeLine] = useState<number | null>(null);
   const [selectedLineId, setSelectedLineId] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<ManagerViewMode>(
-    operationalDate === localDate() ? "live" : "historical",
+    isCurrentOperationalDate(operationalDate, shiftPattern) ? "live" : "historical",
   );
   const [navigationOpen, setNavigationOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -519,12 +519,21 @@ export function ManagerConsole({
   const [selectedDowntimeEventId, setSelectedDowntimeEventId] = useState<number | null>(null);
   const [downtimeEditorOpen, setDowntimeEditorOpen] = useState(false);
   const [downtimeDescription, setDowntimeDescription] = useState("");
+  const [downtimeReason, setDowntimeReason] = useState<DowntimeEvent["reason_category"]>("equipment");
+  const [downtimeOwner, setDowntimeOwner] = useState<DowntimeEvent["owner_group"]>("operations");
   const [downtimeEndedAt, setDowntimeEndedAt] = useState("");
   const [managerComment, setManagerComment] = useState("");
   const [downtimeSaving, setDowntimeSaving] = useState(false);
   const [downtimeMessage, setDowntimeMessage] = useState("");
+  const [newDowntimeContext, setNewDowntimeContext] = useState<{
+    shiftId: number;
+    lineLabel: string;
+    hourLabel: string;
+    startedAt: string;
+    maximumEndAt: string;
+  } | null>(null);
   const rows = useMemo(() => buildManagerRows(data, shiftPattern), [data, shiftPattern]);
-  const isHistorical = operationalDate !== localDate();
+  const isHistorical = !isCurrentOperationalDate(operationalDate, shiftPattern);
   const visibleRows = useMemo(
     () => rows.filter((row) => matchesFilter(row, filter) && (lineFilter === "all" || String(row.assignment.production_line) === lineFilter)),
     [filter, lineFilter, rows],
@@ -779,9 +788,38 @@ export function ManagerConsole({
     if (!event) return;
     setSelectedDowntimeEventId(event.id);
     setDowntimeDescription(event.description);
+    setDowntimeReason(event.reason_category);
+    setDowntimeOwner(event.owner_group);
     setDowntimeEndedAt(event.ended_at ? event.ended_at.slice(0, 16) : "");
     setManagerComment(event.resolution_note);
     setDowntimeEditorOpen(false);
+    setDowntimeMessage("");
+  };
+
+  const openManagerDowntimeHour = (
+    row: ManagerLineRow,
+    hour: ReturnType<typeof buildManagerProgress>[number]["hours"][number],
+  ) => {
+    if (!row.shift) return;
+    const dayOffset = Math.floor(hour.startMinutes / (24 * 60));
+    const hourDate = new Date(`${operationalDate}T12:00:00Z`);
+    hourDate.setUTCDate(hourDate.getUTCDate() + dayOffset);
+    const datePart = hourDate.toISOString().slice(0, 10);
+    const startedAt = `${datePart}T${formatClockMinutes(hour.startMinutes)}:00`;
+    const maximumEndAt = localDateTimeAfter(startedAt, Math.max(1, hour.endMinutes - hour.startMinutes));
+    setSelectedDowntimeEventId(null);
+    setNewDowntimeContext({
+      shiftId: row.shift.id,
+      lineLabel: displayLine(row.assignment.production_line_code),
+      hourLabel: hour.label,
+      startedAt,
+      maximumEndAt,
+    });
+    setDowntimeDescription("");
+    setDowntimeReason("equipment");
+    setDowntimeOwner("operations");
+    setDowntimeEndedAt(maximumEndAt);
+    setManagerComment("");
     setDowntimeMessage("");
   };
 
@@ -991,24 +1029,53 @@ export function ManagerConsole({
   };
 
   const saveDowntimeEvent = async () => {
-    if (!selectedDowntimeEvent || !downtimeDescription.trim()) return;
+    if ((!selectedDowntimeEvent && !newDowntimeContext) || !downtimeDescription.trim()) return;
     setDowntimeSaving(true);
     setDowntimeMessage("");
     try {
-      await apiRequest(`/downtime-events/${selectedDowntimeEvent.id}/`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          description: downtimeDescription.trim(),
-          ended_at: downtimeEndedAt ? new Date(downtimeEndedAt).toISOString() : null,
-          status: downtimeEndedAt ? "resolved" : "open",
-          resolution_note: managerComment.trim(),
-        }),
-      });
-      setDowntimeMessage("Downtime update saved.");
+      const creating = !selectedDowntimeEvent && Boolean(newDowntimeContext);
+      await apiRequest(
+        creating ? "/downtime-events/" : `/downtime-events/${selectedDowntimeEvent!.id}/`,
+        {
+          method: creating ? "POST" : "PATCH",
+          body: JSON.stringify({
+            ...(creating ? {
+              shift: newDowntimeContext!.shiftId,
+              started_at: new Date(newDowntimeContext!.startedAt).toISOString(),
+            } : {}),
+            description: downtimeDescription.trim(),
+            reason_category: downtimeReason,
+            owner_group: downtimeOwner,
+            ended_at: downtimeEndedAt ? new Date(downtimeEndedAt).toISOString() : null,
+            status: downtimeEndedAt ? "resolved" : "open",
+            resolution_note: managerComment.trim(),
+          }),
+        },
+      );
+      setDowntimeMessage(creating ? "Hourly downtime added." : "Downtime update saved.");
       setDowntimeEditorOpen(false);
+      setNewDowntimeContext(null);
+      setSelectedDowntimeEventId(null);
       onRefresh();
     } catch (caught) {
       setDowntimeMessage(caught instanceof Error ? caught.message : "Could not save this update.");
+    } finally {
+      setDowntimeSaving(false);
+    }
+  };
+
+  const deleteDowntimeEvent = async () => {
+    if (!selectedDowntimeEvent || !window.confirm("Delete this downtime event?")) return;
+    setDowntimeSaving(true);
+    setDowntimeMessage("");
+    try {
+      await apiRequest(`/downtime-events/${selectedDowntimeEvent.id}/`, { method: "DELETE" });
+      setSelectedDowntimeEventId(null);
+      setDowntimeEditorOpen(false);
+      setDowntimeMessage("Downtime event deleted.");
+      onRefresh();
+    } catch (caught) {
+      setDowntimeMessage(caught instanceof Error ? caught.message : "Could not delete this downtime event.");
     } finally {
       setDowntimeSaving(false);
     }
@@ -1184,7 +1251,7 @@ export function ManagerConsole({
               value={operationalDate}
               onChange={(event) => {
                 onDateChange(event.target.value);
-                setViewMode(event.target.value === localDate() ? "live" : "historical");
+                setViewMode(isCurrentOperationalDate(event.target.value, shiftPattern) ? "live" : "historical");
               }}
             />
             </label>
@@ -1195,7 +1262,11 @@ export function ManagerConsole({
             <select
               aria-label="Shift pattern"
               value={shiftPattern}
-              onChange={(event) => onShiftPatternChange(event.target.value as ManagerShiftPattern)}
+              onChange={(event) => {
+                const value = event.target.value as ManagerShiftPattern;
+                onShiftPatternChange(value);
+                setViewMode(isCurrentOperationalDate(operationalDate, value) ? "live" : "historical");
+              }}
             >
               <option value="day">Day · {shiftPattern === "day" ? shiftLabel : getShiftWindow(operationalDate, data.shifts, "day").startLabel + "–" + getShiftWindow(operationalDate, data.shifts, "day").endLabel}</option>
               <option value="night">Night · {shiftPattern === "night" ? shiftLabel : getShiftWindow(operationalDate, data.shifts, "night").startLabel + "–" + getShiftWindow(operationalDate, data.shifts, "night").endLabel}</option>
@@ -1393,7 +1464,7 @@ export function ManagerConsole({
                   <aside className="downtime-event-card">
                     {selectedDowntimeEvent ? <>
                       <span>Event at {shortTime(selectedDowntimeEvent.started_at)}</span><strong>{selectedDowntimeEvent.duration_minutes} min</strong><small>Reason</small><p>{selectedDowntimeEvent.description}</p>
-                      <button type="button" className="event-edit-link" onClick={() => openDowntimeEvent(selectedDowntimeEvent.id)}><AppIcon name="edit" size={18} /> Edit / comment</button>
+                      <button type="button" className="event-edit-link" disabled={isHistorical} title={isHistorical ? "Historical downtime is read-only." : "Edit downtime"} onClick={() => openDowntimeEvent(selectedDowntimeEvent.id)}><AppIcon name="edit" size={18} /> Edit / comment</button>
                     </> : <><span>No event selected</span><p>Select a downtime bar to review its description.</p></>}
                   </aside>
                 </div>
@@ -1408,7 +1479,7 @@ export function ManagerConsole({
                   <label>Manager comment<textarea rows={3} value={managerComment} onChange={(event) => setManagerComment(event.target.value)} placeholder="Add context, evidence or correction reason" /></label>
                   <p className="downtime-editor__policy"><AppIcon name="info" size={18} /> Changes update calculated downtime. Planned breaks remain excluded from loss reporting.</p>
                   {downtimeMessage ? <p className="downtime-editor__message" role="status">{downtimeMessage}</p> : null}
-                  <footer><button type="button" className="button button--ghost" onClick={() => { setSelectedDowntimeEventId(null); setDowntimeEditorOpen(false); }}>Cancel</button><button type="button" className="button button--primary" disabled={downtimeSaving || !downtimeDescription.trim()} onClick={saveDowntimeEvent}>{downtimeSaving ? "Saving…" : "Review & save"}</button></footer>
+                  <footer><button type="button" className="button button--danger" disabled={downtimeSaving || isHistorical} onClick={deleteDowntimeEvent}>Delete</button><button type="button" className="button button--ghost" onClick={() => { setSelectedDowntimeEventId(null); setDowntimeEditorOpen(false); }}>Cancel</button><button type="button" className="button button--primary" disabled={downtimeSaving || isHistorical || !downtimeDescription.trim()} onClick={saveDowntimeEvent}>{downtimeSaving ? "Saving…" : "Review & save"}</button></footer>
                 </section>
               </div> : null}
             </>
@@ -1554,7 +1625,7 @@ export function ManagerConsole({
                     <h3>Status timeline</h3>
                     <ol className="drawer-event-history">
                       {data.downtimeEvents.filter((event) => event.production_line === selectedLine.assignment.production_line).slice(-4).map((event) => (
-                        <li key={event.id}><button type="button" onClick={() => openDowntimeEvent(event.id)}><strong>{shortTime(event.started_at)}</strong><span>{event.description || event.reason_category}</span><small>{event.duration_minutes} min · {titleCase(event.status)} · Edit/comment</small></button></li>
+                        <li key={event.id}><button type="button" disabled={isHistorical} title={isHistorical ? "Historical downtime is read-only." : "Edit downtime"} onClick={() => openDowntimeEvent(event.id)}><strong>{shortTime(event.started_at)}</strong><span>{event.description || event.reason_category}</span><small>{event.duration_minutes} min · {titleCase(event.status)} · {isHistorical ? "Read-only" : "Edit/comment"}</small></button></li>
                       ))}
                       {selectedLine.update ? <li><strong>{formatDateTime(selectedLine.update.recorded_at)}</strong><span>Latest status: {titleCase(selectedLine.update.status)}</span><small>{selectedLine.update.action_taken || "Status recorded"}</small></li> : null}
                     </ol>
@@ -1566,7 +1637,7 @@ export function ManagerConsole({
                 </aside>
               ) : null}
 
-              {selectedDowntimeEventId && selectedDowntimeEvent ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="line-downtime-editor-title"><header><div><span className="eyebrow">Manager event review</span><h2 id="line-downtime-editor-title">Edit downtime &amp; description</h2></div><button type="button" aria-label="Close downtime editor" onClick={() => setSelectedDowntimeEventId(null)}>×</button></header><div className="downtime-editor__summary"><strong>{displayLine(selectedLine?.assignment.production_line_code ?? selectedDowntimeEvent.production_line_code)}</strong><span>Started {formatDateTime(selectedDowntimeEvent.started_at)} · Current {selectedDowntimeEvent.duration_minutes} min</span></div><label>Description<textarea rows={3} value={downtimeDescription} onChange={(event) => setDowntimeDescription(event.target.value)} required /></label><label>Downtime end<input type="datetime-local" value={downtimeEndedAt} min={selectedDowntimeEvent.started_at.slice(0, 16)} onChange={(event) => setDowntimeEndedAt(event.target.value)} /></label><label>Manager comment<textarea rows={3} value={managerComment} onChange={(event) => setManagerComment(event.target.value)} /></label>{downtimeMessage ? <p className="downtime-editor__message" role="status">{downtimeMessage}</p> : null}<footer><button type="button" className="button button--ghost" onClick={() => setSelectedDowntimeEventId(null)}>Cancel</button><button type="button" className="button button--primary" disabled={downtimeSaving || !downtimeDescription.trim()} onClick={saveDowntimeEvent}>{downtimeSaving ? "Saving…" : "Review & save"}</button></footer></section></div> : null}
+              {selectedDowntimeEventId && selectedDowntimeEvent ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="line-downtime-editor-title"><header><div><span className="eyebrow">Manager event review</span><h2 id="line-downtime-editor-title">Edit downtime &amp; description</h2></div><button type="button" aria-label="Close downtime editor" onClick={() => setSelectedDowntimeEventId(null)}>×</button></header><div className="downtime-editor__summary"><strong>{displayLine(selectedLine?.assignment.production_line_code ?? selectedDowntimeEvent.production_line_code)}</strong><span>Started {formatDateTime(selectedDowntimeEvent.started_at)} · Current {selectedDowntimeEvent.duration_minutes} min</span></div><label>Description<textarea rows={3} value={downtimeDescription} onChange={(event) => setDowntimeDescription(event.target.value)} required /></label><label>Downtime end<input type="datetime-local" value={downtimeEndedAt} min={selectedDowntimeEvent.started_at.slice(0, 16)} onChange={(event) => setDowntimeEndedAt(event.target.value)} /></label><label>Manager comment<textarea rows={3} value={managerComment} onChange={(event) => setManagerComment(event.target.value)} /></label>{downtimeMessage ? <p className="downtime-editor__message" role="status">{downtimeMessage}</p> : null}<footer><button type="button" className="button button--danger" disabled={downtimeSaving || isHistorical} onClick={deleteDowntimeEvent}>Delete</button><button type="button" className="button button--ghost" onClick={() => setSelectedDowntimeEventId(null)}>Cancel</button><button type="button" className="button button--primary" disabled={downtimeSaving || isHistorical || !downtimeDescription.trim()} onClick={saveDowntimeEvent}>{downtimeSaving ? "Saving…" : "Review & save"}</button></footer></section></div> : null}
             </>
           ) : null}
 
@@ -1640,7 +1711,14 @@ export function ManagerConsole({
                           item.assignment === row.assignment.id &&
                           dateTimeToShiftMinutes(item.hour_start_at, scheduleWindow) === Math.floor(hour.startMinutes / 60) * 60
                         );
-                        return <div className={`manager-output-hour${hour.current ? " is-current" : ""}`} key={hour.label}><strong>{hour.label}</strong><div className="manager-output-hour-track"><i style={{ width: `${hour.target && hour.done !== null ? Math.min(100, hour.done / hour.target * 100) : 0}%` }} /></div><small>{hour.breakMinutes ? `${hour.breakMinutes}m break · ` : ""}T {hour.target === null ? "—" : NUMBER.format(hour.current ? hour.dueNow ?? 0 : hour.target)} · D {hour.done === null ? "—" : NUMBER.format(hour.done)} · S {short === null ? "—" : NUMBER.format(short)} · DT {hourlyLineDowntime(row.assignment.production_line, hour.startMinutes, hour.endMinutes)} min</small>{recordedOutput ? <small>Reject {NUMBER.format(recordedOutput.rejected_units ?? 0)} · Rework {NUMBER.format(recordedOutput.rework_units ?? 0)}</small> : null}<button type="button" className="manager-output-hour-edit" disabled={isHistorical} onClick={() => openManagerOutputHour(row.assignment, hour)}>{hour.done === null ? "Record output" : "Review / correct"}</button></div>;
+                        const editFailure = row.assignment.plan_status === "draft"
+                          ? "Publish and approve this plan first."
+                          : !row.shift
+                            ? "This plan has no active shift."
+                            : isHistorical
+                              ? "Operational updates are read-only outside the current shift day."
+                              : "";
+                        return <div className={`manager-output-hour${hour.current ? " is-current" : ""}`} key={hour.label}><strong>{hour.label}</strong><div className="manager-output-hour-track"><i style={{ width: `${hour.target && hour.done !== null ? Math.min(100, hour.done / hour.target * 100) : 0}%` }} /></div><small>{hour.breakMinutes ? `${hour.breakMinutes}m break · ` : ""}T {hour.target === null ? "—" : NUMBER.format(hour.current ? hour.dueNow ?? 0 : hour.target)} · D {hour.done === null ? "—" : NUMBER.format(hour.done)} · S {short === null ? "—" : NUMBER.format(short)} · DT {hourlyLineDowntime(row.assignment.production_line, hour.startMinutes, hour.endMinutes)} min</small>{recordedOutput ? <small>Reject {NUMBER.format(recordedOutput.rejected_units ?? 0)} · Rework {NUMBER.format(recordedOutput.rework_units ?? 0)}</small> : null}<button type="button" className="manager-output-hour-edit" disabled={Boolean(editFailure)} title={editFailure || "Record or correct hourly production"} onClick={() => openManagerOutputHour(row.assignment, hour)}>{hour.done === null ? "Record output" : "Review / correct"}</button><button type="button" className="manager-output-hour-edit" disabled={Boolean(editFailure)} title={editFailure || "Add hourly downtime"} onClick={() => openManagerDowntimeHour(row, hour)}>Manage DT</button></div>;
                       })}</div>
                       {progress && !progress.hours.some((hour) => hour.done !== null) ? <p>Hourly actuals have not been recorded for this line. Done and short are unavailable.</p> : null}
                     </div></td></tr> : null}
@@ -1722,6 +1800,22 @@ export function ManagerConsole({
                 onRefresh();
               }}
             />
+          ) : null}
+
+          {newDowntimeContext ? (
+            <div className="downtime-modal-backdrop" role="presentation">
+              <section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="manager-add-downtime-title">
+                <header><div><span className="eyebrow">Manager · Hourly control</span><h2 id="manager-add-downtime-title">Add downtime</h2><p>{newDowntimeContext.lineLabel} · {newDowntimeContext.hourLabel}</p></div><button type="button" aria-label="Close downtime editor" onClick={() => setNewDowntimeContext(null)}>×</button></header>
+                <label>Start<input type="datetime-local" value={newDowntimeContext.startedAt} min={newDowntimeContext.startedAt} max={newDowntimeContext.maximumEndAt} onChange={(event) => setNewDowntimeContext({ ...newDowntimeContext, startedAt: event.target.value })} /></label>
+                <label>End<input type="datetime-local" value={downtimeEndedAt} min={newDowntimeContext.startedAt} max={newDowntimeContext.maximumEndAt} onChange={(event) => setDowntimeEndedAt(event.target.value)} /></label>
+                <label>Reason<select value={downtimeReason} onChange={(event) => setDowntimeReason(event.target.value as DowntimeEvent["reason_category"])}><option value="equipment">Equipment</option><option value="material">Material</option><option value="quality">Quality</option><option value="staffing">Staffing</option><option value="changeover">Changeover</option><option value="other">Other</option></select></label>
+                <label>Owner<select value={downtimeOwner} onChange={(event) => setDowntimeOwner(event.target.value as DowntimeEvent["owner_group"])}><option value="operations">Operations</option><option value="engineering">Engineering</option><option value="qa">QA</option><option value="machine_minder">Machine Minder</option></select></label>
+                <label>Description<textarea rows={3} value={downtimeDescription} onChange={(event) => setDowntimeDescription(event.target.value)} required /></label>
+                <label>Resolution / handover note<textarea rows={2} value={managerComment} onChange={(event) => setManagerComment(event.target.value)} /></label>
+                {downtimeMessage ? <p className="downtime-editor__message" role="status">{downtimeMessage}</p> : null}
+                <footer><button type="button" className="button button--ghost" onClick={() => setNewDowntimeContext(null)}>Cancel</button><button type="button" className="button button--primary" disabled={downtimeSaving || !downtimeDescription.trim()} onClick={saveDowntimeEvent}>{downtimeSaving ? "Saving…" : "Add downtime"}</button></footer>
+              </section>
+            </div>
           ) : null}
 
         </main>

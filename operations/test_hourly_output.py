@@ -1,4 +1,4 @@
-from datetime import date, datetime, time
+from datetime import datetime, time, timedelta
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -39,7 +39,7 @@ def hourly_context(db):
     assignment = TeamLeaderAssignment.objects.create(
         production_line=line,
         team_leader=leader,
-        date=date(2026, 9, 25),
+        date=timezone.localdate(),
         shift_type=Shift.ShiftType.DAY,
         assigned_by=manager,
     )
@@ -62,14 +62,10 @@ def hourly_context(db):
     }
 
 
-def api_hour(hour=10):
-    return datetime(
-        2026,
-        9,
-        25,
-        hour,
-        0,
-        tzinfo=timezone.get_current_timezone(),
+def api_hour(hour=10, *, operational_date=None):
+    return timezone.make_aware(
+        datetime.combine(operational_date or timezone.localdate(), time(hour)),
+        timezone.get_current_timezone(),
     )
 
 
@@ -124,6 +120,49 @@ def test_assigned_team_leader_can_create_update_and_delete_hourly_output(
         event_type="hourly_output.deleted",
         resource_id=response.data["id"],
     ).exists()
+
+
+@pytest.mark.django_db
+def test_published_historical_plan_is_read_only_for_operational_output(
+    hourly_context,
+):
+    historical_date = timezone.localdate() - timedelta(days=1)
+    assignment = hourly_context["assignment"]
+    shift = hourly_context["shift"]
+    assignment.date = historical_date
+    assignment.save(update_fields=("date", "updated_at"))
+    shift.date = historical_date
+    shift.save(update_fields=("date", "updated_at"))
+    output = HourlyOutput.objects.create(
+        assignment=assignment,
+        hour_start_at=api_hour(10, operational_date=historical_date),
+        actual_units=420,
+        recorded_by=hourly_context["leader"],
+        last_edited_by=hourly_context["leader"],
+    )
+    client = APIClient()
+    client.force_authenticate(user=hourly_context["leader"])
+
+    created = client.post(
+        "/api/hourly-outputs/",
+        {
+            "assignment": assignment.id,
+            "hour_start_at": api_hour(11, operational_date=historical_date).isoformat(),
+            "actual_units": 300,
+        },
+        format="json",
+    )
+    updated = client.patch(
+        f"/api/hourly-outputs/{output.id}/",
+        {"actual_units": 450},
+        format="json",
+    )
+    deleted = client.delete(f"/api/hourly-outputs/{output.id}/")
+
+    assert created.status_code == 400
+    assert updated.status_code == 400
+    assert deleted.status_code == 400
+    assert "read-only" in str(created.data)
 
 
 @pytest.mark.django_db
@@ -244,7 +283,7 @@ def test_hourly_output_validates_clock_hour_shift_window_and_duplicates(
     output = HourlyOutput(
         assignment=hourly_context["assignment"],
         hour_start_at=datetime.combine(
-            date(2026, 9, 25),
+            timezone.localdate(),
             time(10, 5),
             tzinfo=timezone.get_current_timezone(),
         ),
@@ -260,7 +299,7 @@ def test_night_shift_accepts_clock_hours_after_midnight(hourly_context):
     assignment = TeamLeaderAssignment.objects.create(
         production_line=hourly_context["assignment"].production_line,
         team_leader=hourly_context["leader"],
-        date=date(2026, 9, 26),
+        date=timezone.localdate(),
         shift_type=Shift.ShiftType.NIGHT,
         assigned_by=hourly_context["manager"],
     )
@@ -275,13 +314,9 @@ def test_night_shift_accepts_clock_hours_after_midnight(hourly_context):
     )
     client = APIClient()
     client.force_authenticate(user=hourly_context["leader"])
-    hour = datetime(
-        2026,
-        9,
-        27,
-        1,
-        0,
-        tzinfo=timezone.get_current_timezone(),
+    hour = timezone.make_aware(
+        datetime.combine(assignment.date + timedelta(days=1), time(1)),
+        timezone.get_current_timezone(),
     )
 
     response = client.post(

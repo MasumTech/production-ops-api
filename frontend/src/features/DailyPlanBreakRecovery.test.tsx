@@ -266,6 +266,7 @@ describe("daily plan and break opportunity workspace", () => {
         planBlocks={planBlocks}
         shifts={[shift]}
         updates={[update]}
+        live
         onSaved={onSaved}
       />,
     );
@@ -351,6 +352,23 @@ describe("daily plan and break opportunity workspace", () => {
     ).toBeEnabled();
   });
 
+  it("explains why a published plan without a shift is read-only", () => {
+    render(
+      <DailyPlanPanel
+        assignments={[{ ...assignment, plan_status: "published" }]}
+        planBlocks={planBlocks}
+        shifts={[]}
+        updates={[update]}
+        live
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Line 3 ▾/ }));
+
+    expect(screen.getByRole("button", { name: "Record output for 07:00–08:00" })).toBeDisabled();
+    expect(screen.getByText(/no active shift/i)).toBeInTheDocument();
+  });
+
   it("lets the assigned Team Leader add, update and delete hourly downtime", async () => {
     const actor = userEvent.setup();
     const request = vi.spyOn(api, "apiRequest").mockResolvedValue({} as never);
@@ -378,6 +396,7 @@ describe("daily plan and break opportunity workspace", () => {
         shifts={[shift]}
         updates={[update]}
         downtimeEvents={[downtime]}
+        live
         onSaved={onSaved}
       />,
     );

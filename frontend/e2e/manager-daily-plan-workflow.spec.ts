@@ -42,6 +42,13 @@ test("manager edits a current shift plan block", async ({ page }, testInfo) => {
   await signInAsManager(page);
 
   await expect(page.getByRole("button", { name: "Add plan block" })).toBeVisible();
+  await page.getByRole("button", { name: "Line 1 ▾" }).click();
+  const futureHour = page.locator(".manager-output-hour").filter({ hasText: "17:00–18:00" });
+  await expect(futureHour.getByRole("button", { name: "Record output" })).toBeEnabled();
+  await expect(futureHour.getByRole("button", { name: "Manage DT" })).toBeEnabled();
+  await futureHour.getByRole("button", { name: "Manage DT" }).click();
+  await expect(page.getByRole("dialog", { name: "Add downtime" })).toContainText("Line 1 · 17:00–18:00");
+  await page.getByRole("button", { name: "Close downtime editor" }).click();
   const firstBlock = page.locator(".daily-plan-block--production").first();
   await firstBlock.click();
   const detail = page.getByRole("dialog", { name: /Salt & Pepper Chicken|Oat Drink 1L/ });
