@@ -50,6 +50,17 @@ export interface Assignment {
   date: string;
   shift_type: "day" | "night";
   notes: string;
+  plan_status?: "draft" | "published";
+  plan_published_at?: string | null;
+  plan_published_by?: number | null;
+  plan_published_by_username?: string | null;
+  plan_approval_requested_at?: string | null;
+  plan_approval_requested_by?: number | null;
+  plan_approval_requested_by_username?: string | null;
+  plan_version?: number;
+  plan_last_amended_at?: string | null;
+  plan_last_amended_by?: number | null;
+  plan_last_amended_by_username?: string | null;
 }
 
 export interface LineUpdate {
@@ -151,6 +162,27 @@ export interface DailyPlanBlock {
   target_units_per_hour: number | null;
   planned_units: number;
   break_number: number | null;
+  actual_units?: number | null;
+  short_units?: number | null;
+  completion_status?: "planned" | "completed" | "changed_over";
+  completed_at?: string | null;
+  completed_by?: number | null;
+  completed_by_username?: string | null;
+  short_reason?:
+    | ""
+    | "target_completed"
+    | "material_unavailable"
+    | "material_delayed"
+    | "quality_hold"
+    | "machine_downtime"
+    | "labour_shortage"
+    | "manager_instruction"
+    | "changeover_brought_forward"
+    | "other";
+  short_note?: string;
+  replacement_plan_block?: number | null;
+  material_issue?: number | null;
+  material_issue_status?: MaterialStatus | null;
 }
 
 export interface HourlyOutput {

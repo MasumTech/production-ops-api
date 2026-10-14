@@ -49,6 +49,9 @@ import type {
 } from "./types";
 
 function eventMessage(event: OperationalEvent): string {
+  if (typeof event.metadata.description === "string") {
+    return event.metadata.description;
+  }
   const label = event.event_type.replaceAll("_", " ").replaceAll(".", " · ");
   return `${event.severity === "critical" ? "Critical live update" : "Live update"}: ${label}`;
 }
@@ -542,10 +545,12 @@ export default function App() {
     setCaptureMode("escalation");
     setCapturePrefill({
       category: "other",
-      summary: "Daily plan change request",
+      summary: assignment
+        ? `Plan change request · ${assignment.production_line_code}`
+        : "Plan change request",
       details: assignment
-        ? `Request a reviewed schedule change for ${assignment.production_line_code}. Published plan remains unchanged until Operations Manager approval.`
-        : "Request a reviewed schedule change. Published plan remains unchanged until Operations Manager approval.",
+        ? `Please review a requested change for ${assignment.production_line_code}. The current published plan remains active until the Operations Manager updates it.`
+        : "Please review this requested plan change. The current published plan remains active until the Operations Manager updates it.",
     });
     setTab("issues");
   };

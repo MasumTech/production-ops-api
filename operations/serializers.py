@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from typing import ClassVar
 
 from django.contrib.auth import get_user_model
@@ -339,6 +339,21 @@ class TeamLeaderAssignmentSerializer(serializers.ModelSerializer):
         source="assigned_by.username",
         read_only=True,
     )
+    plan_published_by_username = serializers.CharField(
+        source="plan_published_by.username",
+        read_only=True,
+        allow_null=True,
+    )
+    plan_approval_requested_by_username = serializers.CharField(
+        source="plan_approval_requested_by.username",
+        read_only=True,
+        allow_null=True,
+    )
+    plan_last_amended_by_username = serializers.CharField(
+        source="plan_last_amended_by.username",
+        read_only=True,
+        allow_null=True,
+    )
 
     class Meta:
         model = TeamLeaderAssignment
@@ -354,6 +369,17 @@ class TeamLeaderAssignmentSerializer(serializers.ModelSerializer):
             "assigned_by",
             "assigned_by_username",
             "notes",
+            "plan_status",
+            "plan_published_at",
+            "plan_published_by",
+            "plan_published_by_username",
+            "plan_approval_requested_at",
+            "plan_approval_requested_by",
+            "plan_approval_requested_by_username",
+            "plan_version",
+            "plan_last_amended_at",
+            "plan_last_amended_by",
+            "plan_last_amended_by_username",
             "created_at",
             "updated_at",
         )
@@ -361,6 +387,17 @@ class TeamLeaderAssignmentSerializer(serializers.ModelSerializer):
             "id",
             "assigned_by",
             "assigned_by_username",
+            "plan_status",
+            "plan_published_at",
+            "plan_published_by",
+            "plan_published_by_username",
+            "plan_approval_requested_at",
+            "plan_approval_requested_by",
+            "plan_approval_requested_by_username",
+            "plan_version",
+            "plan_last_amended_at",
+            "plan_last_amended_by",
+            "plan_last_amended_by_username",
             "created_at",
             "updated_at",
         )
@@ -1587,6 +1624,14 @@ class HourlyOutputSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         errors = {}
 
+        if (
+            assignment
+            and assignment.plan_status != TeamLeaderAssignment.PlanStatus.PUBLISHED
+        ):
+            errors["assignment"] = (
+                "This plan has not been published or approved by the Operations Manager."
+            )
+
         if self.instance and "hour_start_at" in attrs:
             existing_hour = timezone.localtime(self.instance.hour_start_at)
             requested_hour = timezone.localtime(hour_start_at)
@@ -1615,8 +1660,9 @@ class HourlyOutputSerializer(serializers.ModelSerializer):
                 shift_type=assignment.shift_type,
             ).first()
             if shift is None:
-                errors["assignment"] = (
-                    "A matching shift record is required before output can be recorded."
+                errors.setdefault(
+                    "assignment",
+                    "A matching shift record is required before output can be recorded.",
                 )
             else:
                 local_hour = timezone.localtime(hour_start_at)
@@ -1676,6 +1722,23 @@ class DailyPlanBlockSerializer(serializers.ModelSerializer):
     )
     assignment_date = serializers.DateField(source="assignment.date", read_only=True)
     planned_units = serializers.IntegerField(read_only=True)
+    short_units = serializers.IntegerField(read_only=True, allow_null=True)
+    completed_by_username = serializers.CharField(
+        source="completed_by.username",
+        read_only=True,
+        allow_null=True,
+    )
+    material_issue_status = serializers.CharField(
+        source="material_issue.status",
+        read_only=True,
+        allow_null=True,
+    )
+    change_reason = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        max_length=255,
+    )
 
     class Meta:
         model = DailyPlanBlock
@@ -1694,23 +1757,107 @@ class DailyPlanBlockSerializer(serializers.ModelSerializer):
             "target_units_per_hour",
             "planned_units",
             "break_number",
+            "actual_units",
+            "short_units",
+            "completion_status",
+            "completed_at",
+            "completed_by",
+            "completed_by_username",
+            "short_reason",
+            "short_note",
+            "replacement_plan_block",
+            "material_issue",
+            "material_issue_status",
+            "change_reason",
             "created_by",
             "created_at",
             "updated_at",
         )
         read_only_fields = (
             "id",
+            "sequence_number",
             "planned_units",
+            "short_units",
+            "actual_units",
+            "completion_status",
+            "completed_at",
+            "completed_by",
+            "completed_by_username",
+            "short_reason",
+            "short_note",
+            "replacement_plan_block",
+            "material_issue",
+            "material_issue_status",
             "created_by",
             "created_at",
             "updated_at",
         )
 
     def validate(self, attrs):
+        assignment = attrs.get("assignment", getattr(self.instance, "assignment", None))
+        if (
+            self.instance
+            and "assignment" in attrs
+            and attrs["assignment"].id != self.instance.assignment_id
+        ):
+            raise serializers.ValidationError(
+                {"assignment": "A plan block cannot be moved to another line."}
+            )
+
+        change_reason = attrs.get("change_reason", "").strip()
+        request = self.context.get("request")
+        if (
+            self.instance
+            and assignment
+            and assignment.plan_status == TeamLeaderAssignment.PlanStatus.PUBLISHED
+            and request
+            and request.user.is_staff
+            and not change_reason
+        ):
+            raise serializers.ValidationError(
+                {
+                    "change_reason": (
+                        "Record a short reason when changing a published plan."
+                    )
+                }
+            )
+
+        if not self.instance and assignment:
+            existing_blocks = DailyPlanBlock.objects.filter(
+                assignment=assignment
+            ).order_by("planned_end_at", "sequence_number")
+            previous = existing_blocks.last()
+            expected_start = (
+                previous.planned_end_at
+                if previous
+                else self._shift_bounds(assignment)[0]
+            )
+            supplied_start = attrs.get("planned_start_at")
+            if supplied_start and supplied_start != expected_start:
+                raise serializers.ValidationError(
+                    {
+                        "planned_start_at": (
+                            "This time is already allocated or unavailable. "
+                            f"The next plan block must start at "
+                            f"{timezone.localtime(expected_start):%H:%M}."
+                        )
+                    }
+                )
+            attrs["planned_start_at"] = expected_start
+            attrs["sequence_number"] = (
+                max(
+                    existing_blocks.values_list("sequence_number", flat=True),
+                    default=0,
+                )
+                + 1
+            )
+            if attrs.get(
+                "block_type"
+            ) == DailyPlanBlock.BlockType.BREAK and not attrs.get("planned_end_at"):
+                attrs["planned_end_at"] = expected_start + timedelta(minutes=40)
+
         instance = DailyPlanBlock(
-            assignment=attrs.get(
-                "assignment", getattr(self.instance, "assignment", None)
-            ),
+            assignment=assignment,
             sequence_number=attrs.get(
                 "sequence_number", getattr(self.instance, "sequence_number", 1)
             ),
@@ -1736,6 +1883,16 @@ class DailyPlanBlockSerializer(serializers.ModelSerializer):
             break_number=attrs.get(
                 "break_number", getattr(self.instance, "break_number", None)
             ),
+            actual_units=getattr(self.instance, "actual_units", None),
+            completion_status=getattr(
+                self.instance,
+                "completion_status",
+                DailyPlanBlock.CompletionStatus.PLANNED,
+            ),
+            completed_at=getattr(self.instance, "completed_at", None),
+            completed_by=getattr(self.instance, "completed_by", None),
+            short_reason=getattr(self.instance, "short_reason", ""),
+            short_note=getattr(self.instance, "short_note", ""),
         )
         if self.instance:
             instance.pk = self.instance.pk
@@ -1744,6 +1901,44 @@ class DailyPlanBlockSerializer(serializers.ModelSerializer):
         except DjangoValidationError as error:
             raise serializers.ValidationError(error.message_dict) from error
         return attrs
+
+    @staticmethod
+    def _shift_bounds(assignment):
+        configured_shift = Shift.objects.filter(
+            production_line=assignment.production_line,
+            date=assignment.date,
+            shift_type=assignment.shift_type,
+        ).first()
+        if assignment.shift_type == Shift.ShiftType.DAY:
+            default_start = time(7) if assignment.date.weekday() >= 5 else time(6, 45)
+            default_end = time(18)
+        else:
+            default_start = time(23)
+            default_end = time(7)
+        start_time = configured_shift.start_time if configured_shift else default_start
+        end_time = configured_shift.end_time if configured_shift else default_end
+        end_date = assignment.date
+        if end_time <= start_time:
+            end_date += timedelta(days=1)
+        current_timezone = timezone.get_current_timezone()
+        return (
+            timezone.make_aware(
+                datetime.combine(assignment.date, start_time),
+                current_timezone,
+            ),
+            timezone.make_aware(
+                datetime.combine(end_date, end_time),
+                current_timezone,
+            ),
+        )
+
+    def create(self, validated_data):
+        validated_data.pop("change_reason", None)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data.pop("change_reason", None)
+        return super().update(instance, validated_data)
 
 
 class DailyPlanBlockFilterSerializer(serializers.Serializer):
@@ -1758,6 +1953,57 @@ class DailyPlanBlockFilterSerializer(serializers.Serializer):
         choices=DailyPlanBlock.BlockType.choices,
         required=False,
     )
+
+
+class DailyPlanBlockCompleteSerializer(serializers.Serializer):
+    actual_units = serializers.IntegerField(min_value=0)
+    completed_at = serializers.DateTimeField(required=False, default=timezone.now)
+    short_reason = serializers.ChoiceField(
+        choices=DailyPlanBlock.ShortReason.choices,
+        required=False,
+        allow_blank=True,
+    )
+    short_note = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=1000,
+    )
+    replacement_plan_block = serializers.PrimaryKeyRelatedField(
+        queryset=DailyPlanBlock.objects.filter(
+            block_type=DailyPlanBlock.BlockType.PRODUCTION
+        ),
+        required=False,
+        allow_null=True,
+    )
+
+    def validate(self, attrs):
+        block = self.context["block"]
+        if block.block_type != DailyPlanBlock.BlockType.PRODUCTION:
+            raise serializers.ValidationError(
+                {"detail": "Only production blocks can be completed."}
+            )
+        if block.assignment.plan_status != TeamLeaderAssignment.PlanStatus.PUBLISHED:
+            raise serializers.ValidationError(
+                {"detail": "Publish and approve this plan before recording output."}
+            )
+        short_units = max(0, block.planned_units - attrs["actual_units"])
+        if short_units and not attrs.get("short_reason"):
+            raise serializers.ValidationError(
+                {
+                    "short_reason": (
+                        f"This product is {short_units:,} units short. "
+                        "Select a reason before completing the changeover."
+                    )
+                }
+            )
+        replacement = attrs.get("replacement_plan_block")
+        if replacement and replacement.assignment_id != block.assignment_id:
+            raise serializers.ValidationError(
+                {
+                    "replacement_plan_block": "The replacement must be on the same line plan."
+                }
+            )
+        return attrs
 
 
 class BreakOpportunitySerializer(serializers.ModelSerializer):

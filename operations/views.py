@@ -77,6 +77,7 @@ from .serializers import (
     BreakRecoveryFilterSerializer,
     BreakRecoverySerializer,
     CurrentUserSerializer,
+    DailyPlanBlockCompleteSerializer,
     DailyPlanBlockFilterSerializer,
     DailyPlanBlockSerializer,
     DowntimeEventSerializer,
@@ -1203,14 +1204,25 @@ class DowntimeEventViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         shift = serializer.validated_data["shift"]
+        assignment = TeamLeaderAssignment.objects.filter(
+            production_line=shift.production_line,
+            date=shift.date,
+            shift_type=shift.shift_type,
+        ).first()
         if (
-            not self.request.user.is_staff
-            and not TeamLeaderAssignment.objects.filter(
-                team_leader=self.request.user,
-                production_line=shift.production_line,
-                date=shift.date,
-                shift_type=shift.shift_type,
-            ).exists()
+            assignment
+            and assignment.plan_status != TeamLeaderAssignment.PlanStatus.PUBLISHED
+        ):
+            raise ValidationError(
+                {
+                    "shift": (
+                        "This plan has not been published or approved by the "
+                        "Operations Manager."
+                    )
+                }
+            )
+        if not self.request.user.is_staff and (
+            assignment is None or assignment.team_leader_id != self.request.user.id
         ):
             raise PermissionDenied(
                 "You can only record downtime for your assigned lines."
@@ -1219,6 +1231,23 @@ class DowntimeEventViewSet(viewsets.ModelViewSet):
         self._publish_downtime_event(downtime, "created")
 
     def perform_update(self, serializer):
+        assignment = TeamLeaderAssignment.objects.filter(
+            production_line=serializer.instance.shift.production_line,
+            date=serializer.instance.shift.date,
+            shift_type=serializer.instance.shift.shift_type,
+        ).first()
+        if (
+            assignment
+            and assignment.plan_status != TeamLeaderAssignment.PlanStatus.PUBLISHED
+        ):
+            raise ValidationError(
+                {
+                    "shift": (
+                        "This plan has not been published or approved by the "
+                        "Operations Manager."
+                    )
+                }
+            )
         downtime = serializer.save()
         self._publish_downtime_event(downtime, "changed")
 
@@ -1348,6 +1377,9 @@ class TeamLeaderAssignmentViewSet(viewsets.ModelViewSet):
             "production_line",
             "team_leader",
             "assigned_by",
+            "plan_published_by",
+            "plan_approval_requested_by",
+            "plan_last_amended_by",
         )
 
         action_name = getattr(self, "action", None)
@@ -1380,7 +1412,114 @@ class TeamLeaderAssignmentViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        serializer.save(assigned_by=self.request.user)
+        serializer.save(
+            assigned_by=self.request.user,
+            plan_status=TeamLeaderAssignment.PlanStatus.DRAFT,
+        )
+
+    def get_permissions(self):
+        if self.action == "request_publication":
+            return [IsAuthenticated()]
+        return super().get_permissions()
+
+    @action(detail=True, methods=("post",), url_path="request-publication")
+    def request_publication(self, request, pk=None):
+        assignment = self.get_object()
+        if request.user.is_staff:
+            raise ValidationError(
+                {"detail": "Only the assigned Team Leader requests publication."}
+            )
+        if assignment.team_leader_id != request.user.id:
+            raise PermissionDenied(
+                "You can only request publication for your assigned line."
+            )
+        if assignment.plan_status == TeamLeaderAssignment.PlanStatus.PUBLISHED:
+            raise ValidationError({"detail": "This plan is already published."})
+        if not assignment.daily_plan_blocks.exists():
+            raise ValidationError(
+                {
+                    "detail": "The Manager must add a plan block before publication can be requested."
+                }
+            )
+        if assignment.plan_approval_requested_at:
+            return Response(self.get_serializer(assignment).data)
+
+        assignment.plan_approval_requested_at = timezone.now()
+        assignment.plan_approval_requested_by = request.user
+        assignment.save(
+            update_fields=(
+                "plan_approval_requested_at",
+                "plan_approval_requested_by",
+                "updated_at",
+            )
+        )
+        create_operational_event(
+            event_type="daily_plan.publication_requested",
+            resource_type="teamleaderassignment",
+            resource_id=assignment.id,
+            assignment=assignment,
+            production_line=assignment.production_line,
+            actor=request.user,
+            severity=OperationalEvent.Severity.INFO,
+            metadata={
+                "title": "Publication requested",
+                "description": (
+                    f"{request.user.get_full_name() or request.user.username} requested "
+                    f"publication of the {assignment.get_shift_type_display()} shift plan "
+                    f"for {assignment.production_line.code}."
+                ),
+                "plan_status": assignment.plan_status,
+            },
+        )
+        return Response(self.get_serializer(assignment).data)
+
+    @action(detail=True, methods=("post",), url_path="publish")
+    def publish(self, request, pk=None):
+        assignment = self.get_object()
+        if assignment.plan_status == TeamLeaderAssignment.PlanStatus.PUBLISHED:
+            return Response(self.get_serializer(assignment).data)
+        if not assignment.daily_plan_blocks.exists():
+            raise ValidationError(
+                {"detail": "Add at least one plan block before publishing this plan."}
+            )
+
+        published_at = timezone.now()
+        assignment.plan_status = TeamLeaderAssignment.PlanStatus.PUBLISHED
+        assignment.plan_published_at = published_at
+        assignment.plan_published_by = request.user
+        assignment.plan_approval_requested_at = None
+        assignment.plan_approval_requested_by = None
+        assignment.save(
+            update_fields=(
+                "plan_status",
+                "plan_published_at",
+                "plan_published_by",
+                "plan_approval_requested_at",
+                "plan_approval_requested_by",
+                "updated_at",
+            )
+        )
+        create_operational_event(
+            event_type="daily_plan.published",
+            resource_type="teamleaderassignment",
+            resource_id=assignment.id,
+            assignment=assignment,
+            production_line=assignment.production_line,
+            actor=request.user,
+            severity=OperationalEvent.Severity.INFO,
+            metadata={
+                "title": "Plan published",
+                "description": (
+                    f"The {assignment.production_line.code} "
+                    f"{assignment.get_shift_type_display()} shift plan is approved "
+                    "and ready for production updates."
+                ),
+                "published_at": published_at.isoformat(),
+                "plan_version": assignment.plan_version,
+            },
+            recipients=(assignment.team_leader,),
+        )
+        return Response(self.get_serializer(assignment).data)
 
     @extend_schema(
         parameters=[TeamLeaderAssignmentFilterSerializer],
@@ -2358,12 +2497,19 @@ class DailyPlanBlockViewSet(viewsets.ModelViewSet):
     http_method_names = ("get", "post", "patch", "delete", "head", "options")
     ordering = ("planned_start_at", "sequence_number")
 
+    def get_permissions(self):
+        if self.action == "complete":
+            return [IsAssignedTeamLeaderOrStaff()]
+        return super().get_permissions()
+
     def get_queryset(self):
         queryset = self.queryset.select_related(
             "assignment",
             "assignment__production_line",
             "assignment__team_leader",
             "created_by",
+            "completed_by",
+            "material_issue",
         )
         if not self.request.user.is_staff:
             queryset = queryset.filter(assignment__team_leader=self.request.user)
@@ -2390,9 +2536,57 @@ class DailyPlanBlockViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        with transaction.atomic():
+            block = serializer.save(created_by=self.request.user)
+            assignment = block.assignment
+            if assignment.plan_status == TeamLeaderAssignment.PlanStatus.PUBLISHED:
+                assignment.plan_version += 1
+                assignment.plan_last_amended_at = timezone.now()
+                assignment.plan_last_amended_by = self.request.user
+                assignment.save(
+                    update_fields=(
+                        "plan_version",
+                        "plan_last_amended_at",
+                        "plan_last_amended_by",
+                        "updated_at",
+                    )
+                )
+                self._publish_plan_amendment_event(
+                    block,
+                    "Plan block added to the published plan.",
+                )
+
+    def perform_update(self, serializer):
+        with transaction.atomic():
+            block = serializer.save()
+            assignment = block.assignment
+            if assignment.plan_status == TeamLeaderAssignment.PlanStatus.PUBLISHED:
+                assignment.plan_version += 1
+                assignment.plan_last_amended_at = timezone.now()
+                assignment.plan_last_amended_by = self.request.user
+                assignment.save(
+                    update_fields=(
+                        "plan_version",
+                        "plan_last_amended_at",
+                        "plan_last_amended_by",
+                        "updated_at",
+                    )
+                )
+                self._publish_plan_amendment_event(
+                    block,
+                    str(self.request.data.get("change_reason", "")).strip(),
+                )
 
     def perform_destroy(self, instance):
+        if instance.actual_units is not None:
+            raise ValidationError(
+                {
+                    "detail": (
+                        "This product already has completion evidence. Close or amend "
+                        "the product instead of deleting it."
+                    )
+                }
+            )
         try:
             instance.delete()
         except ProtectedError as error:
@@ -2404,6 +2598,186 @@ class DailyPlanBlockViewSet(viewsets.ModelViewSet):
                     )
                 }
             ) from error
+
+    @action(detail=False, methods=("get",), url_path="availability")
+    def availability(self, request):
+        assignment_id = request.query_params.get("assignment")
+        if not assignment_id:
+            raise ValidationError({"assignment": "Choose an assignment."})
+        assignment = (
+            TeamLeaderAssignment.objects.select_related("production_line")
+            .filter(pk=assignment_id)
+            .first()
+        )
+        if assignment is None:
+            raise NotFound("Assignment was not found.")
+        if not request.user.is_staff and assignment.team_leader_id != request.user.id:
+            raise PermissionDenied(
+                "You can only view availability for your assigned lines."
+            )
+        blocks = DailyPlanBlock.objects.filter(assignment=assignment).order_by(
+            "planned_end_at", "sequence_number"
+        )
+        shift_start, shift_end = DailyPlanBlockSerializer._shift_bounds(assignment)
+        previous = blocks.last()
+        next_start = previous.planned_end_at if previous else shift_start
+        return Response(
+            {
+                "assignment": assignment.id,
+                "shift_start_at": shift_start.isoformat(),
+                "shift_end_at": shift_end.isoformat(),
+                "next_available_start_at": next_start.isoformat(),
+                "next_sequence_number": max(
+                    blocks.values_list("sequence_number", flat=True),
+                    default=0,
+                )
+                + 1,
+                "fully_allocated": next_start >= shift_end,
+                "plan_status": assignment.plan_status,
+            }
+        )
+
+    @action(detail=True, methods=("post",), url_path="complete")
+    def complete(self, request, pk=None):
+        block = self.get_object()
+        input_serializer = DailyPlanBlockCompleteSerializer(
+            data=request.data,
+            context={"request": request, "block": block},
+        )
+        input_serializer.is_valid(raise_exception=True)
+        values = input_serializer.validated_data
+        actual_units = values["actual_units"]
+        short_units = max(0, block.planned_units - actual_units)
+        short_reason = values.get("short_reason", "")
+
+        with transaction.atomic():
+            material_issue = block.material_issue
+            if short_units and short_reason in {
+                DailyPlanBlock.ShortReason.MATERIAL_UNAVAILABLE,
+                DailyPlanBlock.ShortReason.MATERIAL_DELAYED,
+            }:
+                material_values = {
+                    "product_name": block.product_name,
+                    "planned_quantity": block.planned_units,
+                    "status": ProductMaterialReadiness.Status.SHORT,
+                    "shortage_quantity": short_units,
+                    "owner": request.user,
+                    "expected_available_at": values["completed_at"]
+                    + timedelta(hours=1),
+                    "needed_by_at": values["completed_at"],
+                    "risk_summary": (
+                        f"{block.product_name} finished {short_units:,} units short."
+                    ),
+                    "responsible_role": "Materials",
+                    "expected_action": "Confirm replenishment or revised plan.",
+                    "next_action": "Operations Manager review required.",
+                    "notes": values.get("short_note", ""),
+                }
+                material_issue = ProductMaterialReadiness.objects.filter(
+                    assignment=block.assignment,
+                    product_code=block.product_code,
+                ).first()
+                if material_issue is None:
+                    next_material_sequence = (
+                        ProductMaterialReadiness.objects.filter(
+                            assignment=block.assignment
+                        )
+                        .order_by("-sequence_number")
+                        .values_list("sequence_number", flat=True)
+                        .first()
+                        or 0
+                    ) + 1
+                    material_issue = ProductMaterialReadiness.objects.create(
+                        assignment=block.assignment,
+                        sequence_number=next_material_sequence,
+                        product_code=block.product_code,
+                        created_by=request.user,
+                        **material_values,
+                    )
+                else:
+                    for field, value in material_values.items():
+                        setattr(material_issue, field, value)
+                    material_issue.save(
+                        update_fields=(*material_values.keys(), "updated_at")
+                    )
+
+            block.actual_units = actual_units
+            block.completed_at = values["completed_at"]
+            block.completed_by = request.user
+            block.short_reason = short_reason
+            block.short_note = values.get("short_note", "")
+            block.replacement_plan_block = values.get("replacement_plan_block")
+            block.material_issue = material_issue
+            block.completion_status = (
+                DailyPlanBlock.CompletionStatus.CHANGED_OVER
+                if short_units
+                else DailyPlanBlock.CompletionStatus.COMPLETED
+            )
+            block.full_clean()
+            block.save(
+                update_fields=(
+                    "actual_units",
+                    "completed_at",
+                    "completed_by",
+                    "short_reason",
+                    "short_note",
+                    "replacement_plan_block",
+                    "material_issue",
+                    "completion_status",
+                    "updated_at",
+                )
+            )
+            create_operational_event(
+                event_type="daily_plan.product_completed",
+                resource_type="dailyplanblock",
+                resource_id=block.id,
+                assignment=block.assignment,
+                production_line=block.assignment.production_line,
+                actor=request.user,
+                severity=(
+                    OperationalEvent.Severity.WARNING
+                    if short_units
+                    else OperationalEvent.Severity.INFO
+                ),
+                metadata={
+                    "title": "Product shortfall"
+                    if short_units
+                    else "Product completed",
+                    "description": (
+                        f"{block.product_name} finished {short_units:,} units short."
+                        if short_units
+                        else f"{block.product_name} completed its planned target."
+                    ),
+                    "product_code": block.product_code,
+                    "product_name": block.product_name,
+                    "planned_units": block.planned_units,
+                    "actual_units": actual_units,
+                    "short_units": short_units,
+                    "short_reason": short_reason,
+                },
+            )
+        return Response(self.get_serializer(block).data)
+
+    def _publish_plan_amendment_event(self, block, reason):
+        create_operational_event(
+            event_type="daily_plan.amended",
+            resource_type="dailyplanblock",
+            resource_id=block.id,
+            assignment=block.assignment,
+            production_line=block.assignment.production_line,
+            actor=self.request.user,
+            severity=OperationalEvent.Severity.INFO,
+            metadata={
+                "title": "Plan updated",
+                "description": (
+                    f"The published plan for {block.assignment.production_line.code} "
+                    "was updated by the Operations Manager."
+                ),
+                "change_reason": reason,
+                "plan_version": block.assignment.plan_version,
+            },
+            recipients=(block.assignment.team_leader,),
+        )
 
 
 @extend_schema_view(

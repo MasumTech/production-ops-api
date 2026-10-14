@@ -22,6 +22,10 @@ const CONTENT: Record<string, { title: string; description: string }> = {
   "downtime.created": { title: "Downtime recorded", description: "Downtime was added to an hourly plan. Review the reason, owner and duration." },
   "downtime.changed": { title: "Downtime updated", description: "An hourly downtime record changed. Review the latest timing and resolution note." },
   "downtime.deleted": { title: "Downtime removed", description: "An hourly downtime record was deleted. Check the line history if follow-up is still required." },
+  "daily_plan.publication_requested": { title: "Publication requested", description: "A Team Leader reviewed a draft plan and asked the Operations Manager to publish it." },
+  "daily_plan.published": { title: "Plan published", description: "The daily plan is approved and ready for production and downtime updates." },
+  "daily_plan.amended": { title: "Plan updated", description: "The Operations Manager changed a published plan. Review the latest schedule before continuing." },
+  "daily_plan.product_completed": { title: "Product completion recorded", description: "A planned product was completed or changed over. Review its target, done and short evidence." },
 };
 
 function contentFor(event: OperationalEvent) {
@@ -29,7 +33,11 @@ function contentFor(event: OperationalEvent) {
   const fallbackDescription = event.event_type.endsWith(".created")
     ? "A new operational record is ready for review."
     : "An operational record changed and may need your attention.";
-  return CONTENT[event.event_type] ?? { title: fallbackTitle, description: fallbackDescription };
+  const configured = CONTENT[event.event_type] ?? { title: fallbackTitle, description: fallbackDescription };
+  return {
+    title: typeof event.metadata.title === "string" ? event.metadata.title : configured.title,
+    description: typeof event.metadata.description === "string" ? event.metadata.description : configured.description,
+  };
 }
 
 function eventContext(event: OperationalEvent): string {

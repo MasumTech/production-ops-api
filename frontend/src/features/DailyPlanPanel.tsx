@@ -124,6 +124,14 @@ export function DailyPlanPanel({
   const [downtimeSaving, setDowntimeSaving] = useState(false);
   const [downtimeMessage, setDowntimeMessage] = useState("");
   const [deleteDowntimeId, setDeleteDowntimeId] = useState<number | null>(null);
+  const [publicationSaving, setPublicationSaving] = useState<number | null>(null);
+  const [publicationMessage, setPublicationMessage] = useState("");
+  const [selectedProductBlock, setSelectedProductBlock] = useState<DailyPlanBlock | null>(null);
+  const [completedUnits, setCompletedUnits] = useState("");
+  const [shortReason, setShortReason] = useState<DailyPlanBlock["short_reason"]>("");
+  const [completionNote, setCompletionNote] = useState("");
+  const [completionSaving, setCompletionSaving] = useState(false);
+  const [completionMessage, setCompletionMessage] = useState("");
 
   const eventsForHour = (selected: SelectedDowntimeHour): DowntimeEvent[] =>
     downtimeEvents.filter((event) => {
@@ -250,6 +258,73 @@ export function DailyPlanPanel({
     }
   };
 
+  const requestPublication = async (assignment: Assignment) => {
+    setPublicationSaving(assignment.id);
+    setPublicationMessage("");
+    try {
+      await apiRequest<Assignment>(
+        `/team-leader-assignments/${assignment.id}/request-publication/`,
+        { method: "POST" },
+      );
+      const message = `Publication requested for ${displayLine(assignment.production_line_code)}.`;
+      setPublicationMessage(message);
+      await onSaved?.(message);
+    } catch (caught) {
+      setPublicationMessage(
+        caught instanceof ApiError ? caught.message : "Could not request publication.",
+      );
+    } finally {
+      setPublicationSaving(null);
+    }
+  };
+
+  const openProductCompletion = (block: DailyPlanBlock) => {
+    setSelectedProductBlock(block);
+    setCompletedUnits(String(block.actual_units ?? ""));
+    setShortReason(block.short_reason ?? "");
+    setCompletionNote(block.short_note ?? "");
+    setCompletionMessage("");
+  };
+
+  const completeProduct = async (submitEvent: FormEvent) => {
+    submitEvent.preventDefault();
+    if (!selectedProductBlock || completedUnits === "") return;
+    const actualUnits = Number(completedUnits);
+    const productShort = Math.max(0, selectedProductBlock.planned_units - actualUnits);
+    if (productShort && !shortReason) {
+      setCompletionMessage(
+        `This product is ${NUMBER.format(productShort)} units short. Select a reason before completing the changeover.`,
+      );
+      return;
+    }
+    setCompletionSaving(true);
+    setCompletionMessage("");
+    try {
+      await apiRequest<DailyPlanBlock>(
+        `/daily-plan-blocks/${selectedProductBlock.id}/complete/`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            actual_units: actualUnits,
+            short_reason: productShort ? shortReason : "target_completed",
+            short_note: completionNote.trim(),
+          }),
+        },
+      );
+      const message = productShort
+        ? `${NUMBER.format(productShort)} short units preserved for ${selectedProductBlock.product_name}.`
+        : `${selectedProductBlock.product_name} completed to target.`;
+      await onSaved?.(message);
+      setSelectedProductBlock(null);
+    } catch (caught) {
+      setCompletionMessage(
+        caught instanceof ApiError ? caught.message : "Could not record product completion.",
+      );
+    } finally {
+      setCompletionSaving(false);
+    }
+  };
+
   const shownAssignments = useMemo(
     () =>
       lineFilter === "all"
@@ -306,7 +381,9 @@ export function DailyPlanPanel({
   );
   const snapshotLabel = `${live ? "Now" : "Snapshot"} ${formatClockMinutes(snapshotMinutes)}`;
   const planChangeAssignment =
-    shownAssignments[0]?.id ?? visibleAssignments[0]?.id ?? null;
+    shownAssignments.find((assignment) => assignment.plan_status !== "draft")?.id
+    ?? visibleAssignments.find((assignment) => assignment.plan_status !== "draft")?.id
+    ?? null;
 
   return (
     <section className="tl-plan-v2">
@@ -363,6 +440,30 @@ export function DailyPlanPanel({
               {visibleAssignments.length === 1 ? "" : "s"} assigned
             </span>
           </div>
+
+          <div className="tl-plan-publication-list" aria-label="Plan publication status">
+            {shownAssignments.map((assignment) => {
+              const isDraft = assignment.plan_status === "draft";
+              return (
+                <section className={`tl-plan-publication is-${isDraft ? "draft" : "published"}`} key={assignment.id}>
+                  <div>
+                    <strong>{displayLine(assignment.production_line_code)} · {isDraft ? "Plan awaiting Manager approval" : "Published and approved"}</strong>
+                    <span>{isDraft ? "You can review this plan, but production and downtime updates are unavailable until it is published." : `Version ${assignment.plan_version ?? 1}${assignment.plan_published_by_username ? ` · Published by ${assignment.plan_published_by_username}` : ""}`}</span>
+                  </div>
+                  {isDraft ? (
+                    <button
+                      type="button"
+                      disabled={publicationSaving === assignment.id || Boolean(assignment.plan_approval_requested_at)}
+                      onClick={() => void requestPublication(assignment)}
+                    >
+                      {assignment.plan_approval_requested_at ? "Approval requested" : publicationSaving === assignment.id ? "Requesting…" : "Ask Manager to publish"}
+                    </button>
+                  ) : null}
+                </section>
+              );
+            })}
+          </div>
+          {publicationMessage ? <p className="tl-plan-publication-message" role="status">{publicationMessage}</p> : null}
 
           <section
             className="tl-plan-v2__schedule"
@@ -486,13 +587,16 @@ export function DailyPlanPanel({
 
                       {displayedBlocks.length ? (
                         displayedBlocks.map((block) => (
-                          <div
+                          <button
+                            type="button"
                             className={`tl-plan-v2__block tl-plan-v2__block--${block.block_type}`}
                             style={{
                               ...timelineStyle(block.planned_start_at, block.planned_end_at, window),
                               "--tl-plan-done": `${completedFractionForBlock(block, blocks, window, shift)}%`,
                             } as CSSProperties}
                             key={block.id}
+                            disabled={block.block_type === "break" || assignment.plan_status === "draft"}
+                            onClick={() => openProductCompletion(block)}
                             aria-label={block.block_type === "break" ?
                               `Break ${block.break_number}, ${Math.round((new Date(block.planned_end_at).getTime() - new Date(block.planned_start_at).getTime()) / 60000)} minutes` :
                               `${block.product_name}, ${Math.round(completedFractionForBlock(block, blocks, window, shift))}% of this block's planned output done`}
@@ -511,7 +615,7 @@ export function DailyPlanPanel({
                                     block.planned_end_at,
                                   )}`}
                             </span>
-                          </div>
+                          </button>
                         ))
                       ) : (
                         <span className="tl-plan-v2__empty">
@@ -546,6 +650,7 @@ export function DailyPlanPanel({
                     <th>Current product</th>
                     <th>Planned output</th>
                     <th>Actual output</th>
+                    <th>Short</th>
                     <th>Full-day completion</th>
                     <th>Position now</th>
                   </tr>
@@ -560,6 +665,7 @@ export function DailyPlanPanel({
                     const blocks = planBlocks.filter((block) => block.assignment === assignment.id);
                     const expectedNow = expectedUnitsNow(blocks, window, shift?.planned_output ?? 0, snapshotMinutes);
                     const delta = expectedNow === null ? null : (shift?.actual_output ?? 0) - expectedNow;
+                    const productShort = blocks.reduce((total, block) => total + (block.short_units ?? 0), 0);
 
                     return (
                       <tr
@@ -594,6 +700,7 @@ export function DailyPlanPanel({
                         <td>
                           {NUMBER.format(shift?.actual_output ?? 0)}
                         </td>
+                        <td className={productShort ? "metric-behind" : ""}>{NUMBER.format(productShort)}</td>
                         <td>{completionPercentage(shift)}%</td>
                         <td>
                           <span
@@ -645,6 +752,10 @@ export function DailyPlanPanel({
                     <span style={{ width: `${shift?.planned_output ? Math.min(100, actual / shift.planned_output * 100) : 0}%` }} />
                     {expectedNow !== null && shift?.planned_output ? <i style={{ left: `${Math.min(100, expectedNow / shift.planned_output * 100)}%` }} aria-label="Target due now" /> : null}
                   </div>
+                  <h4>Product target, done and short</h4>
+                  <div className="responsive-table tl-plan-v2__products">
+                    <table><thead><tr><th>Product</th><th>Description</th><th>Target</th><th>Done</th><th>Short</th><th>Status / reason</th></tr></thead><tbody>{blocks.filter((block) => block.block_type === "production").map((block) => <tr key={block.id}><td><strong>{block.product_code}</strong></td><td>{block.product_name}</td><td>{NUMBER.format(block.planned_units)}</td><td>{block.actual_units === null || block.actual_units === undefined ? "—" : NUMBER.format(block.actual_units)}</td><td className={(block.short_units ?? 0) > 0 ? "metric-behind" : ""}>{block.short_units === null || block.short_units === undefined ? "—" : NUMBER.format(block.short_units)}</td><td>{block.short_reason ? block.short_reason.replaceAll("_", " ") : block.completion_status === "completed" ? "Target completed" : "Planned"}</td></tr>)}</tbody></table>
+                  </div>
                   <h4>Hour-by-hour details <small>Target · done · short · DT by {formatClockMinutes(snapshotMinutes)}</small></h4>
                   <div className="tl-plan-v2__hours">
                     {hours.map((hour) => {
@@ -665,7 +776,7 @@ export function DailyPlanPanel({
                           <button
                             type="button"
                             aria-label={`${hour.done === null ? "Record" : "Edit"} output for ${hour.label}`}
-                            disabled={!shift || !live}
+                            disabled={!shift || !live || assignment.plan_status === "draft"}
                             onClick={() => openOutputHour(assignment, hour)}
                           >
                             {hour.done === null ? "Record output" : "Edit output"}
@@ -673,7 +784,7 @@ export function DailyPlanPanel({
                           <button
                             type="button"
                             aria-label={`Manage downtime for ${hour.label}, ${downtimeMinutes} minutes recorded`}
-                            disabled={!shift}
+                            disabled={!shift || assignment.plan_status === "draft"}
                             onClick={() => shift && openDowntimeHour(assignment, shift, hour)}
                           >
                             Downtime
@@ -689,10 +800,27 @@ export function DailyPlanPanel({
 
             <p className="tl-plan-v2__readonly">
               <AppIcon name="info" size={19} />
-              Published plans are read-only. Request a change for
-              Operations Manager review.
+              Plan structure is read-only for Team Leaders. Draft plans require Manager publication; published plans can receive production, downtime and product completion evidence.
             </p>
           </section>
+          {selectedProductBlock ? (
+            <div className="hourly-downtime-backdrop" role="presentation">
+              <section className="hourly-downtime-editor" role="dialog" aria-modal="true" aria-labelledby="tl-product-completion-title">
+                <header><div><span className="eyebrow">Product completion evidence</span><h2 id="tl-product-completion-title">Finish product / changeover</h2><p>{selectedProductBlock.product_name} · {selectedProductBlock.product_code}</p></div><button type="button" aria-label="Close product completion" onClick={() => setSelectedProductBlock(null)}>×</button></header>
+                <form onSubmit={completeProduct}>
+                  <div className="hourly-downtime-editor__grid">
+                    <label>Planned target<input value={NUMBER.format(selectedProductBlock.planned_units)} readOnly /></label>
+                    <label>Completed quantity<input type="number" min="0" value={completedUnits} onChange={(event) => setCompletedUnits(event.target.value)} required /></label>
+                    <label>Calculated short<input value={completedUnits === "" ? "—" : NUMBER.format(Math.max(0, selectedProductBlock.planned_units - Number(completedUnits)))} readOnly /></label>
+                    {completedUnits !== "" && Number(completedUnits) < selectedProductBlock.planned_units ? <label>Shortfall reason<select value={shortReason ?? ""} onChange={(event) => setShortReason(event.target.value as DailyPlanBlock["short_reason"])} required><option value="">Choose reason</option><option value="material_unavailable">Material unavailable</option><option value="material_delayed">Material delayed</option><option value="quality_hold">Quality hold</option><option value="machine_downtime">Machine downtime</option><option value="labour_shortage">Labour shortage</option><option value="manager_instruction">Manager instruction</option><option value="changeover_brought_forward">Changeover brought forward</option><option value="other">Other</option></select></label> : null}
+                    <label className="is-wide">Completion / handover note<textarea rows={3} value={completionNote} onChange={(event) => setCompletionNote(event.target.value)} placeholder="What happened and what product runs next?" /></label>
+                  </div>
+                  {completionMessage ? <p className="hourly-downtime-editor__message" role="status">{completionMessage}</p> : null}
+                  <footer><button type="button" className="button button--ghost" onClick={() => setSelectedProductBlock(null)}>Cancel</button><button type="submit" className="button button--primary" disabled={completionSaving || completedUnits === ""}>{completionSaving ? "Saving…" : "Record completion"}</button></footer>
+                </form>
+              </section>
+            </div>
+          ) : null}
           {selectedDowntimeHour ? (
             <div className="hourly-downtime-backdrop" role="presentation">
               <section className="hourly-downtime-editor" role="dialog" aria-modal="true" aria-labelledby="hourly-downtime-title">

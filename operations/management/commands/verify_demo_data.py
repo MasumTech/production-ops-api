@@ -213,6 +213,19 @@ class Command(BaseCommand):
             )
             for assignment in assignments
         )
+        plans_are_published = all(
+            assignment.plan_status == TeamLeaderAssignment.PlanStatus.PUBLISHED
+            and assignment.plan_published_at
+            and assignment.plan_published_by_id
+            for assignment in assignments
+        )
+        product_shortfall_story = plan_blocks.filter(
+            assignment__production_line__code="DEMO-LINE-02",
+            block_type=DailyPlanBlock.BlockType.PRODUCTION,
+            completion_status=DailyPlanBlock.CompletionStatus.CHANGED_OVER,
+            actual_units__isnull=False,
+            short_reason=DailyPlanBlock.ShortReason.MATERIAL_UNAVAILABLE,
+        ).first()
         line_four_break = plan_blocks.filter(
             assignment__production_line__code="DEMO-LINE-04",
             block_type=DailyPlanBlock.BlockType.BREAK,
@@ -382,6 +395,19 @@ class Command(BaseCommand):
                 "complete plan rows",
                 plan_rows_are_complete,
                 "three production blocks and two 40-minute breaks per line",
+            ),
+            (
+                "published plan workflow",
+                plans_are_published,
+                "every showcase plan includes Manager publication evidence",
+            ),
+            (
+                "product shortfall story",
+                bool(
+                    product_shortfall_story
+                    and product_shortfall_story.short_units == 640
+                ),
+                "Line 2 preserves a 640-unit material shortfall and changeover reason",
             ),
             (
                 "RAG line states",

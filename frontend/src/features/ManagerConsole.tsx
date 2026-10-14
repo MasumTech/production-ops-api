@@ -468,7 +468,6 @@ export function ManagerConsole({
   const [editingPlanBlock, setEditingPlanBlock] = useState<DailyPlanBlock | null>(null);
   const [planAssignment, setPlanAssignment] = useState("");
   const [planTeamLeader, setPlanTeamLeader] = useState("");
-  const [planSequence, setPlanSequence] = useState("");
   const [planBlockType, setPlanBlockType] = useState<"production" | "break">("production");
   const [planStart, setPlanStart] = useState("");
   const [planEnd, setPlanEnd] = useState("");
@@ -476,8 +475,14 @@ export function ManagerConsole({
   const [planProductName, setPlanProductName] = useState("");
   const [planHourlyTarget, setPlanHourlyTarget] = useState("");
   const [planBreakNumber, setPlanBreakNumber] = useState("1");
+  const [planChangeReason, setPlanChangeReason] = useState("");
   const [planSaving, setPlanSaving] = useState(false);
   const [planMessage, setPlanMessage] = useState("");
+  const [publishingAssignment, setPublishingAssignment] = useState<number | null>(null);
+  const [finishingPlanBlock, setFinishingPlanBlock] = useState(false);
+  const [finishActualUnits, setFinishActualUnits] = useState("");
+  const [finishReason, setFinishReason] = useState<DailyPlanBlock["short_reason"]>("");
+  const [finishNote, setFinishNote] = useState("");
   const [shiftEditorOpen, setShiftEditorOpen] = useState(false);
   const [shiftStart, setShiftStart] = useState("");
   const [shiftEnd, setShiftEnd] = useState("");
@@ -617,6 +622,20 @@ export function ManagerConsole({
     : data.productionLines.find(
         (line) => planAssignment === `line-${line.id}`,
       ) ?? null;
+  const selectedPlanBlocks = selectedPlanAssignment
+    ? (data.planBlocks ?? []).filter(
+        (block) => block.assignment === selectedPlanAssignment.id,
+      )
+    : [];
+  const selectedPlanFullyAllocated = Boolean(
+    selectedPlanAssignment
+    && selectedPlanBlocks.length
+    && Math.max(
+      ...selectedPlanBlocks.map((block) =>
+        scheduleDateTimeToShiftMinutes(block.planned_end_at, scheduleWindow),
+      ),
+    ) >= scheduleWindow.endMinutes,
+  );
   const planLeaderOptions = data.users.filter(
     (user) => user.workspace === "team_leader" || user.workspace === undefined,
   );
@@ -704,26 +723,29 @@ export function ManagerConsole({
     const assignment = block
       ? rows.find((row) => row.assignment.id === block.assignment)?.assignment
       : planRows[0]?.assignment;
-    const nextSequence = assignment
-      ? Math.max(
-          0,
-          ...(data.planBlocks ?? [])
-            .filter((item) => item.assignment === assignment.id)
-            .map((item) => item.sequence_number),
-        ) + 1
-      : 1;
+    const assignmentBlocks = assignment
+      ? (data.planBlocks ?? [])
+          .filter((item) => item.assignment === assignment.id)
+          .sort(
+            (left, right) =>
+              new Date(left.planned_end_at).getTime() -
+              new Date(right.planned_end_at).getTime(),
+          )
+      : [];
+    const nextStart = assignmentBlocks.at(-1)?.planned_end_at.slice(0, 16)
+      ?? `${operationalDate}T${configuredShiftStart}`;
     setEditingPlanBlock(block);
     setPlanAssignment(String(block?.assignment ?? assignment?.id ?? ""));
     setPlanTeamLeader(String(block?.assignment ? assignment?.team_leader ?? "" : assignment?.team_leader ?? planLeaderOptions[0]?.id ?? ""));
-    setPlanSequence(String(block?.sequence_number ?? nextSequence));
     setPlanBlockType(block?.block_type ?? "production");
-    const defaultStart = `${operationalDate}T${configuredShiftStart}`;
+    const defaultStart = nextStart;
     setPlanStart(block?.planned_start_at.slice(0, 16) ?? defaultStart);
     setPlanEnd(block?.planned_end_at.slice(0, 16) ?? localDateTimeAfter(defaultStart, 60));
     setPlanProductCode(block?.product_code ?? "");
     setPlanProductName(block?.product_name ?? "");
     setPlanHourlyTarget(String(block?.target_units_per_hour ?? ""));
     setPlanBreakNumber(String(block?.break_number ?? 1));
+    setPlanChangeReason("");
     setPlanMessage("");
     setPlanEditorOpen(true);
     setSelectedPlanBlock(null);
@@ -732,13 +754,24 @@ export function ManagerConsole({
   const changePlanAssignment = (value: string) => {
     setPlanAssignment(value);
     const assignmentId = value.startsWith("line-") ? null : Number(value);
-    const nextSequence = Math.max(
-      0,
-      ...(data.planBlocks ?? [])
-        .filter((item) => assignmentId !== null && item.assignment === assignmentId)
-        .map((item) => item.sequence_number),
-    ) + 1;
-    setPlanSequence(String(nextSequence));
+    const blocks = (data.planBlocks ?? [])
+      .filter((item) => assignmentId !== null && item.assignment === assignmentId)
+      .sort(
+        (left, right) =>
+          new Date(left.planned_end_at).getTime() -
+          new Date(right.planned_end_at).getTime(),
+      );
+    const start = blocks.at(-1)?.planned_end_at.slice(0, 16)
+      ?? `${operationalDate}T${configuredShiftStart}`;
+    setPlanStart(start);
+    setPlanEnd(localDateTimeAfter(start, planBlockType === "break" ? 40 : 60));
+  };
+
+  const changePlanBlockType = (value: "production" | "break") => {
+    setPlanBlockType(value);
+    if (value === "break" && planStart) {
+      setPlanEnd(localDateTimeAfter(planStart, 40));
+    }
   };
 
   const openDowntimeEvent = (eventId: number) => {
@@ -819,8 +852,8 @@ export function ManagerConsole({
   };
 
   const savePlanBlock = async () => {
-    if (!planAssignment || !planSequence || !planStart || !planEnd) {
-      setPlanMessage("Choose a line, sequence, start time and end time.");
+    if (!planAssignment || !planStart || !planEnd) {
+      setPlanMessage("Choose a line, start time and end time.");
       return;
     }
     if (new Date(planEnd).getTime() <= new Date(planStart).getTime()) {
@@ -857,7 +890,6 @@ export function ManagerConsole({
       }
       const payload = {
         assignment: assignmentId,
-        sequence_number: Number(planSequence),
         block_type: planBlockType,
         planned_start_at: new Date(planStart).toISOString(),
         planned_end_at: new Date(planEnd).toISOString(),
@@ -865,6 +897,7 @@ export function ManagerConsole({
         product_name: planBlockType === "production" ? planProductName.trim() : "",
         target_units_per_hour: planBlockType === "production" ? Number(planHourlyTarget) : null,
         break_number: planBlockType === "break" ? Number(planBreakNumber) : null,
+        ...(planChangeReason.trim() ? { change_reason: planChangeReason.trim() } : {}),
       };
       await apiRequest(
         editingPlanBlock
@@ -880,6 +913,62 @@ export function ManagerConsole({
       onRefresh();
     } catch (caught) {
       setPlanMessage(caught instanceof Error ? caught.message : "Could not save this plan block.");
+    } finally {
+      setPlanSaving(false);
+    }
+  };
+
+  const publishPlan = async (assignment: Assignment) => {
+    if (!window.confirm(`Publish and approve the plan for ${displayLine(assignment.production_line_code)}?`)) return;
+    setPublishingAssignment(assignment.id);
+    setPlanMessage("");
+    try {
+      await apiRequest<Assignment>(`/team-leader-assignments/${assignment.id}/publish/`, {
+        method: "POST",
+      });
+      setPlanMessage(`${displayLine(assignment.production_line_code)} plan published and approved.`);
+      onRefresh();
+    } catch (caught) {
+      setPlanMessage(caught instanceof Error ? caught.message : "Could not publish this plan.");
+    } finally {
+      setPublishingAssignment(null);
+    }
+  };
+
+  const openFinishProduct = (block: DailyPlanBlock) => {
+    setSelectedPlanBlock(block);
+    setFinishActualUnits(String(block.actual_units ?? ""));
+    setFinishReason(block.short_reason ?? "");
+    setFinishNote(block.short_note ?? "");
+    setPlanMessage("");
+    setFinishingPlanBlock(true);
+  };
+
+  const completeProduct = async () => {
+    if (!selectedPlanBlock || finishActualUnits === "") return;
+    const actualUnits = Number(finishActualUnits);
+    const shortUnits = Math.max(0, selectedPlanBlock.planned_units - actualUnits);
+    if (shortUnits > 0 && !finishReason) {
+      setPlanMessage(`This product is ${NUMBER.format(shortUnits)} units short. Select a reason.`);
+      return;
+    }
+    setPlanSaving(true);
+    setPlanMessage("");
+    try {
+      await apiRequest<DailyPlanBlock>(`/daily-plan-blocks/${selectedPlanBlock.id}/complete/`, {
+        method: "POST",
+        body: JSON.stringify({
+          actual_units: actualUnits,
+          short_reason: shortUnits > 0 ? finishReason : "target_completed",
+          short_note: finishNote.trim(),
+        }),
+      });
+      setPlanMessage(shortUnits > 0 ? `${NUMBER.format(shortUnits)} short units recorded.` : "Product completion recorded.");
+      setFinishingPlanBlock(false);
+      setSelectedPlanBlock(null);
+      onRefresh();
+    } catch (caught) {
+      setPlanMessage(caught instanceof Error ? caught.message : "Could not complete this product.");
     } finally {
       setPlanSaving(false);
     }
@@ -1486,7 +1575,7 @@ export function ManagerConsole({
               <ManagerViewIntro
                 eyebrow={isHistorical ? "Historical snapshot" : "Today&apos;s schedule"}
                 title="Daily plans"
-                body={isHistorical ? `Read-only approved schedule and recorded output for ${controlBoardDate(operationalDate)}.` : "Compare the approved schedule with recorded output, target due now and each recorded hour."}
+                body={isHistorical ? `Read-only published schedule and recorded output for ${controlBoardDate(operationalDate)}.` : "Build draft schedules, publish them to Team Leaders and retain every product shortfall."}
               />
               <div className="daily-plan-controls">
                 <select aria-label="Filter daily plans by line" value={planLineFilter} onChange={(event) => setPlanLineFilter(event.target.value)}><option value="all">All lines</option>{rows.map((row) => <option key={row.assignment.id} value={row.assignment.production_line}>{displayLine(row.assignment.production_line_code)}</option>)}</select>
@@ -1505,7 +1594,7 @@ export function ManagerConsole({
                     const blocks = (data.planBlocks ?? []).filter((block) => block.assignment === row.assignment.id).sort((left, right) => left.sequence_number - right.sequence_number);
                     const progress = progressLines.find((item) => item.row.assignment.id === row.assignment.id);
                     return <article className="daily-plan-row" key={row.assignment.id}>
-                      <div className="daily-plan-row-label"><strong>{displayLine(row.assignment.production_line_code)}</strong><span>{progress?.actual === null || progress?.actual === undefined ? "Output unavailable" : `${NUMBER.format(progress.actual)} done`} · {lineDowntime(data.downtimeEvents, row.assignment.production_line)} min downtime</span></div>
+                      <div className="daily-plan-row-label"><strong>{displayLine(row.assignment.production_line_code)}</strong><span className={`plan-publication-status is-${row.assignment.plan_status ?? "published"}`}>{row.assignment.plan_status === "draft" ? "Draft · not published" : "Published"}</span><span>{progress?.actual === null || progress?.actual === undefined ? "Output unavailable" : `${NUMBER.format(progress.actual)} done`} · {lineDowntime(data.downtimeEvents, row.assignment.production_line)} min downtime</span>{row.assignment.plan_status === "draft" && profile.is_staff && !isHistorical ? <button type="button" className="plan-publish-button" disabled={publishingAssignment === row.assignment.id || !blocks.length} onClick={() => void publishPlan(row.assignment)}>{publishingAssignment === row.assignment.id ? "Publishing…" : "Publish & approve"}</button> : null}</div>
                       <div className="daily-plan-track">
                         {blocks.length ? blocks.map((block) => {
                           const blockDuration = scheduleDateTimeToShiftMinutes(block.planned_end_at, scheduleWindow) - scheduleDateTimeToShiftMinutes(block.planned_start_at, scheduleWindow);
@@ -1525,22 +1614,25 @@ export function ManagerConsole({
               <section className="daily-plan-output-table" aria-label="Daily plan output table">
                 <h2>Output by line</h2>
                 <p>Select a line for hourly target, recorded done, short and DT.</p>
-                <div className="responsive-table"><table><thead><tr><th>Line</th><th>Planned</th><th>Actual</th><th>Downtime</th><th>Full-day completion</th><th>Position now</th></tr></thead><tbody>{planRows.map((row) => {
+                <div className="responsive-table"><table><thead><tr><th>Line</th><th>Planned</th><th>Actual</th><th>Product short</th><th>Downtime</th><th>Full-day completion</th><th>Position now</th></tr></thead><tbody>{planRows.map((row) => {
                   const progress = progressLines.find((item) => item.row.assignment.id === row.assignment.id);
                   const expanded = expandedPlanLine === row.assignment.id;
                   const delta = progress?.delta ?? null;
+                  const productShort = (data.planBlocks ?? []).filter((block) => block.assignment === row.assignment.id).reduce((total, block) => total + (block.short_units ?? 0), 0);
                   return <Fragment key={row.assignment.id}>
                     <tr className={expanded ? "manager-output-selected" : ""}>
                       <td><button type="button" className="manager-output-open" aria-expanded={expanded} aria-controls={`manager-hours-${row.assignment.id}`} onClick={() => setExpandedPlanLine(expanded ? null : row.assignment.id)}>{displayLine(row.assignment.production_line_code)} {expanded ? "▴" : "▾"}</button><small>{row.update?.current_product || row.assignment.production_line_name}</small></td>
                       <td>{row.shift ? NUMBER.format(row.shift.planned_output) : "—"}</td>
                       <td>{progress?.actual === null || progress?.actual === undefined ? "—" : NUMBER.format(progress.actual)}</td>
+                      <td className={productShort ? "metric-behind" : ""}>{NUMBER.format(productShort)}</td>
                       <td>{lineDowntime(data.downtimeEvents, row.assignment.production_line)} min</td>
                       <td>{planPercent(row.shift) === null ? "—" : `${planPercent(row.shift)}%`}</td>
                       <td className={delta === null ? "" : delta < 0 ? "metric-behind" : "metric-ahead"}><strong>{timePositionLabel(progress?.positionMinutes ?? null)}</strong><small>{unitPositionLabel(delta)} · {progress?.shiftAttainment ?? "—"}% attainment</small></td>
                     </tr>
-                    {expanded ? <tr className="manager-output-detail-row"><td colSpan={6}><div id={`manager-hours-${row.assignment.id}`} className="manager-output-detail" aria-label={`${displayLine(row.assignment.production_line_code)} hourly details`}>
+                    {expanded ? <tr className="manager-output-detail-row"><td colSpan={7}><div id={`manager-hours-${row.assignment.id}`} className="manager-output-detail" aria-label={`${displayLine(row.assignment.production_line_code)} hourly details`}>
                       <header><div><h3>{displayLine(row.assignment.production_line_code)} · Hourly details</h3><p>Target · done · short · DT · partial hour due by {formatClockMinutes(snapshotMinutes)}</p></div><span>{progress?.expectedNow ? `${Math.round((progress.actual ?? 0) / progress.expectedNow * 100)}% of target due now` : "Target unavailable"}</span></header>
                       <div className="manager-output-facts"><div><small>Actual now</small><strong>{progress?.actual === null || progress?.actual === undefined ? "—" : NUMBER.format(progress.actual)}</strong></div><div><small>Target due now</small><strong>{progress?.expectedNow === null || progress?.expectedNow === undefined ? "—" : NUMBER.format(progress.expectedNow)}</strong></div><div><small>Downtime</small><strong>{lineDowntime(data.downtimeEvents, row.assignment.production_line)} min</strong><span>Full shift</span></div><div><small>Position now</small><strong>{timePositionLabel(progress?.positionMinutes ?? null)}</strong><span>{unitPositionLabel(delta)}</span></div><div><small>Shift attainment</small><strong>{progress?.shiftAttainment === null || progress?.shiftAttainment === undefined ? "—" : `${progress.shiftAttainment}%`}</strong><span>Full-shift time basis</span></div><div><small>Left in shift</small><strong>{row.shift && progress?.actual !== null && progress?.actual !== undefined ? NUMBER.format(Math.max(0, row.shift.planned_output - progress.actual)) : "—"}</strong></div></div>
+                      <div className="responsive-table manager-product-position"><table><thead><tr><th>Product</th><th>Description</th><th>Target</th><th>Done</th><th>Short</th><th>Status / reason</th></tr></thead><tbody>{(data.planBlocks ?? []).filter((block) => block.assignment === row.assignment.id && block.block_type === "production").map((block) => <tr key={block.id}><td><strong>{block.product_code}</strong></td><td>{block.product_name}</td><td>{NUMBER.format(block.planned_units)}</td><td>{block.actual_units === null || block.actual_units === undefined ? "—" : NUMBER.format(block.actual_units)}</td><td className={(block.short_units ?? 0) > 0 ? "metric-behind" : ""}>{block.short_units === null || block.short_units === undefined ? "—" : NUMBER.format(block.short_units)}</td><td>{block.short_reason ? titleCase(block.short_reason) : block.completion_status === "completed" ? "Target completed" : "Planned"}</td></tr>)}</tbody></table></div>
                       <div className="manager-output-hours">{progress?.hours.map((hour) => {
                         const targetDue = hour.future ? hour.target : hour.dueNow;
                         const short = hour.done !== null && targetDue !== null ? Math.max(0, targetDue - hour.done) : null;
@@ -1555,9 +1647,10 @@ export function ManagerConsole({
                   </Fragment>;
                 })}</tbody></table></div>
               </section>
-              {selectedPlanBlock ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="plan-block-title"><header><div><span className="eyebrow">Schedule detail</span><h2 id="plan-block-title">{selectedPlanBlock.block_type === "break" ? `Planned break ${selectedPlanBlock.break_number ?? ""}` : selectedPlanBlock.product_name}</h2></div><button type="button" aria-label="Close plan detail" onClick={() => setSelectedPlanBlock(null)}>×</button></header><dl className="plan-block-facts"><div><dt>Start</dt><dd>{formatScheduleClock(selectedPlanBlock.planned_start_at)}</dd></div><div><dt>End</dt><dd>{formatScheduleClock(selectedPlanBlock.planned_end_at)}</dd></div><div><dt>Target</dt><dd>{selectedPlanBlock.target_units_per_hour ?? "—"} / hour</dd></div><div><dt>Quantity</dt><dd>{NUMBER.format(selectedPlanBlock.planned_units)}</dd></div><div><dt>Materials</dt><dd>{data.materials.filter((item) => item.assignment === selectedPlanBlock.assignment && item.sequence_number === selectedPlanBlock.sequence_number).map((item) => item.product_name).join(", ") || "No material record"}</dd></div></dl>{planMessage ? <p role="status" className="downtime-editor__message">{planMessage}</p> : null}<footer><button type="button" className="button button--ghost" onClick={() => setSelectedPlanBlock(null)}>Done</button>{profile.is_staff && !isHistorical ? <><button type="button" className="button button--danger" disabled={planSaving} onClick={() => void deletePlanBlock(selectedPlanBlock)}>Delete block</button><button type="button" className="button button--primary" onClick={() => openPlanEditor(selectedPlanBlock)}>Edit block</button></> : null}</footer></section></div> : null}
+              {selectedPlanBlock && !finishingPlanBlock ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="plan-block-title"><header><div><span className="eyebrow">Schedule detail</span><h2 id="plan-block-title">{selectedPlanBlock.block_type === "break" ? `Planned break ${selectedPlanBlock.break_number ?? ""}` : selectedPlanBlock.product_name}</h2></div><button type="button" aria-label="Close plan detail" onClick={() => setSelectedPlanBlock(null)}>×</button></header><dl className="plan-block-facts"><div><dt>Start</dt><dd>{formatScheduleClock(selectedPlanBlock.planned_start_at)}</dd></div><div><dt>End</dt><dd>{formatScheduleClock(selectedPlanBlock.planned_end_at)}</dd></div><div><dt>Target</dt><dd>{selectedPlanBlock.target_units_per_hour ?? "—"} / hour</dd></div><div><dt>Planned quantity</dt><dd>{NUMBER.format(selectedPlanBlock.planned_units)}</dd></div><div><dt>Done</dt><dd>{selectedPlanBlock.actual_units === null || selectedPlanBlock.actual_units === undefined ? "Not closed" : NUMBER.format(selectedPlanBlock.actual_units)}</dd></div><div><dt>Short</dt><dd className={(selectedPlanBlock.short_units ?? 0) > 0 ? "metric-behind" : ""}>{selectedPlanBlock.short_units === null || selectedPlanBlock.short_units === undefined ? "—" : NUMBER.format(selectedPlanBlock.short_units)}</dd></div><div><dt>Reason</dt><dd>{selectedPlanBlock.short_reason ? titleCase(selectedPlanBlock.short_reason) : "—"}</dd></div><div><dt>Materials</dt><dd>{data.materials.filter((item) => item.assignment === selectedPlanBlock.assignment && item.sequence_number === selectedPlanBlock.sequence_number).map((item) => item.product_name).join(", ") || "No material record"}</dd></div></dl>{planMessage ? <p role="status" className="downtime-editor__message">{planMessage}</p> : null}<footer><button type="button" className="button button--ghost" onClick={() => setSelectedPlanBlock(null)}>Done</button>{profile.is_staff && !isHistorical ? <><button type="button" className="button button--danger" disabled={planSaving || selectedPlanBlock.actual_units !== null && selectedPlanBlock.actual_units !== undefined} onClick={() => void deletePlanBlock(selectedPlanBlock)}>Delete block</button>{selectedPlanBlock.block_type === "production" && data.assignments.find((item) => item.id === selectedPlanBlock.assignment)?.plan_status !== "draft" ? <button type="button" className="button button--ghost" onClick={() => openFinishProduct(selectedPlanBlock)}>Finish product / changeover</button> : null}<button type="button" className="button button--primary" onClick={() => openPlanEditor(selectedPlanBlock)}>Edit block</button></> : null}</footer></section></div> : null}
+              {selectedPlanBlock && finishingPlanBlock ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="finish-plan-product-title"><header><div><span className="eyebrow">Product completion evidence</span><h2 id="finish-plan-product-title">Finish product / changeover</h2><p>{selectedPlanBlock.product_name} · target {NUMBER.format(selectedPlanBlock.planned_units)}</p></div><button type="button" aria-label="Close product completion" onClick={() => setFinishingPlanBlock(false)}>×</button></header><label>Completed quantity<input type="number" min="0" value={finishActualUnits} onChange={(event) => setFinishActualUnits(event.target.value)} required /></label><div className="plan-short-preview"><span>Calculated short</span><strong>{finishActualUnits === "" ? "—" : NUMBER.format(Math.max(0, selectedPlanBlock.planned_units - Number(finishActualUnits)))}</strong></div>{finishActualUnits !== "" && Number(finishActualUnits) < selectedPlanBlock.planned_units ? <label>Shortfall reason<select value={finishReason ?? ""} onChange={(event) => setFinishReason(event.target.value as DailyPlanBlock["short_reason"])} required><option value="">Choose reason</option><option value="material_unavailable">Material unavailable</option><option value="material_delayed">Material delayed</option><option value="quality_hold">Quality hold</option><option value="machine_downtime">Machine downtime</option><option value="labour_shortage">Labour shortage</option><option value="manager_instruction">Manager instruction</option><option value="changeover_brought_forward">Changeover brought forward</option><option value="other">Other</option></select></label> : null}<label>Completion / handover note<textarea rows={3} value={finishNote} onChange={(event) => setFinishNote(event.target.value)} placeholder="Explain the stop or next product." /></label>{planMessage ? <p role="status" className="downtime-editor__message">{planMessage}</p> : null}<footer><button type="button" className="button button--ghost" onClick={() => setFinishingPlanBlock(false)}>Cancel</button><button type="button" className="button button--primary" disabled={planSaving || finishActualUnits === ""} onClick={() => void completeProduct()}>{planSaving ? "Saving…" : "Record completion"}</button></footer></section></div> : null}
               {shiftEditorOpen ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor" role="dialog" aria-modal="true" aria-labelledby="shift-time-title"><header><div><span className="eyebrow">Operations control</span><h2 id="shift-time-title">Shift start & end</h2></div><button type="button" aria-label="Close shift time editor" onClick={() => setShiftEditorOpen(false)}>×</button></header><p>These times apply to every recorded {shiftPattern} shift line for {controlBoardDate(operationalDate)}.</p><label>Shift start<input type="time" value={shiftStart} onChange={(event) => setShiftStart(event.target.value)} /></label><label>Shift end<input type="time" value={shiftEnd} onChange={(event) => setShiftEnd(event.target.value)} /></label><p className="workflow-boundary">Default day shift: Monday–Friday 06:45–18:00; Saturday–Sunday 07:00–18:00. Operations may override the recorded shift when required.</p>{shiftTimeMessage ? <p role="status">{shiftTimeMessage}</p> : null}<footer><button type="button" className="button button--ghost" onClick={() => setShiftEditorOpen(false)}>Cancel</button><button type="button" className="button button--primary" disabled={shiftTimeSaving} onClick={() => void saveShiftTimes()}>{shiftTimeSaving ? "Saving…" : "Save shift time"}</button></footer></section></div> : null}
-              {planEditorOpen ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor plan-block-editor" role="dialog" aria-modal="true" aria-labelledby="plan-editor-title"><header><div><span className="eyebrow">Approved schedule</span><h2 id="plan-editor-title">{editingPlanBlock ? "Edit plan block" : "Add plan block"}</h2></div><button type="button" aria-label="Close plan editor" onClick={() => setPlanEditorOpen(false)}>×</button></header>{selectedPlanAssignment ? <div className="plan-editor-line-context"><strong>Selected line: {displayLine(selectedPlanAssignment.production_line_code)}</strong><span>{selectedPlanAssignment.production_line_code} · {selectedPlanAssignment.production_line_name} · {titleCase(selectedPlanAssignment.shift_type)} shift</span></div> : selectedPlanLine ? <div className="plan-editor-line-context"><strong>Selected line: {displayLine(selectedPlanLine.code)}</strong><span>{selectedPlanLine.code} · Assign a Team Leader below to activate this line for the shift.</span></div> : <p className="downtime-editor__message">Choose a production line.</p>}<div className="plan-editor-grid"><label>Production line<select value={planAssignment} disabled={Boolean(editingPlanBlock)} onChange={(event) => changePlanAssignment(event.target.value)}>{planLineOptions.map(({ line, assignment }) => <option key={line.id} value={assignment?.id ?? `line-${line.id}`}>{displayLine(line.code)} · {line.name}{assignment ? ` · ${assignment.team_leader_username}` : " · Assignment required"}</option>)}</select></label>{!selectedPlanAssignment && selectedPlanLine ? <label>Team Leader<select value={planTeamLeader} onChange={(event) => setPlanTeamLeader(event.target.value)}><option value="">Choose Team Leader</option>{planLeaderOptions.map((leader) => <option key={leader.id} value={leader.id}>{leader.display_name}</option>)}</select></label> : null}<label>Sequence<input type="number" min="1" value={planSequence} onChange={(event) => setPlanSequence(event.target.value)} /></label><label>Block type<select value={planBlockType} onChange={(event) => setPlanBlockType(event.target.value as "production" | "break")}><option value="production">Production</option><option value="break">Planned break</option></select></label><label>Start<input type="datetime-local" value={planStart} onChange={(event) => setPlanStart(event.target.value)} /></label><label>End<input type="datetime-local" value={planEnd} onChange={(event) => setPlanEnd(event.target.value)} /></label>{planBlockType === "production" ? <><label>Product code<input value={planProductCode} onChange={(event) => setPlanProductCode(event.target.value)} /></label><label>Product name<input value={planProductName} onChange={(event) => setPlanProductName(event.target.value)} /></label><label>Target units / hour<input type="number" min="1" value={planHourlyTarget} onChange={(event) => setPlanHourlyTarget(event.target.value)} /></label></> : <label>Break number<select value={planBreakNumber} onChange={(event) => setPlanBreakNumber(event.target.value)}><option value="1">Break 1</option><option value="2">Break 2</option></select></label>}</div><p className="workflow-boundary">The master list contains Lines 1–20. An unassigned line is activated by creating its Team Leader assignment when the first block is saved. Blocks must stay inside the selected shift and cannot overlap. Approved breaks are exactly 40 minutes.</p>{planMessage ? <p role="status" className="downtime-editor__message">{planMessage}</p> : null}<footer><button type="button" className="button button--ghost" onClick={() => setPlanEditorOpen(false)}>Cancel</button><button type="button" className="button button--primary" disabled={planSaving || !selectedPlanLine || (!selectedPlanAssignment && !planTeamLeader)} onClick={() => void savePlanBlock()}>{planSaving ? "Saving…" : editingPlanBlock ? "Save changes" : "Add block"}</button></footer></section></div> : null}
+              {planEditorOpen ? <div className="downtime-modal-backdrop" role="presentation"><section className="downtime-editor plan-block-editor" role="dialog" aria-modal="true" aria-labelledby="plan-editor-title"><header><div><span className="eyebrow">{selectedPlanAssignment?.plan_status === "draft" ? "Draft schedule" : "Published schedule"}</span><h2 id="plan-editor-title">{editingPlanBlock ? "Edit plan block" : "Add plan block"}</h2></div><button type="button" aria-label="Close plan editor" onClick={() => setPlanEditorOpen(false)}>×</button></header>{selectedPlanAssignment ? <div className="plan-editor-line-context"><strong>Selected line: {displayLine(selectedPlanAssignment.production_line_code)}</strong><span>{selectedPlanAssignment.production_line_code} · {selectedPlanAssignment.production_line_name} · {titleCase(selectedPlanAssignment.shift_type)} shift</span></div> : selectedPlanLine ? <div className="plan-editor-line-context"><strong>Selected line: {displayLine(selectedPlanLine.code)}</strong><span>{selectedPlanLine.code} · Assign a Team Leader below to activate this line for the shift.</span></div> : <p className="downtime-editor__message">Choose a production line.</p>}{selectedPlanFullyAllocated && !editingPlanBlock ? <p className="downtime-editor__message">This shift is fully planned. Edit an existing block before adding another.</p> : null}<div className="plan-editor-grid"><label>Production line<select value={planAssignment} disabled={Boolean(editingPlanBlock)} onChange={(event) => changePlanAssignment(event.target.value)}>{planLineOptions.map(({ line, assignment }) => <option key={line.id} value={assignment?.id ?? `line-${line.id}`}>{displayLine(line.code)} · {line.name}{assignment ? ` · ${assignment.team_leader_username}` : " · Assignment required"}</option>)}</select></label>{!selectedPlanAssignment && selectedPlanLine ? <label>Team Leader<select value={planTeamLeader} onChange={(event) => setPlanTeamLeader(event.target.value)}><option value="">Choose Team Leader</option>{planLeaderOptions.map((leader) => <option key={leader.id} value={leader.id}>{leader.display_name}</option>)}</select></label> : null}<label>Block type<select value={planBlockType} disabled={selectedPlanFullyAllocated && !editingPlanBlock} onChange={(event) => changePlanBlockType(event.target.value as "production" | "break")}><option value="production">Production</option><option value="break">Planned break</option></select></label><label>Start · next available<input type="datetime-local" value={planStart} readOnly={!editingPlanBlock} onChange={(event) => setPlanStart(event.target.value)} /></label><label>End<input type="datetime-local" min={planStart} value={planEnd} readOnly={planBlockType === "break" && !editingPlanBlock} onChange={(event) => setPlanEnd(event.target.value)} /></label>{planBlockType === "production" ? <><label>Product code<input value={planProductCode} onChange={(event) => setPlanProductCode(event.target.value)} /></label><label>Product name<input value={planProductName} onChange={(event) => setPlanProductName(event.target.value)} /></label><label>Target units / hour<input type="number" min="1" value={planHourlyTarget} onChange={(event) => setPlanHourlyTarget(event.target.value)} /></label></> : <label>Break number<select value={planBreakNumber} onChange={(event) => setPlanBreakNumber(event.target.value)}><option value="1">Break 1</option><option value="2">Break 2</option></select></label>}{editingPlanBlock && selectedPlanAssignment?.plan_status === "published" ? <label className="is-wide">Change reason<textarea rows={2} value={planChangeReason} onChange={(event) => setPlanChangeReason(event.target.value)} placeholder="Why is the published plan changing?" required /></label> : null}</div><p className="workflow-boundary">New blocks start automatically at the next available time. Booked time cannot be selected, sequence is automatic, and planned breaks are exactly 40 minutes. Draft plans require Publish &amp; approve before production entry.</p>{planMessage ? <p role="status" className="downtime-editor__message">{planMessage}</p> : null}<footer><button type="button" className="button button--ghost" onClick={() => setPlanEditorOpen(false)}>Cancel</button><button type="button" className="button button--primary" disabled={planSaving || (!editingPlanBlock && selectedPlanFullyAllocated) || !selectedPlanLine || (!selectedPlanAssignment && !planTeamLeader) || Boolean(editingPlanBlock && selectedPlanAssignment?.plan_status === "published" && !planChangeReason.trim())} onClick={() => void savePlanBlock()}>{planSaving ? "Saving…" : editingPlanBlock ? "Save changes" : selectedPlanFullyAllocated ? "Shift fully planned" : "Add block"}</button></footer></section></div> : null}
             </>
           ) : null}
 
