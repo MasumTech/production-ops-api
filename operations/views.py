@@ -2567,6 +2567,7 @@ class DailyPlanBlockViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         with transaction.atomic():
+            previous_planned_units = serializer.instance.planned_units
             block = serializer.save()
             assignment = block.assignment
             if assignment.plan_status == TeamLeaderAssignment.PlanStatus.PUBLISHED:
@@ -2585,7 +2586,8 @@ class DailyPlanBlockViewSet(viewsets.ModelViewSet):
                     block,
                     str(self.request.data.get("change_reason", "")).strip(),
                 )
-            recalculate_shift_totals(assignment)
+            if block.planned_units != previous_planned_units:
+                recalculate_shift_totals(assignment)
 
     def perform_destroy(self, instance):
         if instance.actual_units is not None:

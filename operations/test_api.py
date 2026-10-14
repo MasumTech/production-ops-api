@@ -2838,6 +2838,41 @@ def test_staff_can_update_approved_daily_plan_block(
 
 
 @pytest.mark.django_db
+def test_name_only_plan_amendment_preserves_approved_shift_target(
+    staff_client,
+    staff_user,
+    api_team_leader_assignment,
+    shift,
+):
+    block = DailyPlanBlock.objects.create(
+        assignment=api_team_leader_assignment,
+        sequence_number=1,
+        block_type=DailyPlanBlock.BlockType.PRODUCTION,
+        planned_start_at=at_assignment_time(api_team_leader_assignment, 6),
+        planned_end_at=at_assignment_time(api_team_leader_assignment, 8),
+        product_code="SPC-01",
+        product_name="Salt & Pepper Chicken",
+        target_units_per_hour=60,
+        created_by=staff_user,
+    )
+    shift.planned_output = 8400
+    shift.save(update_fields=("planned_output", "updated_at"))
+
+    response = staff_client.patch(
+        reverse("daily-plan-block-detail", args=(block.id,)),
+        {
+            "product_name": "Salt and Pepper Chicken",
+            "change_reason": "Correct the display name.",
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    shift.refresh_from_db()
+    assert shift.planned_output == 8400
+
+
+@pytest.mark.django_db
 def test_published_plan_amendment_requires_a_reason(
     staff_client,
     api_daily_break_block,
