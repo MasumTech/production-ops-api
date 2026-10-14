@@ -23,7 +23,7 @@ import { MaterialsPanel } from "./features/MaterialsPanel";
 import { MyLinesPanel } from "./features/MyLinesPanel";
 import { RaiseIssuePanel } from "./features/RaiseIssuePanel";
 import { SupportCompanion } from "./features/SupportCompanion";
-import { localDate } from "./format";
+import { isCurrentOperationalDate, localDate } from "./format";
 import { connectOperationalEvents, type LiveConnectionState } from "./realtime";
 import { TeamLeaderShell } from "./TeamLeaderShell";
 import type {
@@ -686,9 +686,12 @@ export default function App() {
           onSelectTab={setTab}
           onOperationalDateChange={(value) => {
             setOperationalDate(value);
-            setTeamViewMode(value === localDate() ? "live" : "historical");
+            setTeamViewMode(isCurrentOperationalDate(value, teamShiftPattern) ? "live" : "historical");
           }}
-          onShiftPatternChange={setTeamShiftPattern}
+          onShiftPatternChange={(value) => {
+            setTeamShiftPattern(value);
+            setTeamViewMode(isCurrentOperationalDate(operationalDate, value) ? "live" : "historical");
+          }}
           onViewModeChange={(value) => {
             setTeamViewMode(value);
             if (value === "live") setOperationalDate(localDate());

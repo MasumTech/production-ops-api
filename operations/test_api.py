@@ -302,12 +302,12 @@ def test_production_lines_can_be_filtered_by_status(
 
 
 @pytest.mark.django_db
-def test_creating_shift_assigns_current_user_as_supervisor(
-    authenticated_client,
-    api_user,
+def test_staff_creating_shift_assigns_current_user_as_supervisor(
+    staff_client,
+    staff_user,
     production_line,
 ):
-    response = authenticated_client.post(
+    response = staff_client.post(
         reverse("shift-list"),
         {
             "production_line": production_line.id,
@@ -324,7 +324,7 @@ def test_creating_shift_assigns_current_user_as_supervisor(
     )
 
     assert response.status_code == status.HTTP_201_CREATED
-    assert response.data["supervisor"] == api_user.id
+    assert response.data["supervisor"] == staff_user.id
     assert response.data["performance_percentage"] == 90.0
 
 
@@ -360,10 +360,10 @@ def test_staff_can_change_shift_time(
 
 @pytest.mark.django_db
 def test_duplicate_shift_is_rejected(
-    authenticated_client,
+    staff_client,
     shift,
 ):
-    response = authenticated_client.post(
+    response = staff_client.post(
         reverse("shift-list"),
         {
             "production_line": shift.production_line_id,
@@ -2838,6 +2838,41 @@ def test_staff_can_update_approved_daily_plan_block(
 
 
 @pytest.mark.django_db
+def test_name_only_plan_amendment_preserves_approved_shift_target(
+    staff_client,
+    staff_user,
+    api_team_leader_assignment,
+    shift,
+):
+    block = DailyPlanBlock.objects.create(
+        assignment=api_team_leader_assignment,
+        sequence_number=1,
+        block_type=DailyPlanBlock.BlockType.PRODUCTION,
+        planned_start_at=at_assignment_time(api_team_leader_assignment, 6),
+        planned_end_at=at_assignment_time(api_team_leader_assignment, 8),
+        product_code="SPC-01",
+        product_name="Salt & Pepper Chicken",
+        target_units_per_hour=60,
+        created_by=staff_user,
+    )
+    shift.planned_output = 8400
+    shift.save(update_fields=("planned_output", "updated_at"))
+
+    response = staff_client.patch(
+        reverse("daily-plan-block-detail", args=(block.id,)),
+        {
+            "product_name": "Salt and Pepper Chicken",
+            "change_reason": "Correct the display name.",
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    shift.refresh_from_db()
+    assert shift.planned_output == 8400
+
+
+@pytest.mark.django_db
 def test_published_plan_amendment_requires_a_reason(
     staff_client,
     api_daily_break_block,
@@ -2886,6 +2921,12 @@ def test_manager_created_assignment_starts_with_draft_plan(
     assert response.status_code == status.HTTP_201_CREATED
     assert response.data["plan_status"] == TeamLeaderAssignment.PlanStatus.DRAFT
     assert response.data["plan_published_at"] is None
+    assert Shift.objects.filter(
+        production_line=line,
+        date=timezone.localdate(),
+        shift_type=Shift.ShiftType.DAY,
+        supervisor=response.data["assigned_by"],
+    ).exists()
 
 
 @pytest.mark.django_db
@@ -2899,6 +2940,22 @@ def test_team_leader_requests_and_manager_publishes_plan(
     assignment = api_daily_break_block.assignment
     assignment.plan_status = TeamLeaderAssignment.PlanStatus.DRAFT
     assignment.save(update_fields=("plan_status", "updated_at"))
+    DailyPlanBlock.objects.create(
+        assignment=assignment,
+        sequence_number=1,
+        block_type=DailyPlanBlock.BlockType.PRODUCTION,
+        planned_start_at=at_assignment_time(assignment, 6, 45),
+        planned_end_at=at_assignment_time(assignment, 9),
+        product_code="PUBLISH-01",
+        product_name="Publish path product",
+        target_units_per_hour=100,
+        created_by=staff_user,
+    )
+    Shift.objects.filter(
+        production_line=assignment.production_line,
+        date=assignment.date,
+        shift_type=assignment.shift_type,
+    ).delete()
     authenticated_client.force_authenticate(user=api_user)
 
     request_response = authenticated_client.post(
@@ -2946,6 +3003,13 @@ def test_team_leader_requests_and_manager_publishes_plan(
     assert assignment.plan_published_by == staff_user
     assert assignment.plan_published_at is not None
     assert assignment.plan_approval_requested_at is None
+    repaired_shift = Shift.objects.get(
+        production_line=assignment.production_line,
+        date=assignment.date,
+        shift_type=assignment.shift_type,
+    )
+    assert repaired_shift.supervisor == staff_user
+    assert repaired_shift.planned_output == 225
     assert OperationalEvent.objects.filter(
         event_type="daily_plan.published",
         assignment=assignment,
@@ -3044,6 +3108,14 @@ def test_product_shortfall_is_preserved_and_linked_to_material_risk(
     api_team_leader_assignment,
     api_user,
 ):
+    Shift.objects.create(
+        production_line=api_team_leader_assignment.production_line,
+        supervisor=api_user,
+        date=api_team_leader_assignment.date,
+        shift_type=api_team_leader_assignment.shift_type,
+        start_time=time(6, 45),
+        end_time=time(18),
+    )
     block = DailyPlanBlock.objects.create(
         assignment=api_team_leader_assignment,
         sequence_number=1,

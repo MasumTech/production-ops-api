@@ -23,3 +23,20 @@ export function localDate(): string {
   const offset = now.getTimezoneOffset();
   return new Date(now.getTime() - offset * 60_000).toISOString().slice(0, 10);
 }
+
+export function isCurrentOperationalDate(
+  operationalDate: string,
+  shiftType: "day" | "night",
+  now = new Date(),
+): boolean {
+  const today = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-");
+  if (operationalDate === today) return true;
+  if (shiftType !== "night" || now.getHours() >= 7) return false;
+  const previousDay = new Date(`${today}T12:00:00Z`);
+  previousDay.setUTCDate(previousDay.getUTCDate() - 1);
+  return operationalDate === previousDay.toISOString().slice(0, 10);
+}

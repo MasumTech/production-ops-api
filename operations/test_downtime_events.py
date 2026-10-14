@@ -338,6 +338,82 @@ def test_team_leader_can_create_downtime_only_for_assigned_shift(downtime_shift)
 
 
 @pytest.mark.django_db
+def test_published_historical_plan_is_read_only_for_downtime(downtime_shift):
+    historical_date = timezone.localdate() - timedelta(days=1)
+    downtime_shift.date = historical_date
+    downtime_shift.save(update_fields=("date", "updated_at"))
+    team_leader = get_user_model().objects.create_user(
+        username="historical.downtime.leader",
+        password=None,
+    )
+    TeamLeaderAssignment.objects.create(
+        team_leader=team_leader,
+        production_line=downtime_shift.production_line,
+        date=historical_date,
+        shift_type=downtime_shift.shift_type,
+        assigned_by=downtime_shift.supervisor,
+    )
+    event = DowntimeEvent.objects.create(
+        shift=downtime_shift,
+        started_at=shift_time(downtime_shift, 10),
+        ended_at=shift_time(downtime_shift, 10, 5),
+        reason_category=DowntimeEvent.ReasonCategory.EQUIPMENT,
+        description="Historical event",
+        owner_group=DowntimeEvent.OwnerGroup.ENGINEERING,
+        status=DowntimeEvent.Status.RESOLVED,
+    )
+    client = APIClient()
+    client.force_authenticate(team_leader)
+
+    created = client.post(
+        reverse("downtime-event-list"),
+        {
+            "shift": downtime_shift.id,
+            "started_at": shift_time(downtime_shift, 11).isoformat(),
+            "reason_category": DowntimeEvent.ReasonCategory.EQUIPMENT,
+            "description": "Must remain read-only",
+            "owner_group": DowntimeEvent.OwnerGroup.ENGINEERING,
+            "status": DowntimeEvent.Status.OPEN,
+        },
+        format="json",
+    )
+    updated = client.patch(
+        reverse("downtime-event-detail", args=(event.id,)),
+        {"description": "Must not change"},
+        format="json",
+    )
+    deleted = client.delete(reverse("downtime-event-detail", args=(event.id,)))
+
+    assert created.status_code == status.HTTP_400_BAD_REQUEST
+    assert updated.status_code == status.HTTP_400_BAD_REQUEST
+    assert deleted.status_code == status.HTTP_400_BAD_REQUEST
+    assert "read-only" in str(created.data)
+
+
+@pytest.mark.django_db
+def test_downtime_must_stay_inside_shift_window(downtime_user, downtime_shift):
+    client = APIClient()
+    client.force_authenticate(downtime_user)
+
+    response = client.post(
+        reverse("downtime-event-list"),
+        {
+            "shift": downtime_shift.id,
+            "started_at": shift_time(downtime_shift, 6, 50).isoformat(),
+            "ended_at": shift_time(downtime_shift, 7, 5).isoformat(),
+            "reason_category": DowntimeEvent.ReasonCategory.EQUIPMENT,
+            "description": "Outside the shift",
+            "owner_group": DowntimeEvent.OwnerGroup.ENGINEERING,
+            "status": DowntimeEvent.Status.RESOLVED,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "started_at" in response.data
+
+
+@pytest.mark.django_db
 def test_draft_plan_rejects_team_leader_downtime(downtime_shift):
     team_leader = get_user_model().objects.create_user(
         username="draft.downtime.leader",

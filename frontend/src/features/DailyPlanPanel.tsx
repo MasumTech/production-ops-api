@@ -534,6 +534,14 @@ export function DailyPlanPanel({
             <div className="tl-plan-v2__rows">
               {shownAssignments.map((assignment) => {
                 const shift = lineShift(shifts, assignment);
+                const editFailure = assignment.plan_status === "draft"
+                  ? "The Manager must publish and approve this plan first."
+                  : !shift
+                    ? "This plan has no active shift. Ask a Manager to repair it."
+                    : !live
+                      ? "Operational updates are read-only outside the current shift day."
+                      : "";
+                const canEditOperations = !editFailure;
                 const blocks = planBlocks
                   .filter(
                     (block) => block.assignment === assignment.id,
@@ -595,7 +603,8 @@ export function DailyPlanPanel({
                               "--tl-plan-done": `${completedFractionForBlock(block, blocks, window, shift)}%`,
                             } as CSSProperties}
                             key={block.id}
-                            disabled={block.block_type === "break" || assignment.plan_status === "draft"}
+                            disabled={block.block_type === "break" || !canEditOperations}
+                            title={block.block_type === "break" ? "Planned break" : editFailure || "Record product completion"}
                             onClick={() => openProductCompletion(block)}
                             aria-label={block.block_type === "break" ?
                               `Break ${block.break_number}, ${Math.round((new Date(block.planned_end_at).getTime() - new Date(block.planned_start_at).getTime()) / 60000)} minutes` :
@@ -735,6 +744,13 @@ export function DailyPlanPanel({
                 snapshotMinutes,
               );
               const recorded = hours.some((hour) => hour.done !== null);
+              const editFailure = assignment.plan_status === "draft"
+                ? "The Manager must publish and approve this plan first."
+                : !shift
+                  ? "This plan has no active shift. Ask a Manager to repair it."
+                  : !live
+                    ? "Operational updates are read-only outside the current shift day."
+                    : "";
               return (
                 <div className="tl-plan-v2__detail" id="tl-plan-v2-detail" key={assignment.id}>
                   <div className="tl-plan-v2__detail-heading">
@@ -776,7 +792,8 @@ export function DailyPlanPanel({
                           <button
                             type="button"
                             aria-label={`${hour.done === null ? "Record" : "Edit"} output for ${hour.label}`}
-                            disabled={!shift || !live || assignment.plan_status === "draft"}
+                            disabled={Boolean(editFailure)}
+                            title={editFailure || (hour.done === null ? "Record hourly production" : "Edit hourly production")}
                             onClick={() => openOutputHour(assignment, hour)}
                           >
                             {hour.done === null ? "Record output" : "Edit output"}
@@ -784,7 +801,8 @@ export function DailyPlanPanel({
                           <button
                             type="button"
                             aria-label={`Manage downtime for ${hour.label}, ${downtimeMinutes} minutes recorded`}
-                            disabled={!shift || assignment.plan_status === "draft"}
+                            disabled={Boolean(editFailure)}
+                            title={editFailure || "Add, update or delete hourly downtime"}
                             onClick={() => shift && openDowntimeHour(assignment, shift, hour)}
                           >
                             Downtime
@@ -794,6 +812,7 @@ export function DailyPlanPanel({
                     })}
                   </div>
                   {!recorded ? <p className="tl-plan-v2__data-note">Hourly actuals have not been recorded for this line. Targets are shown without estimated done or short figures.</p> : null}
+                  {editFailure ? <p className="tl-plan-v2__data-note" role="status">Read-only: {editFailure}</p> : null}
                 </div>
               );
             })}

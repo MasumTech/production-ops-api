@@ -497,7 +497,7 @@ describe("manager console", () => {
       <ManagerConsole
         profile={profile}
         data={data}
-        operationalDate="2026-09-01"
+        operationalDate={localDate()}
         shiftPattern="day"
         lastUpdatedAt="2026-09-01T10:00:00Z"
         online
@@ -738,6 +738,10 @@ describe("manager console", () => {
     const futureHour = screen.getByText("17:00–18:00").closest(".manager-output-hour");
     expect(futureHour).not.toBeNull();
     expect(within(futureHour as HTMLElement).getByRole("button", { name: "Record output" })).toBeEnabled();
+    const downtimeButton = within(futureHour as HTMLElement).getByRole("button", { name: "Manage DT" });
+    expect(downtimeButton).toBeEnabled();
+    fireEvent.click(downtimeButton);
+    expect(screen.getByRole("dialog", { name: "Add downtime" })).toHaveTextContent("Line 2 · 17:00–18:00");
   });
 
   it("releases held material and raises a complete material escalation", async () => {

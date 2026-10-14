@@ -58,6 +58,11 @@ from .models import (
     TeamLeaderAssignment,
     UserProfile,
 )
+from .operational_editing import (
+    ensure_shift_for_assignment,
+    operational_edit_failure,
+    recalculate_shift_totals,
+)
 from .permissions import (
     IsAssignedTeamLeaderDowntimeOrStaff,
     IsAssignedTeamLeaderOrStaff,
@@ -1093,7 +1098,7 @@ class ShiftViewSet(viewsets.ModelViewSet):
     permission_classes = (IsAuthenticated,)
 
     def get_permissions(self):
-        if self.action in {"update", "partial_update", "destroy"}:
+        if self.action in {"create", "update", "partial_update", "destroy"}:
             return [IsStaffOrReadOnly()]
         return super().get_permissions()
 
@@ -1209,18 +1214,10 @@ class DowntimeEventViewSet(viewsets.ModelViewSet):
             date=shift.date,
             shift_type=shift.shift_type,
         ).first()
-        if (
-            assignment
-            and assignment.plan_status != TeamLeaderAssignment.PlanStatus.PUBLISHED
-        ):
-            raise ValidationError(
-                {
-                    "shift": (
-                        "This plan has not been published or approved by the "
-                        "Operations Manager."
-                    )
-                }
-            )
+        if assignment:
+            edit_failure = operational_edit_failure(assignment)
+            if edit_failure:
+                raise ValidationError({"shift": edit_failure})
         if not self.request.user.is_staff and (
             assignment is None or assignment.team_leader_id != self.request.user.id
         ):
@@ -1228,6 +1225,8 @@ class DowntimeEventViewSet(viewsets.ModelViewSet):
                 "You can only record downtime for your assigned lines."
             )
         downtime = serializer.save()
+        if assignment:
+            recalculate_shift_totals(assignment)
         self._publish_downtime_event(downtime, "created")
 
     def perform_update(self, serializer):
@@ -1236,24 +1235,29 @@ class DowntimeEventViewSet(viewsets.ModelViewSet):
             date=serializer.instance.shift.date,
             shift_type=serializer.instance.shift.shift_type,
         ).first()
-        if (
-            assignment
-            and assignment.plan_status != TeamLeaderAssignment.PlanStatus.PUBLISHED
-        ):
-            raise ValidationError(
-                {
-                    "shift": (
-                        "This plan has not been published or approved by the "
-                        "Operations Manager."
-                    )
-                }
-            )
+        if assignment:
+            edit_failure = operational_edit_failure(assignment)
+            if edit_failure:
+                raise ValidationError({"shift": edit_failure})
         downtime = serializer.save()
+        if assignment:
+            recalculate_shift_totals(assignment)
         self._publish_downtime_event(downtime, "changed")
 
     def perform_destroy(self, instance):
+        assignment = TeamLeaderAssignment.objects.filter(
+            production_line=instance.shift.production_line,
+            date=instance.shift.date,
+            shift_type=instance.shift.shift_type,
+        ).first()
+        if assignment:
+            edit_failure = operational_edit_failure(assignment)
+            if edit_failure:
+                raise ValidationError({"shift": edit_failure})
         self._publish_downtime_event(instance, "deleted")
         instance.delete()
+        if assignment:
+            recalculate_shift_totals(assignment)
 
     def _publish_downtime_event(self, downtime, action):
         assignment = (
@@ -1412,10 +1416,15 @@ class TeamLeaderAssignmentViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        serializer.save(
-            assigned_by=self.request.user,
-            plan_status=TeamLeaderAssignment.PlanStatus.DRAFT,
-        )
+        with transaction.atomic():
+            assignment = serializer.save(
+                assigned_by=self.request.user,
+                plan_status=TeamLeaderAssignment.PlanStatus.DRAFT,
+            )
+            ensure_shift_for_assignment(
+                assignment,
+                supervisor=self.request.user,
+            )
 
     def get_permissions(self):
         if self.action == "request_publication":
@@ -1435,10 +1444,12 @@ class TeamLeaderAssignmentViewSet(viewsets.ModelViewSet):
             )
         if assignment.plan_status == TeamLeaderAssignment.PlanStatus.PUBLISHED:
             raise ValidationError({"detail": "This plan is already published."})
-        if not assignment.daily_plan_blocks.exists():
+        if not assignment.daily_plan_blocks.filter(
+            block_type=DailyPlanBlock.BlockType.PRODUCTION
+        ).exists():
             raise ValidationError(
                 {
-                    "detail": "The Manager must add a plan block before publication can be requested."
+                    "detail": "The Manager must add a production block before publication can be requested."
                 }
             )
         if assignment.plan_approval_requested_at:
@@ -1476,29 +1487,41 @@ class TeamLeaderAssignmentViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=("post",), url_path="publish")
     def publish(self, request, pk=None):
         assignment = self.get_object()
-        if assignment.plan_status == TeamLeaderAssignment.PlanStatus.PUBLISHED:
-            return Response(self.get_serializer(assignment).data)
-        if not assignment.daily_plan_blocks.exists():
+        if not assignment.daily_plan_blocks.filter(
+            block_type=DailyPlanBlock.BlockType.PRODUCTION
+        ).exists():
             raise ValidationError(
-                {"detail": "Add at least one plan block before publishing this plan."}
+                {
+                    "detail": (
+                        "Add at least one production block before publishing this plan."
+                    )
+                }
             )
 
-        published_at = timezone.now()
-        assignment.plan_status = TeamLeaderAssignment.PlanStatus.PUBLISHED
-        assignment.plan_published_at = published_at
-        assignment.plan_published_by = request.user
-        assignment.plan_approval_requested_at = None
-        assignment.plan_approval_requested_by = None
-        assignment.save(
-            update_fields=(
-                "plan_status",
-                "plan_published_at",
-                "plan_published_by",
-                "plan_approval_requested_at",
-                "plan_approval_requested_by",
-                "updated_at",
+        with transaction.atomic():
+            ensure_shift_for_assignment(
+                assignment,
+                supervisor=request.user,
             )
-        )
+            if assignment.plan_status == TeamLeaderAssignment.PlanStatus.PUBLISHED:
+                return Response(self.get_serializer(assignment).data)
+
+            published_at = timezone.now()
+            assignment.plan_status = TeamLeaderAssignment.PlanStatus.PUBLISHED
+            assignment.plan_published_at = published_at
+            assignment.plan_published_by = request.user
+            assignment.plan_approval_requested_at = None
+            assignment.plan_approval_requested_by = None
+            assignment.save(
+                update_fields=(
+                    "plan_status",
+                    "plan_published_at",
+                    "plan_published_by",
+                    "plan_approval_requested_at",
+                    "plan_approval_requested_by",
+                    "updated_at",
+                )
+            )
         create_operational_event(
             event_type="daily_plan.published",
             resource_type="teamleaderassignment",
@@ -2424,6 +2447,9 @@ class HourlyOutputViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
+        edit_failure = operational_edit_failure(instance.assignment)
+        if edit_failure:
+            raise ValidationError({"assignment": edit_failure})
         if request.user.is_staff:
             correction_reason = str(request.data.get("correction_reason", "")).strip()
             if not correction_reason:
@@ -2447,25 +2473,7 @@ class HourlyOutputViewSet(viewsets.ModelViewSet):
 
     @staticmethod
     def _reconcile_shift(assignment):
-        shift = (
-            Shift.objects.select_for_update()
-            .filter(
-                production_line=assignment.production_line,
-                date=assignment.date,
-                shift_type=assignment.shift_type,
-            )
-            .first()
-        )
-        if shift is None:
-            return
-        actual_output = (
-            HourlyOutput.objects.filter(assignment=assignment).aggregate(
-                total=Coalesce(Sum("actual_units"), 0),
-            )["total"]
-            or 0
-        )
-        shift.actual_output = actual_output
-        shift.save(update_fields=("actual_output", "updated_at"))
+        recalculate_shift_totals(assignment)
 
     def _publish_output_event(self, output, action_name):
         create_operational_event(
@@ -2555,9 +2563,11 @@ class DailyPlanBlockViewSet(viewsets.ModelViewSet):
                     block,
                     "Plan block added to the published plan.",
                 )
+            recalculate_shift_totals(assignment)
 
     def perform_update(self, serializer):
         with transaction.atomic():
+            previous_planned_units = serializer.instance.planned_units
             block = serializer.save()
             assignment = block.assignment
             if assignment.plan_status == TeamLeaderAssignment.PlanStatus.PUBLISHED:
@@ -2576,6 +2586,8 @@ class DailyPlanBlockViewSet(viewsets.ModelViewSet):
                     block,
                     str(self.request.data.get("change_reason", "")).strip(),
                 )
+            if block.planned_units != previous_planned_units:
+                recalculate_shift_totals(assignment)
 
     def perform_destroy(self, instance):
         if instance.actual_units is not None:
@@ -2587,8 +2599,11 @@ class DailyPlanBlockViewSet(viewsets.ModelViewSet):
                     )
                 }
             )
+        assignment = instance.assignment
         try:
-            instance.delete()
+            with transaction.atomic():
+                instance.delete()
+                recalculate_shift_totals(assignment)
         except ProtectedError as error:
             raise ValidationError(
                 {

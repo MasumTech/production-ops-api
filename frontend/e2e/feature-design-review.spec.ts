@@ -61,6 +61,7 @@ test("modern notification drawer presents clear actions and filters", async ({ p
 });
 
 test("Team Leader My Plan opens hourly downtime CRUD", async ({ page }, testInfo) => {
+  await page.clock.install({ time: new Date(`${operationalDate}T08:00:00Z`) });
   await page.setViewportSize({ width: 1536, height: 960 });
   await signIn(page, "demo.leader");
   await page.getByLabel("Operational date").fill(operationalDate);

@@ -31,6 +31,7 @@ from .models import (
     TeamLeaderAssignment,
     UserProfile,
 )
+from .operational_editing import operational_edit_failure
 
 User = get_user_model()
 
@@ -305,6 +306,7 @@ class DowntimeEventSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         instance = self.instance
+        shift = attrs.get("shift", getattr(instance, "shift", None))
         started_at = attrs.get("started_at", getattr(instance, "started_at", None))
         ended_at = attrs.get("ended_at", getattr(instance, "ended_at", None))
         event_status = attrs.get(
@@ -319,6 +321,27 @@ class DowntimeEventSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"ended_at": "Resolved downtime requires an end time."}
             )
+        if shift and started_at:
+            current_timezone = timezone.get_current_timezone()
+            shift_start = timezone.make_aware(
+                datetime.combine(shift.date, shift.start_time),
+                current_timezone,
+            )
+            shift_end_date = shift.date
+            if shift.end_time <= shift.start_time:
+                shift_end_date += timedelta(days=1)
+            shift_end = timezone.make_aware(
+                datetime.combine(shift_end_date, shift.end_time),
+                current_timezone,
+            )
+            if started_at < shift_start or started_at >= shift_end:
+                raise serializers.ValidationError(
+                    {"started_at": "Downtime must start within the recorded shift."}
+                )
+            if ended_at and ended_at > shift_end:
+                raise serializers.ValidationError(
+                    {"ended_at": "Downtime must end within the recorded shift."}
+                )
         return attrs
 
 
@@ -1624,13 +1647,10 @@ class HourlyOutputSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         errors = {}
 
-        if (
-            assignment
-            and assignment.plan_status != TeamLeaderAssignment.PlanStatus.PUBLISHED
-        ):
-            errors["assignment"] = (
-                "This plan has not been published or approved by the Operations Manager."
-            )
+        if assignment:
+            edit_failure = operational_edit_failure(assignment)
+            if edit_failure:
+                errors["assignment"] = edit_failure
 
         if self.instance and "hour_start_at" in attrs:
             existing_hour = timezone.localtime(self.instance.hour_start_at)
@@ -1659,12 +1679,7 @@ class HourlyOutputSerializer(serializers.ModelSerializer):
                 date=assignment.date,
                 shift_type=assignment.shift_type,
             ).first()
-            if shift is None:
-                errors.setdefault(
-                    "assignment",
-                    "A matching shift record is required before output can be recorded.",
-                )
-            else:
+            if shift is not None:
                 local_hour = timezone.localtime(hour_start_at)
                 shift_start = timezone.make_aware(
                     datetime.combine(assignment.date, shift.start_time),
@@ -1986,6 +2001,9 @@ class DailyPlanBlockCompleteSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"detail": "Publish and approve this plan before recording output."}
             )
+        edit_failure = operational_edit_failure(block.assignment)
+        if edit_failure:
+            raise serializers.ValidationError({"detail": edit_failure})
         short_units = max(0, block.planned_units - attrs["actual_units"])
         if short_units and not attrs.get("short_reason"):
             raise serializers.ValidationError(
