@@ -37,7 +37,9 @@ def test_previous_night_is_editable_until_shift_end():
     during_shift = timezone.make_aware(datetime.combine(next_date, time(3)))
     after_shift = timezone.make_aware(datetime.combine(next_date, time(8)))
 
-    with patch("operations.operational_editing.timezone.now", return_value=during_shift):
+    with patch(
+        "operations.operational_editing.timezone.now", return_value=during_shift
+    ):
         assert operational_edit_failure(assignment) is None
     with patch("operations.operational_editing.timezone.now", return_value=after_shift):
         assert "read-only" in operational_edit_failure(assignment)
