@@ -122,7 +122,7 @@ test("Daily Plan matches the approved timeline reference", async ({
   await expect(output.locator(".tl-plan-v2__hour").first()).toContainText(/T .*D .*S .*DT \d+m/);
   await expect(
     page.getByText(
-      /Published plans are read-only\. Request a change for Operations Manager review\./i,
+      /Plan structure is read-only for Team Leaders\. Draft plans require Manager publication/i,
     ),
   ).toBeVisible();
 
@@ -155,7 +155,7 @@ test("Request plan change routes to the selected-line review workflow", async ({
     page.getByRole("heading", { name: /Raise issue|Operational escalation/i }),
   ).toBeVisible();
   await expect(page.getByLabel("Short problem")).toHaveValue(
-    "Daily plan change request",
+    "Plan change request · DEMO-LINE-01",
   );
   await expect(page.getByLabel("Category")).toHaveValue("other");
 });
