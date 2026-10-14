@@ -610,6 +610,58 @@ describe("manager console", () => {
     expect(request).toHaveBeenCalledWith("/daily-plan-blocks/70/", { method: "DELETE" });
   });
 
+  it("publishes and approves a draft line plan with one action", async () => {
+    const actor = userEvent.setup();
+    const request = vi.mocked(api.apiRequest);
+    request.mockResolvedValue({} as never);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const today = localDate();
+    const draftAssignment = {
+      ...data.assignments[1],
+      date: today,
+      plan_status: "draft" as const,
+      plan_approval_requested_at: `${today}T08:00:00Z`,
+    };
+    const block = {
+      ...(data.planBlocks ?? [])[0],
+      assignment_date: today,
+      planned_start_at: `${today}T06:45:00Z`,
+      planned_end_at: `${today}T08:45:00Z`,
+    };
+
+    render(
+      <ManagerConsole
+        profile={profile}
+        data={{
+          ...data,
+          assignments: [draftAssignment],
+          planBlocks: [block],
+          shifts: data.shifts.map((shift) => ({ ...shift, date: today })),
+        }}
+        operationalDate={today}
+        shiftPattern="day"
+        lastUpdatedAt={`${today}T10:00:00Z`}
+        online
+        liveState="live"
+        busy={false}
+        error=""
+        onDateChange={vi.fn()}
+        onShiftPatternChange={vi.fn()}
+        onRefresh={vi.fn()}
+        onSignOut={vi.fn()}
+      />,
+    );
+
+    await actor.click(within(screen.getByRole("navigation", { name: "Manager sections" })).getByRole("button", { name: "Daily plans" }));
+    expect(screen.getByText("Draft · not published")).toBeInTheDocument();
+    await actor.click(screen.getByRole("button", { name: "Publish & approve" }));
+
+    expect(request).toHaveBeenCalledWith(
+      `/team-leader-assignments/${draftAssignment.id}/publish/`,
+      { method: "POST" },
+    );
+  });
+
   it("allows a manager to enter a future hour on today's assigned line", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-11T07:30:00+01:00"));

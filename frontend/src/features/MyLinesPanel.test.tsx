@@ -181,7 +181,7 @@ describe("Team Leader My Lines v2", () => {
     expect(screen.getAllByText("Target now", { exact: false }).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Recovery need", { exact: true })).toHaveLength(2);
     expect(screen.getAllByText("Running to plan", { exact: true }).length).toBeGreaterThan(0);
-    expect(screen.getByText("Running with issues", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText("Close monitoring required", { exact: true })).toBeInTheDocument();
     expect(screen.getByText("Seal concern", { exact: true })).toBeInTheDocument();
     expect(screen.getByText("Machine Minder checking", { exact: true })).toBeInTheDocument();
     expect(screen.getByText("Engineering · Line contact", { exact: true })).toBeInTheDocument();

@@ -2784,7 +2784,7 @@ def test_only_management_staff_can_create_daily_plan(
 
 
 @pytest.mark.django_db
-def test_staff_can_create_approved_daily_plan_block(
+def test_staff_can_create_next_sequential_daily_plan_block(
     staff_client,
     staff_user,
     api_team_leader_assignment,
@@ -2793,13 +2793,12 @@ def test_staff_can_create_approved_daily_plan_block(
         reverse("daily-plan-block-list"),
         {
             "assignment": api_team_leader_assignment.id,
-            "sequence_number": 1,
             "block_type": DailyPlanBlock.BlockType.PRODUCTION,
             "planned_start_at": at_assignment_time(
-                api_team_leader_assignment, 7
+                api_team_leader_assignment, 6, 45
             ).isoformat(),
             "planned_end_at": at_assignment_time(
-                api_team_leader_assignment, 9
+                api_team_leader_assignment, 8, 45
             ).isoformat(),
             "product_code": "SPC-01",
             "product_name": "Salt & Pepper Chicken",
@@ -2810,6 +2809,7 @@ def test_staff_can_create_approved_daily_plan_block(
 
     assert response.status_code == status.HTTP_201_CREATED
     assert response.data["planned_units"] == 48
+    assert response.data["sequence_number"] == 1
     assert response.data["created_by"] == staff_user.id
 
 
@@ -2827,6 +2827,7 @@ def test_staff_can_update_approved_daily_plan_block(
             "planned_end_at": at_assignment_time(
                 api_daily_break_block.assignment, 10, 40
             ).isoformat(),
+            "change_reason": "Move the break after the revised production run.",
         },
         format="json",
     )
@@ -2834,6 +2835,260 @@ def test_staff_can_update_approved_daily_plan_block(
     assert response.status_code == status.HTTP_200_OK
     api_daily_break_block.refresh_from_db()
     assert timezone.localtime(api_daily_break_block.planned_start_at).hour == 10
+
+
+@pytest.mark.django_db
+def test_published_plan_amendment_requires_a_reason(
+    staff_client,
+    api_daily_break_block,
+):
+    response = staff_client.patch(
+        reverse("daily-plan-block-detail", args=(api_daily_break_block.id,)),
+        {
+            "planned_start_at": at_assignment_time(
+                api_daily_break_block.assignment, 10
+            ).isoformat(),
+            "planned_end_at": at_assignment_time(
+                api_daily_break_block.assignment, 10, 40
+            ).isoformat(),
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "change_reason" in response.data
+
+
+@pytest.mark.django_db
+def test_manager_created_assignment_starts_with_draft_plan(
+    staff_client,
+    api_user,
+):
+    line = ProductionLine.objects.create(
+        code="PLAN-DRAFT-01",
+        name="Draft plan line",
+        location="High care",
+        target_units_per_hour=30,
+    )
+
+    response = staff_client.post(
+        reverse("team-leader-assignment-list"),
+        {
+            "team_leader": api_user.id,
+            "production_line": line.id,
+            "date": timezone.localdate().isoformat(),
+            "shift_type": Shift.ShiftType.DAY,
+            "notes": "Manager planning session",
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["plan_status"] == TeamLeaderAssignment.PlanStatus.DRAFT
+    assert response.data["plan_published_at"] is None
+
+
+@pytest.mark.django_db
+def test_team_leader_requests_and_manager_publishes_plan(
+    authenticated_client,
+    staff_client,
+    api_daily_break_block,
+    api_user,
+    staff_user,
+):
+    assignment = api_daily_break_block.assignment
+    assignment.plan_status = TeamLeaderAssignment.PlanStatus.DRAFT
+    assignment.save(update_fields=("plan_status", "updated_at"))
+    authenticated_client.force_authenticate(user=api_user)
+
+    request_response = authenticated_client.post(
+        reverse(
+            "team-leader-assignment-request-publication",
+            args=(assignment.id,),
+        )
+    )
+
+    assert request_response.status_code == status.HTTP_200_OK, request_response.data
+    assignment.refresh_from_db()
+    assert assignment.plan_approval_requested_by == api_user
+    assert assignment.plan_approval_requested_at is not None
+    assert (
+        OperationalEvent.objects.filter(
+            event_type="daily_plan.publication_requested",
+            assignment=assignment,
+        ).count()
+        == 1
+    )
+
+    duplicate_response = authenticated_client.post(
+        reverse(
+            "team-leader-assignment-request-publication",
+            args=(assignment.id,),
+        )
+    )
+    assert duplicate_response.status_code == status.HTTP_200_OK
+    assert (
+        OperationalEvent.objects.filter(
+            event_type="daily_plan.publication_requested",
+            assignment=assignment,
+        ).count()
+        == 1
+    )
+
+    staff_client.force_authenticate(user=staff_user)
+    publish_response = staff_client.post(
+        reverse("team-leader-assignment-publish", args=(assignment.id,))
+    )
+
+    assert publish_response.status_code == status.HTTP_200_OK
+    assignment.refresh_from_db()
+    assert assignment.plan_status == TeamLeaderAssignment.PlanStatus.PUBLISHED
+    assert assignment.plan_published_by == staff_user
+    assert assignment.plan_published_at is not None
+    assert assignment.plan_approval_requested_at is None
+    assert OperationalEvent.objects.filter(
+        event_type="daily_plan.published",
+        assignment=assignment,
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_draft_plan_rejects_hourly_output(
+    authenticated_client,
+    api_team_leader_assignment,
+):
+    api_team_leader_assignment.plan_status = TeamLeaderAssignment.PlanStatus.DRAFT
+    api_team_leader_assignment.save(update_fields=("plan_status", "updated_at"))
+
+    response = authenticated_client.post(
+        reverse("hourly-output-list"),
+        {
+            "assignment": api_team_leader_assignment.id,
+            "hour_start_at": at_assignment_time(
+                api_team_leader_assignment, 7
+            ).isoformat(),
+            "actual_units": 20,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "not been published" in str(response.data)
+
+
+@pytest.mark.django_db
+def test_plan_block_creation_rejects_non_sequential_start(
+    staff_client,
+    api_daily_break_block,
+):
+    assignment = api_daily_break_block.assignment
+
+    response = staff_client.post(
+        reverse("daily-plan-block-list"),
+        {
+            "assignment": assignment.id,
+            "block_type": DailyPlanBlock.BlockType.PRODUCTION,
+            "planned_start_at": at_assignment_time(assignment, 10).isoformat(),
+            "planned_end_at": at_assignment_time(assignment, 11).isoformat(),
+            "product_code": "NEXT-01",
+            "product_name": "Next product",
+            "target_units_per_hour": 60,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "09:40" in str(response.data)
+
+
+@pytest.mark.django_db
+def test_night_plan_can_continue_after_midnight(
+    staff_client,
+    staff_user,
+    api_user,
+    production_line,
+):
+    assignment = TeamLeaderAssignment.objects.create(
+        team_leader=api_user,
+        production_line=production_line,
+        date=timezone.localdate(),
+        shift_type=Shift.ShiftType.NIGHT,
+        assigned_by=staff_user,
+    )
+    start = timezone.make_aware(datetime.combine(assignment.date, time(23)))
+    end = timezone.make_aware(
+        datetime.combine(assignment.date + timedelta(days=1), time(1))
+    )
+
+    response = staff_client.post(
+        reverse("daily-plan-block-list"),
+        {
+            "assignment": assignment.id,
+            "block_type": DailyPlanBlock.BlockType.PRODUCTION,
+            "planned_start_at": start.isoformat(),
+            "planned_end_at": end.isoformat(),
+            "product_code": "NIGHT-01",
+            "product_name": "Night product",
+            "target_units_per_hour": 60,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED, response.data
+    assert response.data["planned_units"] == 120
+
+
+@pytest.mark.django_db
+def test_product_shortfall_is_preserved_and_linked_to_material_risk(
+    authenticated_client,
+    api_team_leader_assignment,
+    api_user,
+):
+    block = DailyPlanBlock.objects.create(
+        assignment=api_team_leader_assignment,
+        sequence_number=1,
+        block_type=DailyPlanBlock.BlockType.PRODUCTION,
+        planned_start_at=at_assignment_time(api_team_leader_assignment, 7),
+        planned_end_at=at_assignment_time(api_team_leader_assignment, 9),
+        product_code="MAT-01",
+        product_name="Material constrained product",
+        target_units_per_hour=60,
+        created_by=api_user,
+    )
+
+    missing_reason = authenticated_client.post(
+        reverse("daily-plan-block-complete", args=(block.id,)),
+        {"actual_units": 80},
+        format="json",
+    )
+    assert missing_reason.status_code == status.HTTP_400_BAD_REQUEST
+    assert "40 units short" in str(missing_reason.data["short_reason"][0])
+
+    response = authenticated_client.post(
+        reverse("daily-plan-block-complete", args=(block.id,)),
+        {
+            "actual_units": 80,
+            "short_reason": DailyPlanBlock.ShortReason.MATERIAL_UNAVAILABLE,
+            "short_note": "Trays were unavailable, so the line changed product.",
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["planned_units"] == 120
+    assert response.data["actual_units"] == 80
+    assert response.data["short_units"] == 40
+    assert response.data["completion_status"] == (
+        DailyPlanBlock.CompletionStatus.CHANGED_OVER
+    )
+    block.refresh_from_db()
+    assert block.material_issue is not None
+    assert block.material_issue.status == ProductMaterialReadiness.Status.SHORT
+    assert block.material_issue.shortage_quantity == 40
+    assert OperationalEvent.objects.filter(
+        event_type="daily_plan.product_completed",
+        resource_id=block.id,
+    ).exists()
 
 
 @pytest.mark.django_db

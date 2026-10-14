@@ -8016,6 +8016,16 @@ td span {
   padding: 7px 6px;
   color: #fff;
   background: linear-gradient(90deg, #189b68 0 var(--tl-plan-done, 0%), #2376dc var(--tl-plan-done, 0%) 100%);
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tl-plan-v2__block:disabled {
+  cursor: default;
+  opacity: 0.78;
 }
 
 .tl-plan-v2__block--break {
@@ -8246,6 +8256,120 @@ td span {
 .tl-plan-v2__readonly .app-icon {
   flex: 0 0 auto;
   color: #0b73ed;
+}
+
+.tl-plan-publication-list {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 16px;
+}
+
+.tl-plan-publication {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid rgb(188 207 224 / 72%);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 72%);
+  box-shadow: 0 10px 30px rgb(27 58 86 / 8%);
+  backdrop-filter: blur(14px) saturate(118%);
+  -webkit-backdrop-filter: blur(14px) saturate(118%);
+}
+
+.tl-plan-publication.is-draft {
+  border-color: rgb(231 168 62 / 58%);
+  background: rgb(255 248 229 / 78%);
+}
+
+.tl-plan-publication.is-published {
+  border-color: rgb(72 174 125 / 48%);
+  background: rgb(237 251 244 / 78%);
+}
+
+.tl-plan-publication div {
+  display: grid;
+  gap: 4px;
+}
+
+.tl-plan-publication span,
+.tl-plan-publication-message {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.tl-plan-publication button,
+.plan-publish-button {
+  min-height: 36px;
+  padding: 8px 13px;
+  border: 1px solid #a66d06;
+  border-radius: 8px;
+  color: #714900;
+  background: rgb(255 240 195 / 86%);
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.tl-plan-publication button:disabled,
+.plan-publish-button:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.plan-publication-status {
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem !important;
+  font-weight: 800;
+}
+
+.plan-publication-status.is-draft {
+  color: #744a00;
+  background: #ffedbb;
+}
+
+.plan-publication-status.is-published {
+  color: #0b7044;
+  background: #d9f6e8;
+}
+
+.daily-plan-row-label .plan-publish-button {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.plan-short-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border: 1px solid rgb(224 170 72 / 48%);
+  border-radius: 10px;
+  background: rgb(255 248 229 / 76%);
+}
+
+.plan-short-preview strong {
+  color: #a04f00;
+  font-size: 1.25rem;
+}
+
+.manager-product-position,
+.tl-plan-v2__products {
+  margin: 16px 0;
+}
+
+.manager-product-position table,
+.tl-plan-v2__products table {
+  min-width: 720px;
+}
+
+@media (max-width: 720px) {
+  .tl-plan-publication {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 1050px) {

@@ -83,6 +83,9 @@ class DailyPlanBlockAdmin(admin.ModelAdmin):
         "block_type",
         "product_name",
         "target_units_per_hour",
+        "actual_units",
+        "short_units",
+        "completion_status",
         "break_number",
     )
     list_filter = ("block_type", "assignment__date", "assignment__production_line")
@@ -91,8 +94,14 @@ class DailyPlanBlockAdmin(admin.ModelAdmin):
         "product_code",
         "product_name",
     )
-    autocomplete_fields = ("assignment", "created_by")
-    readonly_fields = ("created_at", "updated_at")
+    autocomplete_fields = (
+        "assignment",
+        "created_by",
+        "completed_by",
+        "replacement_plan_block",
+        "material_issue",
+    )
+    readonly_fields = ("planned_units", "short_units", "created_at", "updated_at")
 
     @admin.display(ordering="assignment__production_line__code", description="Line")
     def production_line(self, obj):
@@ -414,6 +423,8 @@ class TeamLeaderAssignmentAdmin(admin.ModelAdmin):
         "shift_type",
         "production_line",
         "team_leader",
+        "plan_status",
+        "plan_version",
         "assigned_by",
         "created_at",
     )
@@ -421,6 +432,7 @@ class TeamLeaderAssignmentAdmin(admin.ModelAdmin):
         "date",
         "shift_type",
         "production_line",
+        "plan_status",
     )
     search_fields = (
         "production_line__code",
@@ -432,6 +444,9 @@ class TeamLeaderAssignmentAdmin(admin.ModelAdmin):
         "production_line",
         "team_leader",
         "assigned_by",
+        "plan_published_by",
+        "plan_approval_requested_by",
+        "plan_last_amended_by",
     )
     date_hierarchy = "date"
     ordering = (

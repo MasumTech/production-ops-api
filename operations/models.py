@@ -1,4 +1,4 @@
-from datetime import time, timedelta
+from datetime import datetime, time, timedelta
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -317,6 +317,10 @@ class QualityIncident(TimeStampedModel):
 
 
 class TeamLeaderAssignment(TimeStampedModel):
+    class PlanStatus(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        PUBLISHED = "published", "Published"
+
     team_leader = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -340,6 +344,36 @@ class TeamLeaderAssignment(TimeStampedModel):
         blank=True,
     )
     notes = models.TextField(blank=True)
+    plan_status = models.CharField(
+        max_length=12,
+        choices=PlanStatus.choices,
+        default=PlanStatus.PUBLISHED,
+    )
+    plan_published_at = models.DateTimeField(null=True, blank=True)
+    plan_published_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="published_daily_plans",
+        null=True,
+        blank=True,
+    )
+    plan_approval_requested_at = models.DateTimeField(null=True, blank=True)
+    plan_approval_requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="requested_daily_plan_publications",
+        null=True,
+        blank=True,
+    )
+    plan_version = models.PositiveIntegerField(default=1)
+    plan_last_amended_at = models.DateTimeField(null=True, blank=True)
+    plan_last_amended_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="amended_daily_plans",
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         ordering = [
@@ -549,6 +583,25 @@ class DailyPlanBlock(TimeStampedModel):
         PRODUCTION = "production", "Production"
         BREAK = "break", "Break"
 
+    class CompletionStatus(models.TextChoices):
+        PLANNED = "planned", "Planned"
+        COMPLETED = "completed", "Completed"
+        CHANGED_OVER = "changed_over", "Changed Over"
+
+    class ShortReason(models.TextChoices):
+        TARGET_COMPLETED = "target_completed", "Target completed"
+        MATERIAL_UNAVAILABLE = "material_unavailable", "Material unavailable"
+        MATERIAL_DELAYED = "material_delayed", "Material delayed"
+        QUALITY_HOLD = "quality_hold", "Quality hold"
+        MACHINE_DOWNTIME = "machine_downtime", "Machine downtime"
+        LABOUR_SHORTAGE = "labour_shortage", "Labour shortage"
+        MANAGER_INSTRUCTION = "manager_instruction", "Manager instruction"
+        CHANGEOVER_BROUGHT_FORWARD = (
+            "changeover_brought_forward",
+            "Changeover brought forward",
+        )
+        OTHER = "other", "Other"
+
     assignment = models.ForeignKey(
         TeamLeaderAssignment,
         on_delete=models.PROTECT,
@@ -566,6 +619,40 @@ class DailyPlanBlock(TimeStampedModel):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="created_daily_plan_blocks",
+    )
+    actual_units = models.PositiveIntegerField(null=True, blank=True)
+    completion_status = models.CharField(
+        max_length=20,
+        choices=CompletionStatus.choices,
+        default=CompletionStatus.PLANNED,
+    )
+    completed_at = models.DateTimeField(null=True, blank=True)
+    completed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="completed_daily_plan_blocks",
+        null=True,
+        blank=True,
+    )
+    short_reason = models.CharField(
+        max_length=32,
+        choices=ShortReason.choices,
+        blank=True,
+    )
+    short_note = models.TextField(blank=True)
+    replacement_plan_block = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        related_name="replaced_plan_blocks",
+        null=True,
+        blank=True,
+    )
+    material_issue = models.ForeignKey(
+        "ProductMaterialReadiness",
+        on_delete=models.SET_NULL,
+        related_name="affected_plan_blocks",
+        null=True,
+        blank=True,
     )
 
     class Meta:
@@ -595,6 +682,12 @@ class DailyPlanBlock(TimeStampedModel):
         ).total_seconds() / 60
         return round(duration_minutes * (self.target_units_per_hour or 0) / 60)
 
+    @property
+    def short_units(self):
+        if self.block_type != self.BlockType.PRODUCTION or self.actual_units is None:
+            return None
+        return max(0, self.planned_units - self.actual_units)
+
     def clean(self):
         errors = {}
 
@@ -604,39 +697,43 @@ class DailyPlanBlock(TimeStampedModel):
             elif self.assignment_id:
                 start = timezone.localtime(self.planned_start_at)
                 end = timezone.localtime(self.planned_end_at)
-                if (
-                    start.date() != self.assignment.date
-                    or end.date() != self.assignment.date
-                ):
-                    errors["planned_start_at"] = (
-                        "Plan blocks must stay on the assignment date."
-                    )
+                configured_shift = Shift.objects.filter(
+                    production_line=self.assignment.production_line,
+                    date=self.assignment.date,
+                    shift_type=self.assignment.shift_type,
+                ).first()
                 if self.assignment.shift_type == Shift.ShiftType.DAY:
-                    configured_shift = Shift.objects.filter(
-                        production_line=self.assignment.production_line,
-                        date=self.assignment.date,
-                        shift_type=self.assignment.shift_type,
-                    ).first()
                     default_start = (
                         time(7) if self.assignment.date.weekday() >= 5 else time(6, 45)
                     )
-                    shift_start = (
-                        configured_shift.start_time
-                        if configured_shift
-                        else default_start
+                    default_end = time(18)
+                else:
+                    default_start = time(23)
+                    default_end = time(7)
+                shift_start_time = (
+                    configured_shift.start_time if configured_shift else default_start
+                )
+                shift_end_time = (
+                    configured_shift.end_time if configured_shift else default_end
+                )
+                shift_end_date = self.assignment.date
+                if shift_end_time <= shift_start_time:
+                    shift_end_date += timedelta(days=1)
+                current_timezone = timezone.get_current_timezone()
+                shift_start = timezone.make_aware(
+                    datetime.combine(self.assignment.date, shift_start_time),
+                    current_timezone,
+                )
+                shift_end = timezone.make_aware(
+                    datetime.combine(shift_end_date, shift_end_time),
+                    current_timezone,
+                )
+                if not (start >= shift_start and end <= shift_end):
+                    errors["planned_start_at"] = (
+                        "Plan blocks must stay inside the configured "
+                        f"shift window {shift_start_time.strftime('%H:%M')}–"
+                        f"{shift_end_time.strftime('%H:%M')}."
                     )
-                    shift_end = (
-                        configured_shift.end_time if configured_shift else time(18)
-                    )
-                    if not (
-                        start.time().replace(tzinfo=None) >= shift_start
-                        and end.time().replace(tzinfo=None) <= shift_end
-                    ):
-                        errors["planned_start_at"] = (
-                            "Day plan blocks must stay inside the configured "
-                            f"shift window {shift_start.strftime('%H:%M')}–"
-                            f"{shift_end.strftime('%H:%M')}."
-                        )
 
         if self.block_type == self.BlockType.PRODUCTION:
             if not self.product_code.strip():
@@ -649,11 +746,37 @@ class DailyPlanBlock(TimeStampedModel):
                 )
             if self.break_number is not None:
                 errors["break_number"] = "Production blocks cannot have a break number."
+            if self.actual_units is not None:
+                calculated_short = max(0, self.planned_units - self.actual_units)
+                if calculated_short and not self.short_reason:
+                    errors["short_reason"] = (
+                        "Select a reason before completing a product below target."
+                    )
+                if (
+                    self.completion_status == self.CompletionStatus.PLANNED
+                    or self.completed_at is None
+                    or self.completed_by_id is None
+                ):
+                    errors["completion_status"] = (
+                        "Completed output requires a completion status, time and user."
+                    )
         elif self.block_type == self.BlockType.BREAK:
             if self.break_number not in {1, 2}:
                 errors["break_number"] = "Break blocks must be break 1 or break 2."
             if self.product_code or self.product_name or self.target_units_per_hour:
                 errors["block_type"] = "Break blocks cannot contain product targets."
+            if any(
+                (
+                    self.actual_units is not None,
+                    self.completed_at is not None,
+                    self.completed_by_id is not None,
+                    bool(self.short_reason),
+                    bool(self.short_note),
+                )
+            ):
+                errors["completion_status"] = (
+                    "Break blocks cannot contain product completion evidence."
+                )
             if self.planned_start_at and self.planned_end_at:
                 duration = self.planned_end_at - self.planned_start_at
                 if duration != timedelta(minutes=40):

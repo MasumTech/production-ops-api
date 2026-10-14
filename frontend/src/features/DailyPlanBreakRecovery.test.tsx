@@ -197,7 +197,7 @@ describe("daily plan and break opportunity workspace", () => {
     expect(output).toHaveTextContent(/ahead|behind/);
     expect(
       screen.getByText(
-        /Published plans are read-only\. Request a change for Operations Manager review\./i,
+        /Plan structure is read-only for Team Leaders\. Draft plans require Manager publication/i,
       ),
     ).toBeInTheDocument();
   });
@@ -221,6 +221,72 @@ describe("daily plan and break opportunity workspace", () => {
     );
 
     expect(onRequestPlanChange).toHaveBeenCalledWith(assignment.id);
+  });
+
+  it("shows a draft as read-only and lets the Team Leader request publication", async () => {
+    const actor = userEvent.setup();
+    const request = vi.spyOn(api, "apiRequest").mockResolvedValue({} as never);
+    const onSaved = vi.fn().mockResolvedValue(undefined);
+    const draftAssignment: Assignment = {
+      ...assignment,
+      plan_status: "draft",
+      plan_approval_requested_at: null,
+    };
+
+    render(
+      <DailyPlanPanel
+        assignments={[draftAssignment]}
+        planBlocks={planBlocks}
+        shifts={[shift]}
+        updates={[update]}
+        live
+        onSaved={onSaved}
+      />,
+    );
+
+    expect(screen.getByText(/Plan awaiting Manager approval/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Salt & Pepper Chicken/ })).toBeDisabled();
+    await actor.click(screen.getByRole("button", { name: "Ask Manager to publish" }));
+
+    expect(request).toHaveBeenCalledWith(
+      `/team-leader-assignments/${assignment.id}/request-publication/`,
+      { method: "POST" },
+    );
+    expect(onSaved).toHaveBeenCalledWith("Publication requested for Line 3.");
+  });
+
+  it("records product done and short evidence during changeover", async () => {
+    const actor = userEvent.setup();
+    const request = vi.spyOn(api, "apiRequest").mockResolvedValue({} as never);
+    const onSaved = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <DailyPlanPanel
+        assignments={[{ ...assignment, plan_status: "published" }]}
+        planBlocks={planBlocks}
+        shifts={[shift]}
+        updates={[update]}
+        onSaved={onSaved}
+      />,
+    );
+
+    await actor.click(screen.getByRole("button", { name: /Salt & Pepper Chicken/ }));
+    const dialog = screen.getByRole("dialog", { name: "Finish product / changeover" });
+    await actor.type(within(dialog).getByLabelText("Completed quantity"), "30");
+    await actor.selectOptions(within(dialog).getByLabelText("Shortfall reason"), "material_unavailable");
+    await actor.type(within(dialog).getByLabelText("Completion / handover note"), "Trays unavailable; changed product.");
+    await actor.click(within(dialog).getByRole("button", { name: "Record completion" }));
+
+    expect(request).toHaveBeenCalledWith(
+      "/daily-plan-blocks/1/complete/",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining('"actual_units":30'),
+      }),
+    );
+    expect(onSaved).toHaveBeenCalledWith(
+      "18 short units preserved for Salt & Pepper Chicken.",
+    );
   });
 
   it("expands the selected output row with recorded hourly actuals", async () => {

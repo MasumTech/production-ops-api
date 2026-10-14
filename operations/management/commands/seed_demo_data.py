@@ -565,6 +565,14 @@ class Command(BaseCommand):
                     "team_leader": leader,
                     "assigned_by": users["manager"],
                     "notes": "Local demonstration assignment.",
+                    "plan_status": TeamLeaderAssignment.PlanStatus.PUBLISHED,
+                    "plan_published_at": timezone.make_aware(
+                        datetime.combine(date, time(6, 30)), SITE_TIMEZONE
+                    ),
+                    "plan_published_by": users["manager"],
+                    "plan_approval_requested_at": None,
+                    "plan_approval_requested_by": None,
+                    "plan_version": 1,
                 },
             )
             assignments[key] = assignment
@@ -855,8 +863,39 @@ class Command(BaseCommand):
                         "target_units_per_hour": hourly_target,
                         "break_number": break_number,
                         "created_by": users["manager"],
+                        "actual_units": None,
+                        "completion_status": DailyPlanBlock.CompletionStatus.PLANNED,
+                        "completed_at": None,
+                        "completed_by": None,
+                        "short_reason": "",
+                        "short_note": "",
+                        "replacement_plan_block": None,
+                        "material_issue": None,
                     },
                 )
+                if line_key == "line_2" and sequence == 1:
+                    block.actual_units = max(0, block.planned_units - 640)
+                    block.completion_status = (
+                        DailyPlanBlock.CompletionStatus.CHANGED_OVER
+                    )
+                    block.completed_at = block.planned_end_at
+                    block.completed_by = users["leader"]
+                    block.short_reason = DailyPlanBlock.ShortReason.MATERIAL_UNAVAILABLE
+                    block.short_note = (
+                        "Showcase changeover: planned product closed early because "
+                        "the next material delivery was unavailable."
+                    )
+                    block.save(
+                        update_fields=(
+                            "actual_units",
+                            "completion_status",
+                            "completed_at",
+                            "completed_by",
+                            "short_reason",
+                            "short_note",
+                            "updated_at",
+                        )
+                    )
                 plan_blocks[f"{line_key}_{sequence}"] = block
 
         return plan_blocks

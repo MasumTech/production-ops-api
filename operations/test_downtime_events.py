@@ -338,6 +338,41 @@ def test_team_leader_can_create_downtime_only_for_assigned_shift(downtime_shift)
 
 
 @pytest.mark.django_db
+def test_draft_plan_rejects_team_leader_downtime(downtime_shift):
+    team_leader = get_user_model().objects.create_user(
+        username="draft.downtime.leader",
+        password=None,
+    )
+    TeamLeaderAssignment.objects.create(
+        team_leader=team_leader,
+        production_line=downtime_shift.production_line,
+        date=downtime_shift.date,
+        shift_type=downtime_shift.shift_type,
+        assigned_by=downtime_shift.supervisor,
+        plan_status=TeamLeaderAssignment.PlanStatus.DRAFT,
+    )
+    client = APIClient()
+    client.force_authenticate(team_leader)
+
+    response = client.post(
+        reverse("downtime-event-list"),
+        {
+            "shift": downtime_shift.id,
+            "started_at": shift_time(downtime_shift, 12).isoformat(),
+            "reason_category": DowntimeEvent.ReasonCategory.MATERIAL,
+            "description": "Draft plans cannot receive downtime.",
+            "owner_group": DowntimeEvent.OwnerGroup.OPERATIONS,
+            "status": DowntimeEvent.Status.OPEN,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "not been published" in str(response.data)
+    assert not DowntimeEvent.objects.filter(shift=downtime_shift).exists()
+
+
+@pytest.mark.django_db
 def test_team_leader_downtime_list_is_limited_to_assigned_shifts(downtime_shift):
     team_leader = get_user_model().objects.create_user(
         username="scoped.downtime.leader",

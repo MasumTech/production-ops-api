@@ -52,6 +52,7 @@ test("manager edits a current shift plan block", async ({ page }, testInfo) => {
   const editor = page.getByRole("dialog", { name: "Edit plan block" });
   const productName = editor.getByLabel("Product name");
   await productName.fill(`${originalName} verified`);
+  await editor.getByLabel("Change reason").fill("Browser acceptance verification");
   await editor.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText(`${originalName} verified`, { exact: true }).first()).toBeVisible();
 
@@ -63,7 +64,9 @@ test("manager edits a current shift plan block", async ({ page }, testInfo) => {
 
   await page.getByText(`${originalName} verified`, { exact: true }).first().click();
   await page.getByRole("button", { name: "Edit block" }).click();
-  await page.getByRole("dialog", { name: "Edit plan block" }).getByLabel("Product name").fill(originalName!);
-  await page.getByRole("dialog", { name: "Edit plan block" }).getByRole("button", { name: "Save changes" }).click();
+  const restoreEditor = page.getByRole("dialog", { name: "Edit plan block" });
+  await restoreEditor.getByLabel("Product name").fill(originalName!);
+  await restoreEditor.getByLabel("Change reason").fill("Restore deterministic fixture");
+  await restoreEditor.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText(originalName!, { exact: true }).first()).toBeVisible();
 });
