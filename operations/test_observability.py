@@ -32,7 +32,12 @@ def regular_user(db):
 
 
 @pytest.mark.django_db
-def test_observability_summary_is_staff_only(staff_user, regular_user):
+def test_observability_summary_is_staff_only(
+    staff_user,
+    regular_user,
+    monkeypatch,
+):
+    monkeypatch.setattr("operations.views.redis_is_available", lambda: True)
     url = reverse("observability-summary")
 
     response = authenticated_client(staff_user).get(url)

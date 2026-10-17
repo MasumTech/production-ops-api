@@ -2789,17 +2789,21 @@ def test_staff_can_create_next_sequential_daily_plan_block(
     staff_user,
     api_team_leader_assignment,
 ):
+    start_hour, start_minute = (
+        (7, 0) if api_team_leader_assignment.date.weekday() >= 5 else (6, 45)
+    )
+    planned_start = at_assignment_time(
+        api_team_leader_assignment,
+        start_hour,
+        start_minute,
+    )
     response = staff_client.post(
         reverse("daily-plan-block-list"),
         {
             "assignment": api_team_leader_assignment.id,
             "block_type": DailyPlanBlock.BlockType.PRODUCTION,
-            "planned_start_at": at_assignment_time(
-                api_team_leader_assignment, 6, 45
-            ).isoformat(),
-            "planned_end_at": at_assignment_time(
-                api_team_leader_assignment, 8, 45
-            ).isoformat(),
+            "planned_start_at": planned_start.isoformat(),
+            "planned_end_at": (planned_start + timedelta(hours=2)).isoformat(),
             "product_code": "SPC-01",
             "product_name": "Salt & Pepper Chicken",
             "target_units_per_hour": 24,

@@ -43,4 +43,5 @@ def test_repair_plan_shifts_is_dry_run_until_apply():
     assert "Created 1 missing shift" in output.getvalue()
     shift = Shift.objects.get(production_line=line)
     assert shift.supervisor == manager
-    assert shift.start_time.isoformat() == "06:45:00"
+    expected_start = "07:00:00" if assignment.date.weekday() >= 5 else "06:45:00"
+    assert shift.start_time.isoformat() == expected_start
